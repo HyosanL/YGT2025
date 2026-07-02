@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<rect x="0" y="0" width="120" height="120" fill="#ff8c42"/>
+<g fill="#ff6b3d" opacity="0.65">
+<polygon points="60,58 46,-22 74,-22" transform="rotate(0 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(45 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(90 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(135 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(180 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(225 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(270 60 58)"/>
+<polygon points="60,58 46,-22 74,-22" transform="rotate(315 60 58)"/>
+</g>
+<g id="content" transform="translate(60,60) scale(0.78) translate(-60,-60)">
+<circle cx="60" cy="60" r="27" fill="#f7cfa4" stroke="#222222" stroke-width="3.5"/>
+<path d="M30 46 Q28 22 60 20 Q92 22 90 46 L86 46 Q84 30 60 28 Q36 30 34 46 Z" fill="#4f6fa5" stroke="#222222" stroke-width="2.8"/>
+<path d="M34 46 Q36 30 60 28 Q84 30 86 46 Z" fill="#5c7cb3" stroke="#222222" stroke-width="2.5"/>
+<rect x="32" y="44" width="56" height="9" rx="2.5" fill="#1e2a44" stroke="#222222" stroke-width="2.5"/>
+<path d="M50 48.5 L57 46 L57 51 Z" fill="#ffd257" stroke="#8a6a10" stroke-width="1"/>
+<path d="M70 48.5 L63 46 L63 51 Z" fill="#ffd257" stroke="#8a6a10" stroke-width="1"/>
+<circle cx="60" cy="48.5" r="2.8" fill="#ffd257" stroke="#8a6a10" stroke-width="1"/>
+<path d="M38 53 Q60 58.5 82 53" stroke="#cfd4dc" stroke-width="2" fill="none"/>
+<path d="M36 53 Q60 66 84 53 L84 56.5 Q60 70 36 56.5 Z" fill="#1a1a1a" stroke="#222222" stroke-width="2.2"/>
+<path d="M42 56.5 Q60 63.5 78 56.5" stroke="#555555" stroke-width="1.5" fill="none"/>
+<ellipse cx="49" cy="68" rx="5.5" ry="6.5" fill="#ffffff" stroke="#222222" stroke-width="2.5"/>
+<ellipse cx="71" cy="68" rx="5.5" ry="6.5" fill="#ffffff" stroke="#222222" stroke-width="2.5"/>
+<circle cx="51.5" cy="69.5" r="1.9" fill="#222222"/>
+<circle cx="68.5" cy="69.5" r="1.9" fill="#222222"/>
+<circle cx="41" cy="75" r="1.5" fill="#e2635a"/>
+<circle cx="44.5" cy="78" r="1.2" fill="#e2635a"/>
+<circle cx="39" cy="78.5" r="1" fill="#e2635a"/>
+<circle cx="79" cy="75" r="1.5" fill="#e2635a"/>
+<circle cx="75.5" cy="78" r="1.2" fill="#e2635a"/>
+<circle cx="81" cy="78.5" r="1" fill="#e2635a"/>
+<rect x="50" y="78" width="20" height="7" rx="2" fill="#ffffff" stroke="#222222" stroke-width="2.5"/>
+<line x1="55" y1="78" x2="55" y2="85" stroke="#222222" stroke-width="1.5"/>
+<line x1="60" y1="78" x2="60" y2="85" stroke="#222222" stroke-width="1.5"/>
+<line x1="65" y1="78" x2="65" y2="85" stroke="#222222" stroke-width="1.5"/>
+<path d="M88 56 q6 9 0 13 q-6 -4 0 -13" fill="#8fd8ff" stroke="#222222" stroke-width="2"/>
+<polygon points="6,99 14,99 14,113" fill="#26479a" stroke="#222222" stroke-width="2"/>
+<polygon points="114,99 106,99 106,113" fill="#26479a" stroke="#222222" stroke-width="2"/>
+<rect x="12" y="95" width="96" height="19" rx="4" fill="#2f5fbf" stroke="#222222" stroke-width="3"/>
+<text x="61" y="109.5" text-anchor="middle" font-family="DejaVu Sans" font-weight="bold" font-size="13.5" letter-spacing="5" fill="#ffffff">YGT</text>
+</g>
+</svg>

@@ -1,0 +1,10 @@
+# Cloudflare Pages 프로젝트 설정 (Functions + D1 바인딩)
+name = "ygt2025"
+compatibility_date = "2025-06-01"
+pages_build_output_dir = "dist"
+
+# D1 데이터베이스 바인딩
+[[d1_databases]]
+binding = "DB"
+database_name = "ygt2025-db"
+database_id = "05f67027-49fc-4687-b5a0-afcaaa86cc38"

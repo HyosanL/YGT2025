@@ -1,0 +1,252 @@
+import Phaser from 'phaser';
+import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q2_HALLWAY } from '../../config';
+import { audio } from '../../core/AudioManager';
+import { AlertGauge } from '../../ui/AlertGauge';
+import { Button } from '../../ui/Button';
+import { Cadet, speechBubble } from '../../ui/Characters';
+import { randRange } from '../../utils/rng';
+import { BaseMainScene } from './BaseMainScene';
+
+type JuniorState = 'idle' | 'approaching' | 'saluting' | 'leaving';
+
+/**
+ * Q2. 복도에서 경례 대신 인사로 받기.
+ * 후배 경례를 "인사"로 N회 받으면 성공 — 단, 그 순간 선배가 보고 있으면 게임 오버.
+ */
+export class HallwayScene extends BaseMainScene {
+  private juniorState: JuniorState = 'idle';
+  private seniorVisible = false;
+  private count = 0;
+  private target = 3;
+  private saluteEndAt = 0;
+  private saluteWindowMs = 1;
+  private saluteTimeout: Phaser.Time.TimerEvent | null = null;
+
+  private junior!: Cadet;
+  private senior!: Cadet;
+  private alert!: AlertGauge;
+  private countText!: Phaser.GameObjects.Text;
+  private windowFill!: Phaser.GameObjects.Graphics;
+
+  constructor() {
+    super({ key: 'hallway' });
+  }
+
+  create(): void {
+    this.juniorState = 'idle';
+    this.seniorVisible = false;
+    this.count = 0;
+    this.saluteEndAt = 0;
+    this.saluteTimeout = null;
+
+    // 복도 배경 (원근)
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0x8a8fa8, 0x8a8fa8, 0x565b73, 0x565b73, 1);
+    bg.fillRect(0, 0, GAME_WIDTH, 520);
+    bg.fillStyle(0x6b7089, 1);
+    bg.fillTriangle(240, 520, 480, 520, GAME_WIDTH + 100, GAME_HEIGHT);
+    bg.fillTriangle(240, 520, -100, GAME_HEIGHT, GAME_WIDTH + 100, GAME_HEIGHT);
+    // 창문
+    for (let i = 0; i < 3; i++) {
+      bg.fillStyle(0xbdd7ee, 0.7);
+      bg.fillRoundedRect(70 + i * 220, 240, 150, 200, 8);
+    }
+    // 오른쪽 문(선배 등장 위치)
+    bg.fillStyle(0x4a3b2c, 1);
+    bg.fillRoundedRect(GAME_WIDTH - 150, 330, 130, 260, 8);
+
+    this.countText = this.add
+      .text(GAME_WIDTH / 2, 90, '', {
+        fontFamily: FONT,
+        fontSize: '40px',
+        color: COLORS.textCss,
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: { x: 24, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setDepth(10);
+
+    this.alert = new AlertGauge(this, GAME_WIDTH / 2, 180);
+
+    this.senior = new Cadet(this, GAME_WIDTH - 115, 500, 'senior');
+    this.senior.setScale(0.8).setVisible(false).setDepth(6);
+
+    this.junior = new Cadet(this, GAME_WIDTH / 2, 560, 'junior');
+    this.junior.setVisible(false).setDepth(5);
+
+    // 응답 시간 바
+    const wBg = this.add.graphics();
+    wBg.fillStyle(0x000000, 0.5);
+    wBg.fillRoundedRect(GAME_WIDTH / 2 - 180, GAME_HEIGHT - 330, 360, 24, 8);
+    this.windowFill = this.add.graphics();
+
+    // 조작 버튼
+    new Button(this, GAME_WIDTH / 2 - 165, GAME_HEIGHT - 190, {
+      label: '🙇 인사로 받기',
+      width: 310,
+      height: 130,
+      color: COLORS.accent,
+      fontSize: 34,
+      onClick: () => this.onGreet(),
+    });
+    new Button(this, GAME_WIDTH / 2 + 165, GAME_HEIGHT - 190, {
+      label: '🫡 경례로 받기',
+      width: 310,
+      height: 130,
+      color: COLORS.panelLight,
+      fontSize: 34,
+      onClick: () => this.onSalute(),
+    });
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 90, '인사로 받아야 카운트! 선배가 보고 있는지 확인하고...', {
+        fontFamily: FONT,
+        fontSize: '24px',
+        color: COLORS.subCss,
+      })
+      .setOrigin(0.5);
+
+    this.setupCommon();
+    this.target = Q2_HALLWAY.targetCount(this.day);
+    this.saluteWindowMs = Q2_HALLWAY.saluteWindowMs(this.day);
+    this.updateCountText();
+
+    // 후배 사이클 시작
+    this.time.delayedCall(1200, () => this.startApproach());
+
+    // 선배 등장/퇴장 루프 (독립)
+    this.startSeniorLoop({
+      params: () => ({
+        gapMs: randRange(Q2_HALLWAY.seniorGapMsRange(this.day)),
+        warnMs: Q2_HALLWAY.seniorWarnMs(this.day),
+        stayMs: randRange(Q2_HALLWAY.seniorStayMsRange(this.day)),
+      }),
+      onWarn: (warnMs) => {
+        this.alert.show();
+        this.tweens.addCounter({
+          from: 0,
+          to: 1,
+          duration: warnMs,
+          onUpdate: (tw) => this.alert.setProgress(tw.getValue() ?? 0),
+        });
+      },
+      onEnter: () => {
+        this.seniorVisible = true;
+        this.alert.hide();
+        this.senior.setVisible(true);
+        this.senior.setFace('👀');
+      },
+      onLeave: () => {
+        this.seniorVisible = false;
+        this.senior.setVisible(false);
+      },
+    });
+  }
+
+  private updateCountText(): void {
+    this.countText.setText(`인사 성공 ${this.count} / ${this.target}`);
+  }
+
+  private startApproach(): void {
+    if (this.finished) return;
+    this.juniorState = 'approaching';
+    this.junior.setVisible(true).setPosition(GAME_WIDTH / 2, 480).setScale(0.4).setAlpha(0.9);
+    this.junior.setFace('😳');
+    this.tweens.add({
+      targets: this.junior,
+      y: 700,
+      scale: 1,
+      alpha: 1,
+      duration: Q2_HALLWAY.approachMs(this.day),
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        if (this.finished || this.juniorState !== 'approaching') return;
+        this.startSalute();
+      },
+    });
+  }
+
+  private startSalute(): void {
+    this.juniorState = 'saluting';
+    this.junior.setFace('🫡');
+    speechBubble(this, GAME_WIDTH / 2, 520, '충성!');
+    audio.chime();
+    this.saluteEndAt = this.time.now + this.saluteWindowMs;
+    this.saluteTimeout = this.time.delayedCall(this.saluteWindowMs, () => {
+      if (this.finished || this.juniorState !== 'saluting') return;
+      this.applyDamage(Q2_HALLWAY.hpIgnoreSalute, '경례를 무시했다... 건방지다고 소문났다');
+      this.junior.setFace('😒');
+      this.resolveCycle();
+    });
+  }
+
+  private resolveCycle(): void {
+    this.saluteTimeout?.remove();
+    this.saluteTimeout = null;
+    this.juniorState = 'leaving';
+    this.windowFill.clear();
+    this.tweens.add({
+      targets: this.junior,
+      y: 1050,
+      alpha: 0,
+      duration: 600,
+      onComplete: () => this.junior.setVisible(false),
+    });
+    if (this.count >= this.target || this.finished) return;
+    this.time.delayedCall(randRange(Q2_HALLWAY.juniorGapMsRange(this.day)), () =>
+      this.startApproach()
+    );
+  }
+
+  private onGreet(): void {
+    if (this.finished) return;
+    if (this.juniorState !== 'saluting') return;
+    if (this.seniorVisible) {
+      this.senior.setFace('😡');
+      speechBubble(this, GAME_WIDTH - 115, 340, '너 지금 뭐 했냐?');
+      this.fail('경례를 고개 까딱으로 받는 순간, 선배와 눈이 마주쳤다.');
+      return;
+    }
+    this.count += 1;
+    this.updateCountText();
+    audio.chime();
+    this.junior.setFace('😳');
+    speechBubble(this, GAME_WIDTH / 2, 520, '충... 충성?');
+    if (this.count >= this.target) {
+      this.resolveCycle();
+      this.succeed('오늘의 어깨힘주기 할당량을 채웠다!');
+      return;
+    }
+    this.resolveCycle();
+  }
+
+  private onSalute(): void {
+    if (this.finished) return;
+    if (this.juniorState === 'saluting') {
+      this.junior.setFace('🙂');
+      this.resolveCycle();
+      return;
+    }
+    if (this.juniorState === 'approaching') {
+      // 후배가 경례하기 전에 먼저 경례해버림 — 선경례 굴욕
+      speechBubble(this, GAME_WIDTH / 2, this.junior.y - 160, '풉... ㅋㅋ');
+      this.applyDamage(Q2_HALLWAY.hpPreemptiveSalute, '후배한테 선경례해버렸다...!');
+    }
+  }
+
+  protected tick(_delta: number): void {
+    if (this.juniorState === 'saluting') {
+      const remain = Math.max(0, this.saluteEndAt - this.time.now);
+      const ratio = remain / this.saluteWindowMs;
+      this.windowFill.clear();
+      this.windowFill.fillStyle(ratio < 0.35 ? COLORS.accent : COLORS.safe, 1);
+      this.windowFill.fillRoundedRect(
+        GAME_WIDTH / 2 - 174,
+        GAME_HEIGHT - 326,
+        348 * ratio,
+        16,
+        5
+      );
+    }
+  }
+}
