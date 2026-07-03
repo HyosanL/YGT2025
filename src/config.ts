@@ -55,30 +55,30 @@ export const MINI = {
   failMode: 'gameover' as 'gameover' | 'hp',
   failHpPenalty: 40,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
-  firstDelayMs: [2000, 4000] as const,
+  firstDelayMs: [1500, 3000] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */
-  secondDelayMs: [2500, 5000] as const,
+  secondDelayMs: [2500, 4500] as const,
 } as const;
 
 // ─────────────────────────────────────────────
 // Q1. 샤워장에서 몰래 노래 틀기
 // ─────────────────────────────────────────────
 export const Q1_SHOWER = {
-  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 짧고 빠르게 */
-  songMs: 9000,
+  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 한 판 10초 내외 목표 */
+  songMs: 6000,
   /** 샤워 제한 시간 — 일차가 늘수록 여유가 줄어든다 */
-  showerTimeMs: (day: number): number => Math.round(lerp(15000, 12500, difficulty(day))),
+  showerTimeMs: (day: number): number => Math.round(lerp(11500, 10500, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간 */
   reactMs: (day: number): number => Math.round(lerp(650, 380, difficulty(day))),
   /** 선배 체류 시간 범위 */
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1300, 2000, difficulty(day))),
-    Math.round(lerp(1900, 2800, difficulty(day))),
+    Math.round(lerp(1100, 1600, difficulty(day))),
+    Math.round(lerp(1600, 2200, difficulty(day))),
   ],
   /** 선배 등장 간격 범위 */
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(3000, 2000, difficulty(day))),
-    Math.round(lerp(4800, 3200, difficulty(day))),
+    Math.round(lerp(2300, 1600, difficulty(day))),
+    Math.round(lerp(3800, 2600, difficulty(day))),
   ],
 } as const;
 
@@ -86,16 +86,16 @@ export const Q1_SHOWER = {
 // Q2. 복도에서 경례 대신 인사로 받기
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 필요 성공 횟수 (2~4회, 일차 비례) — 짧고 빠르게 */
-  targetCount: (day: number): number => Math.min(4, 2 + Math.floor((day - 1) / 4)),
+  /** 필요 성공 횟수 (2~3회, 일차 비례) — 한 판 10초 내외 목표 */
+  targetCount: (day: number): number => Math.min(3, 2 + Math.floor((day - 1) / 6)),
   /** 후배 접근 시간 */
-  approachMs: (day: number): number => Math.round(lerp(2000, 1300, difficulty(day))),
+  approachMs: (day: number): number => Math.round(lerp(1400, 900, difficulty(day))),
   /** 경례 후 응답 허용 시간 */
-  saluteWindowMs: (day: number): number => Math.round(lerp(2400, 1600, difficulty(day))),
+  saluteWindowMs: (day: number): number => Math.round(lerp(1800, 1200, difficulty(day))),
   /** 후배 사이 간격 범위 */
   juniorGapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1400, 800, difficulty(day))),
-    Math.round(lerp(2400, 1400, difficulty(day))),
+    Math.round(lerp(800, 500, difficulty(day))),
+    Math.round(lerp(1400, 900, difficulty(day))),
   ],
   /** 선배 체류 시간 범위 (선배는 예고 없이 등장한다) */
   seniorStayMsRange: (day: number): [number, number] => [
@@ -117,19 +117,19 @@ export const Q2_HALLWAY = {
 // Q3. 몰래 결식하고 전자레인지 돌리기
 // ─────────────────────────────────────────────
 export const Q3_MICROWAVE = {
-  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 짧고 빠르게 */
-  cookMs: (day: number): number => Math.round(lerp(6000, 8500, difficulty(day))),
+  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 한 판 10초 내외 목표 */
+  cookMs: (day: number): number => Math.round(lerp(4500, 6500, difficulty(day))),
   /** 100% 도달 시 "삐-" 지속 시간 (이 동안 선배가 있으면 발각) */
-  beepMs: 1400,
+  beepMs: 1100,
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
   reactMs: (day: number): number => Math.round(lerp(700, 420, difficulty(day))),
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1500, 2200, difficulty(day))),
-    Math.round(lerp(2200, 3200, difficulty(day))),
+    Math.round(lerp(1200, 1800, difficulty(day))),
+    Math.round(lerp(1800, 2400, difficulty(day))),
   ],
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(2800, 2000, difficulty(day))),
-    Math.round(lerp(4800, 3200, difficulty(day))),
+    Math.round(lerp(2300, 1600, difficulty(day))),
+    Math.round(lerp(3800, 2600, difficulty(day))),
   ],
 } as const;
 
@@ -137,19 +137,19 @@ export const Q3_MICROWAVE = {
 // Q4. 태권도장까지 걸어가기
 // ─────────────────────────────────────────────
 export const Q4_WALK = {
-  /** 도착까지 필요한 총 이동 시간 (걷기/뛰기 동일 속도) — 짧고 빠르게 */
-  distanceMs: (day: number): number => Math.round(lerp(11000, 15000, difficulty(day))),
+  /** 도착까지 필요한 총 이동 시간 (걷기/뛰기 동일 속도) — 한 판 10초 내외 목표 */
+  distanceMs: (day: number): number => Math.round(lerp(8000, 11000, difficulty(day))),
   /** 뛰는 동안 HP 감소 (초당) */
   runHpPerSec: 3,
   /** 선배는 예고 없이 등장한다. 등장 순간부터 뛰기로 전환할 수 있는 반응 유예 (ms) */
   graceMs: (day: number): number => Math.round(lerp(480, 260, difficulty(day))),
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1200, 2000, difficulty(day))),
-    Math.round(lerp(2200, 3200, difficulty(day))),
+    Math.round(lerp(1000, 1600, difficulty(day))),
+    Math.round(lerp(1800, 2400, difficulty(day))),
   ],
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(3000, 2000, difficulty(day))),
-    Math.round(lerp(5000, 3200, difficulty(day))),
+    Math.round(lerp(2300, 1500, difficulty(day))),
+    Math.round(lerp(3800, 2400, difficulty(day))),
   ],
 } as const;
 
@@ -157,14 +157,14 @@ export const Q4_WALK = {
 // Q5. 옆방 벽 치기 (10일차부터, 순수 운빨)
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 요구 타수 — 짧고 빠르게 */
+  /** 요구 타수 — 한 판 10초 내외 목표 */
   hits: (day: number): number =>
-    Math.min(6, 4 + Math.floor(Math.max(0, day - WALLPUNCH_UNLOCK_DAY) / 4)),
+    Math.min(5, 3 + Math.floor(Math.max(0, day - WALLPUNCH_UNLOCK_DAY) / 4)),
   /** 1회당 선배 확률 */
   seniorChance: (day: number): number =>
     Math.min(0.25, 0.05 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.01),
   /** 결과 공개 전 정적 시간 범위 (ms) */
-  suspenseMsRange: [400, 1100] as const,
+  suspenseMsRange: [300, 800] as const,
 } as const;
 
 // ─────────────────────────────────────────────

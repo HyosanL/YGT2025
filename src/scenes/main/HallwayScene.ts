@@ -115,7 +115,7 @@ export class HallwayScene extends BaseMainScene {
     this.updateCountText();
 
     // 후배 사이클 시작
-    this.time.delayedCall(1200, () => this.startApproach());
+    this.time.delayedCall(500, () => this.startApproach());
 
     // 선배 등장/퇴장 루프 (독립, 예고 없이 좌/우 무작위 등장)
     this.startSeniorLoop({
