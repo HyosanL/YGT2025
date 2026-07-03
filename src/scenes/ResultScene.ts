@@ -69,6 +69,20 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // 축하 꽃가루
+    this.add.particles(0, 0, '__WHITE', {
+      x: { min: 0, max: GAME_WIDTH },
+      y: -20,
+      speedY: { min: 220, max: 420 },
+      speedX: { min: -60, max: 60 },
+      rotate: { min: 0, max: 360 },
+      scale: { start: 1.9, end: 1.1 },
+      alpha: { start: 1, end: 0.4 },
+      lifespan: 2200,
+      quantity: 2,
+      tint: [0x4ecca3, 0xffd700, 0xe94560, 0x4a90d9, 0xf5f5f5],
+    });
+
     // 리듬 유지 — 탭 없이 자동으로 다음 날로 (탭하면 즉시)
     this.time.delayedCall(1200, advance);
     this.input.once('pointerdown', advance);

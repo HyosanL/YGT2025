@@ -2,6 +2,15 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q4_WALK } from '../../config';
 import { gameState } from '../../core/GameState';
 import { Cadet } from '../../ui/Characters';
+import {
+  drawBarracks,
+  drawCloud,
+  drawFlagpole,
+  drawMountains,
+  drawSkyGradient,
+  drawStreetlight,
+  drawTree,
+} from '../../ui/Scenery';
 import { pick, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -38,20 +47,56 @@ export class WalkScene extends BaseMainScene {
     this.notRunningMs = 0;
     this.targetMs = Q4_WALK.distanceMs(gameState.day);
 
-    // 하늘 + 도로
+    // 애니풍 노을 하늘 + 원경 산 + 생활관 건물
+    drawSkyGradient(this, 0, 0, GAME_WIDTH, ROAD_TOP, 0x5d82b8, 0xf2c18e);
+    const sun = this.add.graphics();
+    sun.fillStyle(0xffe9b8, 0.25);
+    sun.fillCircle(560, 400, 70);
+    sun.fillStyle(0xfff3d0, 1);
+    sun.fillCircle(560, 400, 34);
+    drawCloud(this, 150, 130, 1.1, 0.85);
+    drawCloud(this, 520, 215, 0.8, 0.7);
+    drawMountains(this, ROAD_TOP - 28, 150, 0x54679a, 0.9);
+    drawMountains(this, ROAD_TOP - 28, 90, 0x40527e, 1);
+    drawBarracks(this, 30, ROAD_TOP - 26, 220, 120, 0x37415e);
+    drawBarracks(this, 480, ROAD_TOP - 26, 210, 100, 0x3d4868);
+    drawFlagpole(this, 320, ROAD_TOP - 26, 150);
+    // 저 멀리 태권도장
+    const dojang = this.add.graphics();
+    dojang.fillStyle(0x8a4a3c, 1);
+    dojang.fillRect(330, 442, 60, 32);
+    dojang.fillStyle(0x5c2f28, 1);
+    dojang.fillTriangle(320, 442, 400, 442, 360, 416);
+
+    // 잔디 둔덕 + 도로 (원근)
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x3a5a8c, 0x3a5a8c, 0x6d8bb5, 0x6d8bb5, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, ROAD_TOP);
-    bg.fillStyle(0x3d3d4d, 1);
+    bg.fillGradientStyle(0x3f7d4e, 0x3f7d4e, 0x2e5e3e, 0x2e5e3e, 1);
+    bg.fillRect(0, ROAD_TOP - 30, GAME_WIDTH, 30);
+    bg.fillStyle(0x44475a, 1);
     bg.fillTriangle(280, ROAD_TOP, 440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT);
     bg.fillTriangle(280, ROAD_TOP, -200, GAME_HEIGHT, GAME_WIDTH + 200, GAME_HEIGHT);
+    // 도로 양옆 잔디
     bg.fillStyle(0x2e5e3e, 1);
-    bg.fillRect(0, ROAD_TOP - 30, GAME_WIDTH, 30);
+    bg.fillTriangle(280, ROAD_TOP, -200, GAME_HEIGHT, -560, GAME_HEIGHT);
+    bg.fillTriangle(440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT, GAME_WIDTH + 560, GAME_HEIGHT);
+    // 도로 가장자리 차선
+    bg.lineStyle(6, 0xe8e4d8, 0.7);
+    bg.lineBetween(280, ROAD_TOP, -200, GAME_HEIGHT);
+    bg.lineBetween(440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT);
+    // 노을빛이 도로에 스며드는 하이라이트
+    bg.fillGradientStyle(0xf2c18e, 0xf2c18e, 0xf2c18e, 0xf2c18e, 0.12, 0.12, 0, 0);
+    bg.fillRect(0, ROAD_TOP, GAME_WIDTH, 220);
+    // 가로수 + 가로등
+    drawTree(this, 70, 690, 1.15, 0x3f7d4e);
+    drawTree(this, 645, 660, 0.95, 0x4e8d55);
+    drawStreetlight(this, 140, 620, 130, 1);
+    drawStreetlight(this, 580, 610, 120, -1);
+
     this.add
       .text(GAME_WIDTH / 2, ROAD_TOP - 90, '🥋 태권도장은 저 멀리...', {
         fontFamily: FONT,
         fontSize: '28px',
-        color: '#dce6f5',
+        color: '#f5ecd8',
       })
       .setOrigin(0.5);
 

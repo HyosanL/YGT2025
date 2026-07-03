@@ -3,6 +3,14 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q2_HALLWAY } from '../../config'
 import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
+import {
+  drawCeilingLight,
+  drawDoor,
+  drawExtinguisher,
+  drawLightShaft,
+  drawWallClock,
+  drawWindowView,
+} from '../../ui/Scenery';
 import { chance, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -43,22 +51,42 @@ export class HallwayScene extends BaseMainScene {
     this.saluteRemainingMs = 0;
     this.saluteTimeout = null;
 
-    // 복도 배경 (원근)
+    // 애니풍 생활관 복도 — 크림 벽 + 세이지 하부몰딩 + 광택 바닥
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x8a8fa8, 0x8a8fa8, 0x565b73, 0x565b73, 1);
+    bg.fillGradientStyle(0xf0ead9, 0xf0ead9, 0xe2dcc8, 0xe2dcc8, 1);
     bg.fillRect(0, 0, GAME_WIDTH, 520);
-    bg.fillStyle(0x6b7089, 1);
+    // 하부 몰딩
+    bg.fillStyle(0x9aa583, 1);
+    bg.fillRect(0, 428, GAME_WIDTH, 92);
+    bg.fillStyle(0x7d8a6a, 1);
+    bg.fillRect(0, 428, GAME_WIDTH, 8);
+    // 광택 바닥 (원근)
+    bg.fillGradientStyle(0xcfc9b8, 0xcfc9b8, 0x9d978a, 0x9d978a, 1);
     bg.fillTriangle(240, 520, 480, 520, GAME_WIDTH + 100, GAME_HEIGHT);
     bg.fillTriangle(240, 520, -100, GAME_HEIGHT, GAME_WIDTH + 100, GAME_HEIGHT);
-    // 창문
+    // 창문 빛 반사 줄
+    bg.fillStyle(0xffffff, 0.12);
+    bg.fillTriangle(300, 560, 360, 560, 240, GAME_HEIGHT);
+    bg.fillTriangle(430, 560, 490, 560, 580, GAME_HEIGHT);
+    // 원근 보조선 (걸레받이)
+    bg.lineStyle(4, 0x8a8474, 0.5);
+    bg.lineBetween(240, 520, -100, GAME_HEIGHT);
+    bg.lineBetween(480, 520, GAME_WIDTH + 100, GAME_HEIGHT);
+
+    // 창문 3개 + 바닥으로 떨어지는 빛
     for (let i = 0; i < 3; i++) {
-      bg.fillStyle(0xbdd7ee, 0.7);
-      bg.fillRoundedRect(70 + i * 220, 240, 150, 200, 8);
+      const wx = 70 + i * 220;
+      drawWindowView(this, wx, 220, 150, 190);
+      drawLightShaft(this, wx + 75, 415, 150, wx + 150, 920, 260, 0xfff2c4, 0.06);
     }
+    drawCeilingLight(this, 250, 36, 220);
+    drawCeilingLight(this, 520, 36, 220);
+    drawWallClock(this, 360, 160, 24);
+    drawExtinguisher(this, 585, 585, 1);
+
     // 좌/우 문 (선배가 예고 없이 나타날 수 있는 두 지점)
-    bg.fillStyle(0x4a3b2c, 1);
-    bg.fillRoundedRect(GAME_WIDTH - 150, 330, 130, 260, 8);
-    bg.fillRoundedRect(20, 330, 130, 260, 8);
+    drawDoor(this, 20, 330, 130, 260, 0x7a5a3c, '3소대');
+    drawDoor(this, GAME_WIDTH - 150, 330, 130, 260, 0x7a5a3c, '2소대');
 
     this.countText = this.add
       .text(GAME_WIDTH / 2, 90, '', {

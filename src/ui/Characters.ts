@@ -148,6 +148,11 @@ export class Cadet extends Phaser.GameObjects.Container {
       torso.fillRect(u(-48 + i * 8), u(-62), u(5), u(7));
       torso.fillRect(u(26 + i * 8), u(-62), u(5), u(7));
     }
+    // 애니풍 셀셰이딩 (오른쪽 음영) + 라인아트 외곽선
+    torso.fillStyle(0x000000, 0.08);
+    torso.fillRoundedRect(u(12), u(-62), u(40), u(96), u(16));
+    torso.lineStyle(u(2.5), 0x1b2233, 0.55);
+    torso.strokeRoundedRect(u(-52), u(-62), u(104), u(96), u(16));
     this.rig.add(torso);
 
     // 팔 (어깨 피벗) — 선배는 왼팔에 완장
@@ -163,6 +168,8 @@ export class Cadet extends Phaser.GameObjects.Container {
     hg.fillCircle(u(-38), u(4), u(9));
     hg.fillCircle(u(38), u(4), u(9));
     hg.fillCircle(0, 0, u(40));
+    hg.lineStyle(u(2.5), 0x1b2233, 0.5);
+    hg.strokeCircle(0, 0, u(40));
     // 앞머리
     hg.fillStyle(st.hair, 1);
     hg.fillRect(u(-38), u(-32), u(76), u(10));
@@ -176,6 +183,9 @@ export class Cadet extends Phaser.GameObjects.Container {
     hg.fillStyle(0x101016, 1);
     if (big) hg.fillRoundedRect(u(-52), u(-30), u(104), u(9), u(4));
     else hg.fillRoundedRect(u(-36), u(-30), u(72), u(7), u(3));
+    // 정모 크라운 하이라이트
+    hg.fillStyle(0xffffff, 0.15);
+    hg.fillEllipse(u(-14), u(big ? -54 : -50), u(34), u(9));
     // 모표 (금색 날개)
     hg.fillStyle(0xffd700, 1);
     hg.fillCircle(0, u(-46), u(5));
@@ -210,8 +220,12 @@ export class Cadet extends Phaser.GameObjects.Container {
     const g = scene.add.graphics();
     g.fillStyle(this.style.trousers, 1);
     g.fillRoundedRect(u(-13), u(-8), u(26), u(64), u(7));
+    g.lineStyle(u(2.2), 0x1b2233, 0.5);
+    g.strokeRoundedRect(u(-13), u(-8), u(26), u(64), u(7));
     g.fillStyle(this.style.shoe, 1);
     g.fillRoundedRect(u(-15), u(52), u(32), u(18), u(6));
+    g.fillStyle(0xffffff, 0.18);
+    g.fillEllipse(u(-2), u(58), u(20), u(5));
     leg.add(g);
     return leg;
   }
@@ -227,6 +241,8 @@ export class Cadet extends Phaser.GameObjects.Container {
     const g = scene.add.graphics();
     g.fillStyle(this.style.uniform, 1);
     g.fillRoundedRect(u(-11), u(-8), u(22), u(62), u(9));
+    g.lineStyle(u(2.2), 0x1b2233, 0.5);
+    g.strokeRoundedRect(u(-11), u(-8), u(22), u(62), u(9));
     if (armband) {
       g.fillStyle(0xe94560, 1);
       g.fillRect(u(-11), u(8), u(22), u(14));

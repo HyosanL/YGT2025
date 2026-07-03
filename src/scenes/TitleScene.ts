@@ -4,6 +4,7 @@ import { gameState } from '../core/GameState';
 import { fetchTop } from '../core/Leaderboard';
 import { addMuteButton, Button } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
+import { drawBarracks, drawFlagpole, drawMountains } from '../ui/Scenery';
 import { askNickname } from '../utils/nicknameDialog';
 
 export class TitleScene extends Phaser.Scene {
@@ -37,6 +38,20 @@ export class TitleScene extends Phaser.Scene {
         repeat: -1,
       });
     }
+
+    // 달 + 야간 연병장 실루엣
+    const moon = this.add.graphics();
+    moon.fillStyle(0xfff6d8, 0.1);
+    moon.fillCircle(580, 170, 62);
+    moon.fillStyle(0xfff6d8, 1);
+    moon.fillCircle(580, 170, 34);
+    drawMountains(this, 1120, 210, 0x16213e, 1);
+    drawBarracks(this, 60, 1120, 250, 150, 0x101a30, 0xffe9a8, 0.25);
+    drawBarracks(this, 430, 1120, 230, 130, 0x0d1628, 0xffe9a8, 0.2);
+    drawFlagpole(this, 360, 1120, 170);
+    const ground = this.add.graphics();
+    ground.fillGradientStyle(0x1a2338, 0x1a2338, 0x11172a, 0x11172a, 1);
+    ground.fillRect(0, 1120, GAME_WIDTH, GAME_HEIGHT - 1120);
 
     this.add
       .text(GAME_WIDTH / 2, 300, '✈️', { fontFamily: FONT, fontSize: '90px' })

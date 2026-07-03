@@ -3,6 +3,13 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q5_WALLPUNCH } from '../../confi
 import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
+import {
+  addVignette,
+  drawBunkBed,
+  drawLightShaft,
+  drawLockerCabinet,
+  drawWindowView,
+} from '../../ui/Scenery';
 import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -32,16 +39,38 @@ export class WallPunchScene extends BaseMainScene {
     this.count = 0;
     this.rolling = false;
 
-    // 소등 후 어두운 방
+    // 소등 후 어두운 생활관 호실
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x0d0d1a, 0x0d0d1a, 0x14142a, 0x14142a, 1);
+    bg.fillGradientStyle(0x11142a, 0x11142a, 0x1c2036, 0x1c2036, 1);
     bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    // 달빛 창문
-    bg.fillStyle(0x2c3e6b, 0.8);
-    bg.fillRoundedRect(GAME_WIDTH - 220, 180, 160, 220, 10);
+    // 바닥
+    bg.fillGradientStyle(0x232741, 0x232741, 0x1a1d31, 0x1a1d31, 1);
+    bg.fillRect(0, 940, GAME_WIDTH, GAME_HEIGHT - 940);
+    bg.lineStyle(2, 0xffffff, 0.04);
+    for (let x = 280; x < GAME_WIDTH; x += 110) bg.lineBetween(x, 940, x, GAME_HEIGHT);
+    // 벽 포스터
+    bg.fillStyle(0x2c3450, 1);
+    bg.fillRect(300, 290, 92, 124);
+    bg.fillStyle(0x38415e, 1);
+    bg.fillRect(308, 298, 76, 108);
     this.add
-      .text(GAME_WIDTH - 140, 290, '🌙', { fontFamily: FONT, fontSize: '54px' })
+      .text(346, 352, '정\n신\n력', {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: '#8a94b8',
+        align: 'center',
+        lineSpacing: 2,
+      })
       .setOrigin(0.5);
+
+    // 달빛 창문 + 바닥으로 떨어지는 빛
+    drawWindowView(this, GAME_WIDTH - 230, 170, 170, 230, { night: true });
+    drawLightShaft(this, GAME_WIDTH - 145, 412, 170, GAME_WIDTH - 210, 940, 330, 0xbdd7ee, 0.07);
+
+    // 관물대 + 2층 침대 (모포 각)
+    drawLockerCabinet(this, 350, 700, 0.9);
+    drawBunkBed(this, 545, 940, 1.05);
+    addVignette(this, 0.35);
 
     // 옆방과 맞닿은 벽 (왼쪽)
     this.wall = this.add.container(WALL_X, GAME_HEIGHT / 2);
@@ -63,12 +92,6 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5);
     this.wall.add(wallLabel);
 
-    // 침대 + 플레이어
-    const bed = this.add.graphics();
-    bed.fillStyle(0x2a4a3e, 1);
-    bed.fillRoundedRect(300, 760, 360, 150, 16);
-    bed.fillStyle(0xd9d9d9, 1);
-    bed.fillRoundedRect(310, 730, 100, 60, 12);
     this.player = new Cadet(this, 480, 700, 'player');
     this.player.setFace('😈');
 
