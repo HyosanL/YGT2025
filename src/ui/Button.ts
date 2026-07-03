@@ -48,8 +48,10 @@ export class Button extends Phaser.GameObjects.Container {
     this.add(this.labelText);
 
     this.setSize(this.btnW, this.btnH);
+    // 주의: setSize된 컨테이너는 히트테스트 시 displayOrigin(w/2, h/2)이 로컬 좌표에
+    // 더해지므로, 히트영역은 (0,0) 기준으로 잡아야 버튼 전체가 눌린다.
     this.setInteractive(
-      new Phaser.Geom.Rectangle(-this.btnW / 2, -this.btnH / 2, this.btnW, this.btnH),
+      new Phaser.Geom.Rectangle(0, 0, this.btnW, this.btnH),
       Phaser.Geom.Rectangle.Contains
     );
 
