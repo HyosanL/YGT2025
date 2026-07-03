@@ -1,20 +1,27 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q1_SHOWER } from '../../config';
 import { audio } from '../../core/AudioManager';
-import { AlertGauge } from '../../ui/AlertGauge';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
-import { randRange } from '../../utils/rng';
+import { chance, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
+
+const DOOR_X = GAME_WIDTH - 95;
+const CURTAIN_X = 430;
+
+type SeniorSpot = 'door' | 'curtain';
 
 /**
  * Q1. 샤워장에서 몰래 노래 틀기.
  * 노래는 기본 재생 — [⏸] 버튼을 누르고 있는 동안만 멈춘다 (몰래춤추기의 반전 구조).
- * 선배가 문을 열고 들어올 때 재생 중이면 발각. 선배가 나갈 때까지 홀드 유지.
+ * 선배는 예고 없이 정문 또는 옆 칸 커튼 중 무작위 위치에서 갑자기 나타난다.
+ * 등장 순간의 짧은 반응 유예(reactMs) 안에 버튼을 누르지 못하면 발각. 선배가 나갈 때까지 홀드 유지.
  */
 export class ShowerScene extends BaseMainScene {
   private holding = false;
-  private seniorState: 'away' | 'warn' | 'in' = 'away';
+  private seniorState: 'away' | 'in' = 'away';
+  private reacted = false;
+  private seniorSpot: SeniorSpot = 'door';
   private songProgressMs = 0;
   private showerRemainMs = 1;
   private songMs = 1;
@@ -22,8 +29,6 @@ export class ShowerScene extends BaseMainScene {
 
   private player!: Cadet;
   private senior!: Cadet;
-  private alert!: AlertGauge;
-  private doorShadow!: Phaser.GameObjects.Rectangle;
   private songFill!: Phaser.GameObjects.Graphics;
   private timeFill!: Phaser.GameObjects.Graphics;
   private noteTimer!: Phaser.Time.TimerEvent;
@@ -62,17 +67,23 @@ export class ShowerScene extends BaseMainScene {
     this.player = new Cadet(this, 210, 700, 'player');
     this.player.setFace('🎵');
 
-    // 문 (오른쪽)
+    // 문 (오른쪽) — 정문
     const door = this.add.graphics();
     door.fillStyle(0x5a4632, 1);
     door.fillRoundedRect(GAME_WIDTH - 170, 430, 150, 420, 8);
     door.fillStyle(0xd0b878, 1);
     door.fillCircle(GAME_WIDTH - 145, 650, 10);
-    this.doorShadow = this.add
-      .rectangle(GAME_WIDTH - 95, 640, 150, 420, 0x000000, 0)
-      .setDepth(5);
 
-    this.senior = new Cadet(this, GAME_WIDTH - 95, 700, 'senior');
+    // 옆 칸 샤워 커튼 — 두 번째 등장 지점
+    const curtain = this.add.graphics();
+    curtain.fillStyle(0x3d6b8a, 0.9);
+    curtain.fillRoundedRect(CURTAIN_X - 70, 460, 140, 380, 6);
+    curtain.lineStyle(2, 0x2a4d66, 0.8);
+    for (let x = CURTAIN_X - 60; x < CURTAIN_X + 70; x += 20) {
+      curtain.lineBetween(x, 460, x, 840);
+    }
+
+    this.senior = new Cadet(this, DOOR_X, 700, 'senior');
     this.senior.setVisible(false).setDepth(6);
 
     // 노래 진행 바
@@ -102,8 +113,6 @@ export class ShowerScene extends BaseMainScene {
       })
       .setOrigin(0.5)
       .setDepth(10);
-
-    this.alert = new AlertGauge(this, GAME_WIDTH - 200, 380);
 
     // 홀드 버튼
     new Button(this, GAME_WIDTH / 2, GAME_HEIGHT - 190, {
@@ -162,29 +171,24 @@ export class ShowerScene extends BaseMainScene {
     this.startSeniorLoop({
       params: () => ({
         gapMs: randRange(Q1_SHOWER.gapMsRange(this.day)),
-        warnMs: Q1_SHOWER.warnMs(this.day),
         stayMs: randRange(Q1_SHOWER.stayMsRange(this.day)),
       }),
-      onWarn: (warnMs) => {
-        this.seniorState = 'warn';
-        this.alert.show();
-        this.tweens.add({ targets: this.doorShadow, fillAlpha: 0.5, duration: warnMs });
-        this.tweens.addCounter({
-          from: 0,
-          to: 1,
-          duration: warnMs,
-          onUpdate: (tw) => this.alert.setProgress(tw.getValue() ?? 0),
-        });
-      },
       onEnter: () => {
         this.seniorState = 'in';
-        this.alert.hide();
-        audio.door();
-        this.doorShadow.setFillStyle(0x000000, 0);
+        this.reacted = false;
+        this.seniorSpot = chance(0.5) ? 'door' : 'curtain';
+        this.senior.setPosition(this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X, 700);
         this.senior.setVisible(true);
-        if (!this.holding) {
-          this.fail('노랫소리를 들은 선배가 문을 벌컥 열었다!');
-        }
+        // 옆 칸 커튼 쪽은 더 가까운 만큼 반응할 시간이 더 짧다
+        const reactMs = Q1_SHOWER.reactMs(this.day) * (this.seniorSpot === 'curtain' ? 0.7 : 1);
+        this.time.delayedCall(reactMs, () => {
+          if (this.finished || this.seniorState !== 'in') return;
+          if (this.holding) {
+            this.reacted = true;
+          } else {
+            this.fail('반응이 늦었다! 노랫소리를 들켰다.');
+          }
+        });
       },
       onLeave: () => {
         this.seniorState = 'away';
@@ -210,8 +214,8 @@ export class ShowerScene extends BaseMainScene {
       }
     }
 
-    // 선배가 있는 동안 손을 떼면 발각
-    if (this.seniorState === 'in' && !this.holding) {
+    // 반응에 성공해 숨은 뒤, 선배가 있는 동안 손을 떼면 발각
+    if (this.seniorState === 'in' && this.reacted && !this.holding) {
       this.fail('선배 앞에서 노래가 다시 흘러나왔다...!');
       return;
     }

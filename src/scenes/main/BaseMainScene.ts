@@ -8,14 +8,13 @@ import { HpBar } from '../../ui/HpBar';
 
 export interface SeniorLoopParams {
   gapMs: number;
-  warnMs: number;
   stayMs: number;
 }
 
 export interface SeniorLoopHandlers {
   /** 매 사이클마다 호출 — 일차별 난이도가 반영된 타이밍 반환 */
   params: () => SeniorLoopParams;
-  onWarn: (warnMs: number) => void;
+  /** 선배가 예고 없이 등장하는 순간 — 여기서부터 반응속도 승부가 시작된다 */
   onEnter: () => void;
   onLeave: () => void;
 }
@@ -24,7 +23,7 @@ export interface SeniorLoopHandlers {
  * 메인 퀘스트 공통 베이스:
  * - HP 바 / 음소거 버튼
  * - 미니 퀘스트 인터럽트 (pause → 오버레이 launch → resume)
- * - 선배 등장 루프 스케줄러 (전조 → 등장 → 퇴장 반복)
+ * - 선배 등장 루프 스케줄러 (예고 없이 등장 → 체류 → 퇴장 반복, 등장 순간의 반응속도가 핵심)
  * - 성공/실패/데미지 공통 처리
  */
 export abstract class BaseMainScene extends Phaser.Scene {
@@ -52,7 +51,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     });
   }
 
-  // ── 위험 비네트 (선배 전조/등장 시 화면 가장자리가 붉게 고동친다) ──
+  // ── 위험 비네트 (선배가 갑자기 등장하면 화면 가장자리가 붉게 고동친다) ──
 
   private createDangerVignette(): void {
     const edge = 60;
@@ -66,18 +65,17 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.dangerTween = null;
   }
 
-  protected setDanger(level: 'off' | 'warn' | 'in'): void {
+  protected setDanger(level: 'off' | 'in'): void {
     this.dangerTween?.remove();
     this.dangerTween = null;
     if (level === 'off') {
       this.dangerG.setAlpha(0);
       return;
     }
-    const range = level === 'warn' ? { from: 0.08, to: 0.28 } : { from: 0.26, to: 0.42 };
     this.dangerTween = this.tweens.add({
       targets: this.dangerG,
-      alpha: range,
-      duration: level === 'warn' ? 170 : 260,
+      alpha: { from: 0.26, to: 0.42 },
+      duration: 260,
       yoyo: true,
       repeat: -1,
     });
@@ -151,33 +149,26 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
   // ── 선배 등장 루프 ────────────────────────────
 
+  /**
+   * 선배는 예고 없이 갑자기 등장한다. 등장 순간 화면이 흔들리고 비네트가 켜지는 것이
+   * 유일한 신호 — 그때부터가 반응속도 승부. 각 씬은 onEnter에서 자체 반응 유예
+   * 시간(reactMs/graceMs 등)을 두고 플레이어의 대응을 판정한다.
+   */
   protected startSeniorLoop(handlers: SeniorLoopHandlers): void {
     const cycle = (): void => {
       if (this.finished) return;
       const p = handlers.params();
       this.time.delayedCall(p.gapMs, () => {
         if (this.finished) return;
-        audio.footstep();
-        audio.startHeartbeat();
-        this.setDanger('warn');
-        if (p.warnMs > 650) {
-          this.time.delayedCall(p.warnMs / 2, () => {
-            if (!this.finished) audio.footstep();
-          });
-        }
-        handlers.onWarn(p.warnMs);
-        this.time.delayedCall(p.warnMs, () => {
+        audio.door();
+        this.setDanger('in');
+        this.cameras.main.shake(140, 0.006);
+        handlers.onEnter();
+        this.time.delayedCall(p.stayMs, () => {
           if (this.finished) return;
-          this.setDanger('in');
-          this.cameras.main.shake(120, 0.004);
-          handlers.onEnter();
-          this.time.delayedCall(p.stayMs, () => {
-            if (this.finished) return;
-            this.setDanger('off');
-            audio.stopHeartbeat();
-            handlers.onLeave();
-            cycle();
-          });
+          this.setDanger('off');
+          handlers.onLeave();
+          cycle();
         });
       });
     };

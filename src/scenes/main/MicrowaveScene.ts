@@ -1,9 +1,8 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q3_MICROWAVE } from '../../config';
 import { audio } from '../../core/AudioManager';
-import { AlertGauge } from '../../ui/AlertGauge';
 import { Cadet } from '../../ui/Characters';
-import { randRange } from '../../utils/rng';
+import { pick, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
@@ -11,15 +10,20 @@ type Zone = 'laundry' | 'micro';
 const LAUNDRY_X = 170;
 const MICRO_X = 550;
 const PLAYER_Y = 820;
+/** 복도를 따라 선배가 갑자기 나타날 수 있는 여러 지점 */
+const SENIOR_SPOTS = [150, 360, 570] as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
  * 좌(세탁실=은신처)/우(전자레인지) 터치로 이동. 전자레인지 앞에서만 게이지가 찬다.
- * 100% 도달 시 "삐-" 소리가 나는 동안 선배가 있으면 발각.
+ * 선배는 예고 없이 복도의 여러 지점 중 한 곳에 갑자기 나타난다.
+ * 등장 순간의 반응 유예(reactMs) 안에 세탁실로 피하지 못하면 발각.
+ * 100% 도달 시 "삐-" 소리가 나는 동안은 숨어 있어도 선배가 있으면 발각.
  */
 export class MicrowaveScene extends BaseMainScene {
   private zone: Zone = 'micro';
-  private seniorState: 'away' | 'warn' | 'in' = 'away';
+  private seniorState: 'away' | 'in' = 'away';
+  private reacted = false;
   private cookProgressMs = 0;
   private cookTotalMs = 1;
   private beeping = false;
@@ -27,7 +31,6 @@ export class MicrowaveScene extends BaseMainScene {
 
   private player!: Cadet;
   private senior!: Cadet;
-  private alert!: AlertGauge;
   private cookFill!: Phaser.GameObjects.Graphics;
   private cookLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
@@ -112,8 +115,6 @@ export class MicrowaveScene extends BaseMainScene {
       .setOrigin(0.5)
       .setVisible(false);
 
-    this.alert = new AlertGauge(this, GAME_WIDTH / 2, 200);
-
     this.senior = new Cadet(this, GAME_WIDTH / 2, 340, 'senior');
     this.senior.setScale(0.7).setVisible(false).setDepth(5);
 
@@ -141,23 +142,22 @@ export class MicrowaveScene extends BaseMainScene {
     this.startSeniorLoop({
       params: () => ({
         gapMs: randRange(Q3_MICROWAVE.gapMsRange(this.day)),
-        warnMs: Q3_MICROWAVE.warnMs(this.day),
         stayMs: randRange(Q3_MICROWAVE.stayMsRange(this.day)),
       }),
-      onWarn: (warnMs) => {
-        this.seniorState = 'warn';
-        this.alert.show();
-        this.tweens.addCounter({
-          from: 0,
-          to: 1,
-          duration: warnMs,
-          onUpdate: (tw) => this.alert.setProgress(tw.getValue() ?? 0),
-        });
-      },
       onEnter: () => {
         this.seniorState = 'in';
-        this.alert.hide();
+        this.reacted = false;
+        this.senior.setPosition(pick(SENIOR_SPOTS), 340);
         this.senior.setVisible(true);
+        const reactMs = Q3_MICROWAVE.reactMs(this.day);
+        this.time.delayedCall(reactMs, () => {
+          if (this.finished || this.seniorState !== 'in') return;
+          if (this.zone === 'laundry') {
+            this.reacted = true;
+          } else {
+            this.fail('반응이 늦었다! 전자레인지 앞에 서 있는 걸 들켰다.');
+          }
+        });
       },
       onLeave: () => {
         this.seniorState = 'away';
@@ -175,8 +175,8 @@ export class MicrowaveScene extends BaseMainScene {
   }
 
   protected tick(delta: number): void {
-    // 선배 판정: 전자레인지 앞에서 발각
-    if (this.seniorState === 'in' && this.zone === 'micro') {
+    // 반응에 성공해 세탁실로 피한 뒤, 다시 전자레인지 앞으로 돌아오면 발각
+    if (this.seniorState === 'in' && this.reacted && this.zone === 'micro') {
       this.fail('전자레인지 앞에 서 있는 걸 선배에게 발각됐다!');
       return;
     }

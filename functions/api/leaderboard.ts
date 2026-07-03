@@ -31,8 +31,16 @@ function bad(message: string, status = 400): Response {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+  // 닉네임별 최고 기록(days DESC, play_ms ASC) 1건만 노출
   const { results } = await env.DB.prepare(
-    'SELECT nickname, days, play_ms, created_at FROM leaderboard ORDER BY days DESC, play_ms ASC LIMIT ?'
+    `SELECT nickname, days, play_ms, created_at FROM (
+       SELECT nickname, days, play_ms, created_at,
+              ROW_NUMBER() OVER (PARTITION BY nickname ORDER BY days DESC, play_ms ASC) AS rn
+       FROM leaderboard
+     )
+     WHERE rn = 1
+     ORDER BY days DESC, play_ms ASC
+     LIMIT ?`
   )
     .bind(TOP_LIMIT)
     .all();

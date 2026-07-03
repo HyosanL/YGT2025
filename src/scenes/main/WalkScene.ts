@@ -1,31 +1,30 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q4_WALK } from '../../config';
 import { gameState } from '../../core/GameState';
-import { AlertGauge } from '../../ui/AlertGauge';
 import { Cadet } from '../../ui/Characters';
-import { randRange } from '../../utils/rng';
+import { pick, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 const ROAD_TOP = 500;
 
 /**
  * Q4. 태권도장까지 걸어가기 — 화면 홀드 = 뛰기(HP 소모), 떼면 걷기.
- * 선배가 보일 때 걷고 있으면 게임 오버.
+ * 선배는 예고 없이 좌/우/정면 중 무작위 방향에서 갑자기 나타난다.
+ * 등장 순간 반응 유예(graceMs) 안에 뛰기로 전환하지 못하면 게임 오버.
  */
 export class WalkScene extends BaseMainScene {
   private progressMs = 0;
   private targetMs = 1;
   private holding = false;
-  private seniorState: 'away' | 'warn' | 'in' = 'away';
+  private seniorState: 'away' | 'in' = 'away';
   private notRunningMs = 0;
-  private seniorSide: 1 | -1 = 1;
+  private graceMs = 300;
+  private seniorSide: 'left' | 'right' | 'center' = 'right';
 
   private player!: Cadet;
   private senior!: Cadet;
-  private alert!: AlertGauge;
   private progressFill!: Phaser.GameObjects.Graphics;
   private stateText!: Phaser.GameObjects.Text;
-  private warnIcon!: Phaser.GameObjects.Text;
   private stripes: Phaser.GameObjects.Rectangle[] = [];
 
   constructor() {
@@ -78,14 +77,6 @@ export class WalkScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(10);
 
-    this.alert = new AlertGauge(this, GAME_WIDTH / 2, 170);
-
-    this.warnIcon = this.add
-      .text(GAME_WIDTH - 60, 700, '❗', { fontFamily: FONT, fontSize: '72px' })
-      .setOrigin(0.5)
-      .setVisible(false)
-      .setDepth(500);
-
     this.player = new Cadet(this, GAME_WIDTH / 2, 1010, 'player');
     this.tweens.add({
       targets: this.player,
@@ -120,36 +111,37 @@ export class WalkScene extends BaseMainScene {
     this.startSeniorLoop({
       params: () => ({
         gapMs: randRange(Q4_WALK.gapMsRange(this.day)),
-        warnMs: Q4_WALK.warnMs(this.day),
         stayMs: randRange(Q4_WALK.stayMsRange(this.day)),
       }),
-      onWarn: (warnMs) => {
-        this.seniorState = 'warn';
-        this.seniorSide = Math.random() < 0.5 ? 1 : -1;
-        this.warnIcon.setX(this.seniorSide === 1 ? GAME_WIDTH - 60 : 60).setVisible(true);
-        this.alert.show();
-        this.tweens.addCounter({
-          from: 0,
-          to: 1,
-          duration: warnMs,
-          onUpdate: (tw) => this.alert.setProgress(tw.getValue() ?? 0),
-        });
-      },
       onEnter: () => {
         this.seniorState = 'in';
         this.notRunningMs = 0;
-        this.warnIcon.setVisible(false);
-        this.alert.hide();
-        const targetX = this.seniorSide === 1 ? GAME_WIDTH - 130 : 130;
-        this.senior.setPosition(this.seniorSide === 1 ? GAME_WIDTH + 150 : -150, 820);
-        this.senior.setVisible(true);
-        this.tweens.add({ targets: this.senior, x: targetX, duration: 300, ease: 'Cubic.easeOut' });
+        this.graceMs = Q4_WALK.graceMs(this.day);
+        this.seniorSide = pick(['left', 'right', 'center'] as const);
+        if (this.seniorSide === 'center') {
+          // 정면에 갑자기 나타남 — 텔레그래프 없이 즉시 등장
+          this.senior.setPosition(GAME_WIDTH / 2, 780).setScale(0.7).setAlpha(0);
+          this.senior.setVisible(true);
+          this.tweens.add({ targets: this.senior, alpha: 1, scale: 1, duration: 120 });
+        } else {
+          const targetX = this.seniorSide === 'right' ? GAME_WIDTH - 130 : 130;
+          this.senior
+            .setPosition(this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150, 820)
+            .setScale(1)
+            .setAlpha(1);
+          this.senior.setVisible(true);
+          this.tweens.add({ targets: this.senior, x: targetX, duration: 160, ease: 'Cubic.easeOut' });
+        }
       },
       onLeave: () => {
         this.seniorState = 'away';
+        if (this.seniorSide === 'center') {
+          this.senior.setVisible(false);
+          return;
+        }
         this.tweens.add({
           targets: this.senior,
-          x: this.seniorSide === 1 ? GAME_WIDTH + 150 : -150,
+          x: this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150,
           duration: 300,
           onComplete: () => this.senior.setVisible(false),
         });
@@ -183,9 +175,9 @@ export class WalkScene extends BaseMainScene {
         this.notRunningMs = 0;
       } else {
         this.notRunningMs += delta;
-        if (this.notRunningMs > Q4_WALK.graceMs) {
+        if (this.notRunningMs > this.graceMs) {
           this.player.setFace('😨');
-          this.fail('이동 간 구보 위반! 걷는 걸 선배에게 들켰다.');
+          this.fail('선배가 갑자기 나타났는데 반응이 늦었다! 걷는 걸 들켰다.');
           return;
         }
       }

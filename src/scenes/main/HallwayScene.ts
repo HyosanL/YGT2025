@@ -1,30 +1,34 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q2_HALLWAY } from '../../config';
 import { audio } from '../../core/AudioManager';
-import { AlertGauge } from '../../ui/AlertGauge';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
-import { randRange } from '../../utils/rng';
+import { chance, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type JuniorState = 'idle' | 'approaching' | 'saluting' | 'leaving';
+type SeniorSide = 'left' | 'right';
+
+const SENIOR_RIGHT_X = GAME_WIDTH - 115;
+const SENIOR_LEFT_X = 115;
 
 /**
  * Q2. 복도에서 경례 대신 인사로 받기.
  * 후배 경례를 "인사"로 N회 받으면 성공 — 단, 그 순간 선배가 보고 있으면 게임 오버.
+ * 선배는 예고 없이 복도 좌/우 양쪽 문 중 무작위로 갑자기 나타난다.
  */
 export class HallwayScene extends BaseMainScene {
   private juniorState: JuniorState = 'idle';
   private seniorVisible = false;
+  private seniorSide: SeniorSide = 'right';
   private count = 0;
   private target = 3;
-  private saluteEndAt = 0;
+  private saluteRemainingMs = 0;
   private saluteWindowMs = 1;
   private saluteTimeout: Phaser.Time.TimerEvent | null = null;
 
   private junior!: Cadet;
   private senior!: Cadet;
-  private alert!: AlertGauge;
   private countText!: Phaser.GameObjects.Text;
   private windowFill!: Phaser.GameObjects.Graphics;
 
@@ -36,7 +40,7 @@ export class HallwayScene extends BaseMainScene {
     this.juniorState = 'idle';
     this.seniorVisible = false;
     this.count = 0;
-    this.saluteEndAt = 0;
+    this.saluteRemainingMs = 0;
     this.saluteTimeout = null;
 
     // 복도 배경 (원근)
@@ -51,9 +55,10 @@ export class HallwayScene extends BaseMainScene {
       bg.fillStyle(0xbdd7ee, 0.7);
       bg.fillRoundedRect(70 + i * 220, 240, 150, 200, 8);
     }
-    // 오른쪽 문(선배 등장 위치)
+    // 좌/우 문 (선배가 예고 없이 나타날 수 있는 두 지점)
     bg.fillStyle(0x4a3b2c, 1);
     bg.fillRoundedRect(GAME_WIDTH - 150, 330, 130, 260, 8);
+    bg.fillRoundedRect(20, 330, 130, 260, 8);
 
     this.countText = this.add
       .text(GAME_WIDTH / 2, 90, '', {
@@ -67,9 +72,7 @@ export class HallwayScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(10);
 
-    this.alert = new AlertGauge(this, GAME_WIDTH / 2, 180);
-
-    this.senior = new Cadet(this, GAME_WIDTH - 115, 500, 'senior');
+    this.senior = new Cadet(this, SENIOR_RIGHT_X, 500, 'senior');
     this.senior.setScale(0.8).setVisible(false).setDepth(6);
 
     this.junior = new Cadet(this, GAME_WIDTH / 2, 560, 'junior');
@@ -114,25 +117,16 @@ export class HallwayScene extends BaseMainScene {
     // 후배 사이클 시작
     this.time.delayedCall(1200, () => this.startApproach());
 
-    // 선배 등장/퇴장 루프 (독립)
+    // 선배 등장/퇴장 루프 (독립, 예고 없이 좌/우 무작위 등장)
     this.startSeniorLoop({
       params: () => ({
         gapMs: randRange(Q2_HALLWAY.seniorGapMsRange(this.day)),
-        warnMs: Q2_HALLWAY.seniorWarnMs(this.day),
         stayMs: randRange(Q2_HALLWAY.seniorStayMsRange(this.day)),
       }),
-      onWarn: (warnMs) => {
-        this.alert.show();
-        this.tweens.addCounter({
-          from: 0,
-          to: 1,
-          duration: warnMs,
-          onUpdate: (tw) => this.alert.setProgress(tw.getValue() ?? 0),
-        });
-      },
       onEnter: () => {
         this.seniorVisible = true;
-        this.alert.hide();
+        this.seniorSide = chance(0.5) ? 'left' : 'right';
+        this.senior.setPosition(this.seniorSide === 'right' ? SENIOR_RIGHT_X : SENIOR_LEFT_X, 500);
         this.senior.setVisible(true);
         this.senior.setFace('👀');
       },
@@ -171,7 +165,7 @@ export class HallwayScene extends BaseMainScene {
     this.junior.setFace('🫡');
     speechBubble(this, GAME_WIDTH / 2, 520, '충성!');
     audio.chime();
-    this.saluteEndAt = this.time.now + this.saluteWindowMs;
+    this.saluteRemainingMs = this.saluteWindowMs;
     this.saluteTimeout = this.time.delayedCall(this.saluteWindowMs, () => {
       if (this.finished || this.juniorState !== 'saluting') return;
       this.applyDamage(Q2_HALLWAY.hpIgnoreSalute, '경례를 무시했다... 건방지다고 소문났다');
@@ -203,7 +197,7 @@ export class HallwayScene extends BaseMainScene {
     if (this.juniorState !== 'saluting') return;
     if (this.seniorVisible) {
       this.senior.setFace('😡');
-      speechBubble(this, GAME_WIDTH - 115, 340, '너 지금 뭐 했냐?');
+      speechBubble(this, this.senior.x, 340, '너 지금 뭐 했냐?');
       this.fail('경례를 고개 까딱으로 받는 순간, 선배와 눈이 마주쳤다.');
       return;
     }
@@ -234,9 +228,10 @@ export class HallwayScene extends BaseMainScene {
     }
   }
 
-  protected tick(_delta: number): void {
+  protected tick(delta: number): void {
     if (this.juniorState === 'saluting') {
-      const remain = Math.max(0, this.saluteEndAt - this.time.now);
+      const remain = Math.max(0, this.saluteRemainingMs - delta);
+      this.saluteRemainingMs = remain;
       const ratio = remain / this.saluteWindowMs;
       this.windowFill.clear();
       this.windowFill.fillStyle(ratio < 0.35 ? COLORS.accent : COLORS.safe, 1);

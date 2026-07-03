@@ -17,13 +17,14 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   protected done = false;
 
   private timerTotal = 0;
-  private timerEndAt = 0;
+  private timerRemaining = 0;
   private timerActive = false;
   private onExpire: (() => void) | null = null;
   private timerFill: Phaser.GameObjects.Graphics | null = null;
   private timerText: Phaser.GameObjects.Text | null = null;
   private panicOverlay: Phaser.GameObjects.Rectangle | null = null;
   private lastSecond = -1;
+  private pulseMs = 0;
 
   init(data: MiniSceneData): void {
     this.returnTo = data.returnTo;
@@ -36,6 +37,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.timerFill = null;
     this.timerText = null;
     this.lastSecond = -1;
+    this.pulseMs = 0;
 
     const dim = this.add
       .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75)
@@ -67,7 +69,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   /** 카운트다운 시작 — 패널 상단에 바 + 큰 숫자 */
   protected startTimer(totalMs: number, onExpire: () => void): void {
     this.timerTotal = totalMs;
-    this.timerEndAt = this.time.now + totalMs;
+    this.timerRemaining = totalMs;
     this.timerActive = true;
     this.onExpire = onExpire;
 
@@ -91,9 +93,14 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.timerActive = false;
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
     if (!this.timerActive || this.done) return;
-    const remain = Math.max(0, this.timerEndAt - this.time.now);
+    // delta 누적 방식 — this.time.now(절대 시계)는 이 씬이 재사용되는 launch 사이
+    // 정지해 있던 실제 경과 시간을 그대로 반영해버려, 재진입 시 이미 만료된
+    // 값으로 계산되는 버그가 있었다. 프레임 delta만 소비해야 안전하다.
+    this.pulseMs += delta;
+    this.timerRemaining = Math.max(0, this.timerRemaining - delta);
+    const remain = this.timerRemaining;
     const ratio = remain / this.timerTotal;
     const panic = remain < Math.min(3000, this.timerTotal * 0.45);
 
@@ -111,7 +118,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     if (this.panicOverlay) {
       this.panicOverlay.setFillStyle(
         0xe94560,
-        panic ? 0.06 + 0.06 * (1 + Math.sin(this.time.now / 90)) : 0
+        panic ? 0.06 + 0.06 * (1 + Math.sin(this.pulseMs / 90)) : 0
       );
     }
 

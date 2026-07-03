@@ -91,15 +91,6 @@ class AudioManagerImpl {
 
   // ── SFX ──────────────────────────────────────
 
-  /** 선배 전조: 발소리 (점점 다가오는 세 걸음) */
-  footstep(): void {
-    if (!this.ready) return;
-    this.noiseBurst(this.now, 0.09, 0.55, 280);
-    this.noiseBurst(this.now + 0.2, 0.09, 0.75, 250);
-    this.noiseBurst(this.now + 0.36, 0.1, 0.95, 220);
-    this.tone('sine', 70, this.now + 0.36, 0.12, 0.4, 50);
-  }
-
   /** 문 여는 소리 */
   door(): void {
     if (!this.ready) return;
