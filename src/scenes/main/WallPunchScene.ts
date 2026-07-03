@@ -130,6 +130,7 @@ export class WallPunchScene extends BaseMainScene {
     this.punchBtn.setEnabled(false);
 
     audio.thud();
+    this.player.punchOnce('left');
     this.cameras.main.shake(150, 0.008);
     this.tweens.add({ targets: this.wall, x: WALL_X - 14, duration: 60, yoyo: true });
     // 벽에 금 가는 연출

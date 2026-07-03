@@ -170,7 +170,16 @@ export class MicrowaveScene extends BaseMainScene {
     if (this.finished || this.zone === zone) return;
     this.zone = zone;
     const x = zone === 'laundry' ? LAUNDRY_X : MICRO_X;
-    this.tweens.add({ targets: this.player, x, duration: 180, ease: 'Cubic.easeOut' });
+    this.player.setMotion('run');
+    this.tweens.add({
+      targets: this.player,
+      x,
+      duration: 180,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        if (!this.finished) this.player.setMotion('idle');
+      },
+    });
     this.player.setFace(zone === 'laundry' ? '🫣' : '🤤');
   }
 

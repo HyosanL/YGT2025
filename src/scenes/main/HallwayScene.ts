@@ -146,6 +146,7 @@ export class HallwayScene extends BaseMainScene {
     this.juniorState = 'approaching';
     this.junior.setVisible(true).setPosition(GAME_WIDTH / 2, 480).setScale(0.4).setAlpha(0.9);
     this.junior.setFace('😳');
+    this.junior.setMotion('walk');
     this.tweens.add({
       targets: this.junior,
       y: 700,
@@ -163,6 +164,7 @@ export class HallwayScene extends BaseMainScene {
   private startSalute(): void {
     this.juniorState = 'saluting';
     this.junior.setFace('🫡');
+    this.junior.setMotion('salute');
     speechBubble(this, GAME_WIDTH / 2, 520, '충성!');
     audio.chime();
     this.saluteRemainingMs = this.saluteWindowMs;
@@ -179,6 +181,7 @@ export class HallwayScene extends BaseMainScene {
     this.saluteTimeout = null;
     this.juniorState = 'leaving';
     this.windowFill.clear();
+    this.junior.setMotion('walk');
     this.tweens.add({
       targets: this.junior,
       y: 1050,

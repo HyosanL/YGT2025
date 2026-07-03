@@ -71,7 +71,8 @@ export class DayIntroScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    new Cadet(this, GAME_WIDTH / 2, 800, 'player', true);
+    const cadet = new Cadet(this, GAME_WIDTH / 2, 800, 'player', true);
+    this.time.delayedCall(900, () => cadet.saluteOnce(1000));
 
     addMuteButton(this);
 

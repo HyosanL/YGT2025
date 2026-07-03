@@ -78,16 +78,34 @@ export class WalkScene extends BaseMainScene {
       .setDepth(10);
 
     this.player = new Cadet(this, GAME_WIDTH / 2, 1010, 'player');
-    this.tweens.add({
-      targets: this.player,
-      y: 1000,
-      duration: 400,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.player.setMotion('walk');
 
     this.senior = new Cadet(this, GAME_WIDTH + 150, 820, 'senior');
     this.senior.setVisible(false);
+
+    // 구보 중 발밑 흙먼지
+    this.time.addEvent({
+      delay: 120,
+      loop: true,
+      callback: () => {
+        if (!this.holding || this.finished) return;
+        const puff = this.add.circle(
+          this.player.x + Phaser.Math.Between(-26, 26),
+          this.player.y + 96,
+          Phaser.Math.Between(5, 10),
+          0xd9cfc0,
+          0.35
+        );
+        this.tweens.add({
+          targets: puff,
+          y: puff.y + 20,
+          scale: 1.9,
+          alpha: 0,
+          duration: 380,
+          onComplete: () => puff.destroy(),
+        });
+      },
+    });
 
     this.stateText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 120, '🚶 걷는 중... (화면을 꾹 누르면 뛰기)', {
@@ -122,6 +140,7 @@ export class WalkScene extends BaseMainScene {
           // 정면에 갑자기 나타남 — 텔레그래프 없이 즉시 등장
           this.senior.setPosition(GAME_WIDTH / 2, 780).setScale(0.7).setAlpha(0);
           this.senior.setVisible(true);
+          this.senior.setMotion('idle');
           this.tweens.add({ targets: this.senior, alpha: 1, scale: 1, duration: 120 });
         } else {
           const targetX = this.seniorSide === 'right' ? GAME_WIDTH - 130 : 130;
@@ -130,7 +149,14 @@ export class WalkScene extends BaseMainScene {
             .setScale(1)
             .setAlpha(1);
           this.senior.setVisible(true);
-          this.tweens.add({ targets: this.senior, x: targetX, duration: 160, ease: 'Cubic.easeOut' });
+          this.senior.setMotion('run');
+          this.tweens.add({
+            targets: this.senior,
+            x: targetX,
+            duration: 160,
+            ease: 'Cubic.easeOut',
+            onComplete: () => this.senior.setMotion('idle'),
+          });
         }
       },
       onLeave: () => {
@@ -139,11 +165,15 @@ export class WalkScene extends BaseMainScene {
           this.senior.setVisible(false);
           return;
         }
+        this.senior.setMotion('run');
         this.tweens.add({
           targets: this.senior,
           x: this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150,
           duration: 300,
-          onComplete: () => this.senior.setVisible(false),
+          onComplete: () => {
+            this.senior.setVisible(false);
+            this.senior.setMotion('idle');
+          },
         });
       },
     });
@@ -189,6 +219,7 @@ export class WalkScene extends BaseMainScene {
     );
     this.stateText.setColor(this.holding ? COLORS.warnCss : COLORS.textCss);
     this.player.setFace(this.holding ? '😤' : '😏');
+    this.player.setMotion(this.holding ? 'run' : 'walk');
 
     const speed = (this.holding ? 0.55 : 0.25) * delta;
     for (const s of this.stripes) {

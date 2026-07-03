@@ -66,6 +66,7 @@ export class ShowerScene extends BaseMainScene {
 
     this.player = new Cadet(this, 210, 700, 'player');
     this.player.setFace('🎵');
+    this.player.setMotion('dance');
 
     // 문 (오른쪽) — 정문
     const door = this.add.graphics();
@@ -124,10 +125,12 @@ export class ShowerScene extends BaseMainScene {
       onDown: () => {
         this.holding = true;
         this.player.setFace('😗');
+        this.player.setMotion('idle');
       },
       onUp: () => {
         this.holding = false;
         this.player.setFace('🎵');
+        this.player.setMotion('dance');
       },
     });
     this.add

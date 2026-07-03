@@ -3,6 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { gameState } from '../core/GameState';
 import { fetchTop } from '../core/Leaderboard';
 import { addMuteButton, Button } from '../ui/Button';
+import { Cadet } from '../ui/Characters';
 import { askNickname } from '../utils/nicknameDialog';
 
 export class TitleScene extends Phaser.Scene {
@@ -62,6 +63,19 @@ export class TitleScene extends Phaser.Scene {
         color: COLORS.accentCss,
       })
       .setOrigin(0.5);
+
+    // 하단 추격전 — 기태는 오늘도 도망 중 (버튼보다 먼저 생성해 뒤에 깔린다)
+    const runner = new Cadet(this, -140, 1155, 'player');
+    runner.setScale(0.6);
+    runner.setMotion('run');
+    runner.setFace('😆');
+    const chaser = new Cadet(this, -400, 1155, 'senior');
+    chaser.setScale(0.62);
+    chaser.setMotion('run');
+    chaser.setFace('😡');
+    // 선배 쪽이 살짝 빨라서 갈수록 간격이 좁혀진다
+    this.tweens.add({ targets: runner, x: GAME_WIDTH + 260, duration: 6000, repeat: -1 });
+    this.tweens.add({ targets: chaser, x: GAME_WIDTH + 40, duration: 6000, repeat: -1 });
 
     if (gameState.bestDay > 0) {
       this.add
