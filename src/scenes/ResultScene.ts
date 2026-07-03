@@ -28,16 +28,24 @@ export class ResultScene extends Phaser.Scene {
   private showSuccess(data: ResultSceneData): void {
     const clearedDay = gameState.day;
     gameState.completeDay();
+    let advanced = false;
+    const advance = (): void => {
+      if (advanced) return;
+      advanced = true;
+      this.scene.start('DayIntro');
+    };
 
     const bg = this.add.graphics();
     bg.fillGradientStyle(0x1c4a3e, 0x1c4a3e, COLORS.bg, COLORS.bg, 1);
     bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
+    const badge = this.add
+      .text(GAME_WIDTH / 2, 380, '✅', { fontFamily: FONT, fontSize: '110px' })
+      .setOrigin(0.5)
+      .setScale(0.3);
+    this.tweens.add({ targets: badge, scale: 1, duration: 250, ease: 'Back.easeOut' });
     this.add
-      .text(GAME_WIDTH / 2, 340, '✅', { fontFamily: FONT, fontSize: '110px' })
-      .setOrigin(0.5);
-    this.add
-      .text(GAME_WIDTH / 2, 480, `${clearedDay}일차 클리어!`, {
+      .text(GAME_WIDTH / 2, 520, `${clearedDay}일차 클리어!`, {
         fontFamily: FONT,
         fontSize: '72px',
         color: COLORS.safeCss,
@@ -45,7 +53,7 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(GAME_WIDTH / 2, 580, data.reason, {
+      .text(GAME_WIDTH / 2, 620, data.reason, {
         fontFamily: FONT,
         fontSize: '32px',
         color: COLORS.subCss,
@@ -54,21 +62,16 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(GAME_WIDTH / 2, 700, '내일은 더 위험하다...', {
+      .text(GAME_WIDTH / 2, 740, '내일은 더 위험하다...', {
         fontFamily: FONT,
         fontSize: '28px',
         color: COLORS.warnCss,
       })
       .setOrigin(0.5);
 
-    new Button(this, GAME_WIDTH / 2, 880, {
-      label: `${clearedDay + 1}일차로 ▶`,
-      width: 420,
-      height: 110,
-      color: COLORS.accent,
-      fontSize: 38,
-      onClick: () => this.scene.start('DayIntro'),
-    });
+    // 리듬 유지 — 탭 없이 자동으로 다음 날로 (탭하면 즉시)
+    this.time.delayedCall(1200, advance);
+    this.input.once('pointerdown', advance);
   }
 
   private showGameOver(data: ResultSceneData): void {

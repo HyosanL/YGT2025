@@ -123,9 +123,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
     );
-    this.tweens.add({ targets: banner, y: 130, duration: 350, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: banner, y: 130, duration: 220, ease: 'Back.easeOut' });
 
-    this.time.delayedCall(1000, () => {
+    this.time.delayedCall(600, () => {
       banner.destroy();
       if (this.finished) {
         this.miniActive = false;
@@ -183,8 +183,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.setDanger('off');
     audio.stopAll();
     audio.fanfare();
-    this.cameras.main.flash(400, 78, 204, 163);
-    this.time.delayedCall(900, () => {
+    this.cameras.main.flash(300, 78, 204, 163);
+    this.time.delayedCall(550, () => {
       this.scene.start('Result', { success: true, reason: message });
     });
   }
@@ -195,9 +195,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
     audio.stopAll();
     audio.caught();
     audio.gameover();
-    this.cameras.main.shake(500, 0.012);
-    this.cameras.main.flash(500, 233, 69, 96);
-    this.time.delayedCall(1200, () => {
+    this.cameras.main.shake(400, 0.012);
+    this.cameras.main.flash(400, 233, 69, 96);
+    this.time.delayedCall(900, () => {
       this.scene.start('Result', { success: false, reason });
     });
   }

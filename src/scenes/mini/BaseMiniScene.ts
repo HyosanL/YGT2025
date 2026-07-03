@@ -145,7 +145,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(600);
     void text;
-    this.time.delayedCall(800, () => {
+    this.time.delayedCall(550, () => {
       this.scene.resume(this.returnTo);
       this.scene.stop();
     });
