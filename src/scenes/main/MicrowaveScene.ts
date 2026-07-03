@@ -3,7 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q3_MICROWAVE } from '../../confi
 import { audio } from '../../core/AudioManager';
 import { Cadet } from '../../ui/Characters';
 import { addVignette, drawAreaSign, drawSkyGradient, drawWasher } from '../../ui/Scenery';
-import { pick, randRange } from '../../utils/rng';
+import { chance, pick, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
@@ -197,7 +197,14 @@ export class MicrowaveScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        this.senior.setPosition(pick(SENIOR_SPOTS), 340);
+        // 변칙 등장 — 대개 복도 멀리(작게), 가끔은 방 안까지 들어온다(크게)
+        if (chance(0.3)) {
+          this.senior.setPosition(640, randFloat(760, 810)).setScale(randFloat(0.95, 1.1));
+        } else {
+          this.senior
+            .setPosition(pick(SENIOR_SPOTS) + randFloat(-20, 20), 340)
+            .setScale(randFloat(0.55, 0.75));
+        }
         this.senior.setVisible(true);
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
         this.time.delayedCall(reactMs, () => {
@@ -205,7 +212,7 @@ export class MicrowaveScene extends BaseMainScene {
           if (this.zone === 'laundry') {
             this.reacted = true;
           } else {
-            this.fail('반응이 늦었다! 전자레인지 앞에 서 있는 걸 들켰다.');
+            this.failCaught(this.senior, '반응이 늦었다! 전자레인지 앞에 서 있는 걸 들켰다.');
           }
         });
       },
@@ -236,14 +243,14 @@ export class MicrowaveScene extends BaseMainScene {
   protected tick(delta: number): void {
     // 반응에 성공해 세탁실로 피한 뒤, 다시 전자레인지 앞으로 돌아오면 발각
     if (this.seniorState === 'in' && this.reacted && this.zone === 'micro') {
-      this.fail('전자레인지 앞에 서 있는 걸 선배에게 발각됐다!');
+      this.failCaught(this.senior, '전자레인지 앞에 서 있는 걸 선배에게 발각됐다!');
       return;
     }
 
     if (this.beeping) {
       this.beepElapsedMs += delta;
       if (this.seniorState === 'in') {
-        this.fail('"삐-" 소리를 들은 선배가 전자레인지를 열어봤다...');
+        this.failCaught(this.senior, '"삐-" 소리를 들은 선배가 전자레인지를 열어봤다...');
         return;
       }
       if (this.beepElapsedMs >= Q3_MICROWAVE.beepMs) {

@@ -73,6 +73,12 @@ export class Button extends Phaser.GameObjects.Container {
     };
     this.on('pointerup', () => release(true));
     this.on('pointerout', () => release(false));
+    // 씬이 pause되면 pointerup이 유실되어 홀드가 고착된다 — pause 시점에 강제 해제
+    const onScenePause = (): void => release(false);
+    scene.events.on(Phaser.Scenes.Events.PAUSE, onScenePause);
+    this.once(Phaser.GameObjects.Events.DESTROY, () => {
+      scene.events.off(Phaser.Scenes.Events.PAUSE, onScenePause);
+    });
 
     scene.add.existing(this);
   }

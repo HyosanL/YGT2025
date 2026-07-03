@@ -64,21 +64,22 @@ export const MINI = {
 // Q1. 샤워장에서 몰래 노래 틀기
 // ─────────────────────────────────────────────
 export const Q1_SHOWER = {
-  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 한 판 10초 내외 목표 */
-  songMs: 6000,
-  /** 샤워 제한 시간 — 일차가 늘수록 여유가 줄어든다 */
-  showerTimeMs: (day: number): number => Math.round(lerp(11500, 10500, difficulty(day))),
-  /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간 */
-  reactMs: (day: number): number => Math.round(lerp(650, 380, difficulty(day))),
-  /** 선배 체류 시간 범위 */
+  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 판당 12~14초, 선배 조우 4~5회 */
+  songMs: 8000,
+  /** 샤워 제한 시간 — 조우가 잦아진 만큼 시뮬레이션 기준 여유 ~2초 확보 (운빨 사망 방지) */
+  showerTimeMs: (day: number): number => Math.round(lerp(14500, 16500, difficulty(day))),
+  /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간
+   *  (모바일 터치 반응 한계 고려 — 커튼 등장 보정 후에도 360ms 밑으로 내려가지 않게) */
+  reactMs: (day: number): number => Math.round(lerp(650, 420, difficulty(day))),
+  /** 선배 체류 시간 범위 — 짧게 치고 빠진다 */
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1100, 1600, difficulty(day))),
-    Math.round(lerp(1600, 2200, difficulty(day))),
+    Math.round(lerp(800, 1100, difficulty(day))),
+    Math.round(lerp(1200, 1500, difficulty(day))),
   ],
-  /** 선배 등장 간격 범위 */
+  /** 선배 등장 간격 범위 — 빨리빨리 돌아온다 */
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(2300, 1600, difficulty(day))),
-    Math.round(lerp(3800, 2600, difficulty(day))),
+    Math.round(lerp(1500, 1200, difficulty(day))),
+    Math.round(lerp(2500, 2000, difficulty(day))),
   ],
 } as const;
 
@@ -86,8 +87,8 @@ export const Q1_SHOWER = {
 // Q2. 복도에서 경례 대신 인사로 받기
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 필요 성공 횟수 (2~3회, 일차 비례) — 한 판 10초 내외 목표 */
-  targetCount: (day: number): number => Math.min(3, 2 + Math.floor((day - 1) / 6)),
+  /** 필요 성공 횟수 (3~4회, 일차 비례) */
+  targetCount: (day: number): number => Math.min(4, 3 + Math.floor((day - 1) / 8)),
   /** 후배 접근 시간 */
   approachMs: (day: number): number => Math.round(lerp(1400, 900, difficulty(day))),
   /** 경례 후 응답 허용 시간 */
@@ -97,15 +98,15 @@ export const Q2_HALLWAY = {
     Math.round(lerp(800, 500, difficulty(day))),
     Math.round(lerp(1400, 900, difficulty(day))),
   ],
-  /** 선배 체류 시간 범위 (선배는 예고 없이 등장한다) */
+  /** 선배 체류 시간 범위 (선배는 예고 없이 등장한다) — 짧게 치고 빠진다 */
   seniorStayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1300, 2000, difficulty(day))),
-    Math.round(lerp(2000, 3000, difficulty(day))),
+    Math.round(lerp(900, 1200, difficulty(day))),
+    Math.round(lerp(1300, 1800, difficulty(day))),
   ],
-  /** 선배 등장 간격 범위 */
+  /** 선배 등장 간격 범위 — 빨리빨리 돌아온다 */
   seniorGapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(2600, 1700, difficulty(day))),
-    Math.round(lerp(4800, 3000, difficulty(day))),
+    Math.round(lerp(1600, 1100, difficulty(day))),
+    Math.round(lerp(2800, 1900, difficulty(day))),
   ],
   /** 선경례 굴욕 페널티 */
   hpPreemptiveSalute: 10,
@@ -117,19 +118,22 @@ export const Q2_HALLWAY = {
 // Q3. 몰래 결식하고 전자레인지 돌리기
 // ─────────────────────────────────────────────
 export const Q3_MICROWAVE = {
-  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 한 판 10초 내외 목표 */
-  cookMs: (day: number): number => Math.round(lerp(4500, 6500, difficulty(day))),
-  /** 100% 도달 시 "삐-" 지속 시간 (이 동안 선배가 있으면 발각) */
-  beepMs: 1100,
+  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 11~16초, 선배 조우 3~5회 */
+  cookMs: (day: number): number => Math.round(lerp(5500, 7500, difficulty(day))),
+  /** 100% 도달 시 "삐-" 지속 시간 — gap 하한(1300ms)보다 인지+반응 여유만큼 짧아야
+   *  '삐- 중 선배 등장' 코인플립 사망이 생기지 않는다 */
+  beepMs: 800,
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
   reactMs: (day: number): number => Math.round(lerp(700, 420, difficulty(day))),
+  /** 짧게 치고 빠진다 */
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1200, 1800, difficulty(day))),
-    Math.round(lerp(1800, 2400, difficulty(day))),
+    Math.round(lerp(900, 1200, difficulty(day))),
+    Math.round(lerp(1300, 1700, difficulty(day))),
   ],
+  /** 빨리빨리 돌아온다 (하한은 beep 800ms + 반응 여유를 보장) */
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(2300, 1600, difficulty(day))),
-    Math.round(lerp(3800, 2600, difficulty(day))),
+    Math.round(lerp(1600, 1300, difficulty(day))),
+    Math.round(lerp(2500, 1900, difficulty(day))),
   ],
 } as const;
 
@@ -137,19 +141,22 @@ export const Q3_MICROWAVE = {
 // Q4. 태권도장까지 걸어가기
 // ─────────────────────────────────────────────
 export const Q4_WALK = {
-  /** 도착까지 필요한 총 이동 시간 (걷기/뛰기 동일 속도) — 한 판 10초 내외 목표 */
-  distanceMs: (day: number): number => Math.round(lerp(8000, 11000, difficulty(day))),
+  /** 도착까지 필요한 총 이동 시간 (걷기/뛰기 동일 속도) — 판당 11~13초, 선배 조우 4~5회 */
+  distanceMs: (day: number): number => Math.round(lerp(10000, 13000, difficulty(day))),
   /** 뛰는 동안 HP 감소 (초당) */
   runHpPerSec: 3,
-  /** 선배는 예고 없이 등장한다. 등장 순간부터 뛰기로 전환할 수 있는 반응 유예 (ms) */
-  graceMs: (day: number): number => Math.round(lerp(480, 260, difficulty(day))),
+  /** 선배는 예고 없이 등장한다. 등장 순간부터 뛰기로 전환할 수 있는 반응 유예 (ms)
+   *  — 모바일 터치 반응 한계(~300ms+) 고려해 바닥을 360ms로 */
+  graceMs: (day: number): number => Math.round(lerp(500, 360, difficulty(day))),
+  /** 짧게 치고 빠진다 */
   stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1000, 1600, difficulty(day))),
-    Math.round(lerp(1800, 2400, difficulty(day))),
+    Math.round(lerp(800, 1100, difficulty(day))),
+    Math.round(lerp(1300, 1600, difficulty(day))),
   ],
+  /** 빨리빨리 돌아온다 */
   gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(2300, 1500, difficulty(day))),
-    Math.round(lerp(3800, 2400, difficulty(day))),
+    Math.round(lerp(1500, 1000, difficulty(day))),
+    Math.round(lerp(2600, 1700, difficulty(day))),
   ],
 } as const;
 
@@ -157,9 +164,9 @@ export const Q4_WALK = {
 // Q5. 옆방 벽 치기 (10일차부터, 순수 운빨)
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 요구 타수 — 한 판 10초 내외 목표 */
+  /** 요구 타수 */
   hits: (day: number): number =>
-    Math.min(5, 3 + Math.floor(Math.max(0, day - WALLPUNCH_UNLOCK_DAY) / 4)),
+    Math.min(6, 4 + Math.floor(Math.max(0, day - WALLPUNCH_UNLOCK_DAY) / 4)),
   /** 1회당 선배 확률 */
   seniorChance: (day: number): number =>
     Math.min(0.25, 0.05 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.01),

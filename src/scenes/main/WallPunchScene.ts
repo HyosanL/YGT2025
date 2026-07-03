@@ -187,10 +187,13 @@ export class WallPunchScene extends BaseMainScene {
         this.time.delayedCall(400, () => {
           audio.door();
           const senior = new Cadet(this, WALL_X + 200, 620, 'senior');
-          senior.setDepth(70);
-          speechBubble(this, WALL_X + 200, 400, '...여기 2학년 방이지?', 1800);
+          senior.setScale(0.8);
           this.player.setFace('😱');
-          this.fail('벽 너머엔 선배가 놀러와 있었다... 문이 벌컥 열렸다.');
+          this.failCaught(
+            senior,
+            '벽 너머엔 선배가 놀러와 있었다... 문이 벌컥 열렸다.',
+            '...여기 2학년 방이지?'
+          );
         });
         return;
       }

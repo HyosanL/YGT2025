@@ -11,7 +11,7 @@ import {
   drawStreetlight,
   drawTree,
 } from '../../ui/Scenery';
-import { pick, randRange } from '../../utils/rng';
+import { pick, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 const ROAD_TOP = 500;
@@ -168,6 +168,10 @@ export class WalkScene extends BaseMainScene {
     this.input.on('pointerup', () => {
       this.holding = false;
     });
+    // 미니퀘스트 pause 중 pointerup이 유실되면 홀드가 고착된다 — pause 시 강제 해제
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => {
+      this.holding = false;
+    });
 
     this.setupCommon();
 
@@ -181,23 +185,28 @@ export class WalkScene extends BaseMainScene {
         this.notRunningMs = 0;
         this.graceMs = Q4_WALK.graceMs(this.day);
         this.seniorSide = pick(['left', 'right', 'center'] as const);
+        // 변칙 등장 — 매번 크기(거리감)와 위치가 달라진다
+        const scale = randFloat(0.8, 1.2);
         if (this.seniorSide === 'center') {
           // 정면에 갑자기 나타남 — 텔레그래프 없이 즉시 등장
-          this.senior.setPosition(GAME_WIDTH / 2, 780).setScale(0.7).setAlpha(0);
+          this.senior
+            .setPosition(GAME_WIDTH / 2 + randFloat(-90, 90), randFloat(720, 820))
+            .setScale(scale * 0.7)
+            .setAlpha(0);
           this.senior.setVisible(true);
           this.senior.setMotion('idle');
-          this.tweens.add({ targets: this.senior, alpha: 1, scale: 1, duration: 120 });
+          this.tweens.add({ targets: this.senior, alpha: 1, scale, duration: 120 });
         } else {
           const targetX = this.seniorSide === 'right' ? GAME_WIDTH - 130 : 130;
           this.senior
-            .setPosition(this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150, 820)
-            .setScale(1)
+            .setPosition(this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150, randFloat(770, 860))
+            .setScale(scale)
             .setAlpha(1);
           this.senior.setVisible(true);
           this.senior.setMotion('run');
           this.tweens.add({
             targets: this.senior,
-            x: targetX,
+            x: targetX + randFloat(-30, 30),
             duration: 160,
             ease: 'Cubic.easeOut',
             onComplete: () => this.senior.setMotion('idle'),
@@ -252,7 +261,7 @@ export class WalkScene extends BaseMainScene {
         this.notRunningMs += delta;
         if (this.notRunningMs > this.graceMs) {
           this.player.setFace('😨');
-          this.fail('선배가 갑자기 나타났는데 반응이 늦었다! 걷는 걸 들켰다.');
+          this.failCaught(this.senior, '선배가 갑자기 나타났는데 반응이 늦었다! 걷는 걸 들켰다.');
           return;
         }
       }

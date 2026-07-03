@@ -4,6 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import { questManager } from '../../core/QuestManager';
 import { addMuteButton, showToast } from '../../ui/Button';
+import { Cadet, speechBubble } from '../../ui/Characters';
 import { HpBar } from '../../ui/HpBar';
 
 export interface SeniorLoopParams {
@@ -33,11 +34,17 @@ export abstract class BaseMainScene extends Phaser.Scene {
   private miniActive = false;
   private dangerG!: Phaser.GameObjects.Graphics;
   private dangerTween: Phaser.Tweens.Tween | null = null;
+  private seniorHandlers: SeniorLoopHandlers | null = null;
+  private seniorActive = false;
+  private seniorTimer: Phaser.Time.TimerEvent | null = null;
 
   /** 서브클래스 create()에서 배경을 그린 뒤 호출 */
   protected setupCommon(): void {
     this.finished = false;
     this.miniActive = false;
+    this.seniorHandlers = null;
+    this.seniorActive = false;
+    this.seniorTimer = null;
     this.day = gameState.day;
     this.hpBar = new HpBar(this);
     addMuteButton(this);
@@ -72,9 +79,10 @@ export abstract class BaseMainScene extends Phaser.Scene {
       this.dangerG.setAlpha(0);
       return;
     }
+    // 은은한 경고 (과하지 않게 — 등장 연출의 주역은 선배 본인)
     this.dangerTween = this.tweens.add({
       targets: this.dangerG,
-      alpha: { from: 0.26, to: 0.42 },
+      alpha: { from: 0.07, to: 0.13 },
       duration: 260,
       yoyo: true,
       repeat: -1,
@@ -131,6 +139,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
         this.miniActive = false;
         return;
       }
+      // pause 직전 진행 중인 선배 조우/판정을 강제 종료 — 복귀 직후
+      // 동결됐던 반응 판정이 터져 대응 불가로 죽는 상황을 방지한다
+      this.clearSeniorEncounter();
       const mini = questManager.pickMini();
       this.scene.launch(mini, { returnTo: this.scene.key });
       this.scene.pause();
@@ -145,6 +156,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
       return;
     }
     showToast(this, '휴... 다시 집중하자');
+    // 새 gap으로 선배 사이클 재시작 (+ 정신 차릴 시간 약간)
+    this.scheduleSeniorCycle(600);
   }
 
   // ── 선배 등장 루프 ────────────────────────────
@@ -155,24 +168,46 @@ export abstract class BaseMainScene extends Phaser.Scene {
    * 시간(reactMs/graceMs 등)을 두고 플레이어의 대응을 판정한다.
    */
   protected startSeniorLoop(handlers: SeniorLoopHandlers): void {
-    const cycle = (): void => {
+    this.seniorHandlers = handlers;
+    this.scheduleSeniorCycle();
+  }
+
+  private scheduleSeniorCycle(extraDelayMs = 0): void {
+    const h = this.seniorHandlers;
+    if (!h || this.finished) return;
+    this.seniorTimer?.remove(); // 중복 사이클 방지
+    const p = h.params();
+    this.seniorTimer = this.time.delayedCall(p.gapMs + extraDelayMs, () => {
       if (this.finished) return;
-      const p = handlers.params();
-      this.time.delayedCall(p.gapMs, () => {
+      audio.door();
+      this.setDanger('in');
+      this.cameras.main.shake(140, 0.006);
+      this.seniorActive = true;
+      h.onEnter();
+      this.seniorTimer = this.time.delayedCall(p.stayMs, () => {
         if (this.finished) return;
-        audio.door();
-        this.setDanger('in');
-        this.cameras.main.shake(140, 0.006);
-        handlers.onEnter();
-        this.time.delayedCall(p.stayMs, () => {
-          if (this.finished) return;
-          this.setDanger('off');
-          handlers.onLeave();
-          cycle();
-        });
+        this.seniorActive = false;
+        this.setDanger('off');
+        h.onLeave();
+        this.scheduleSeniorCycle();
       });
-    };
-    cycle();
+    });
+  }
+
+  /**
+   * 진행 중인 선배 조우와 예약 타이머를 즉시 정리한다 (미니퀘스트 진입용).
+   * onLeave가 seniorState를 'away'로 되돌리므로, 동결된 반응 판정
+   * delayedCall이 복귀 후 발화해도 가드에 걸려 무해해진다.
+   */
+  private clearSeniorEncounter(): void {
+    if (!this.seniorHandlers) return;
+    this.seniorTimer?.remove();
+    this.seniorTimer = null;
+    if (this.seniorActive) {
+      this.seniorActive = false;
+      this.setDanger('off');
+      this.seniorHandlers.onLeave();
+    }
   }
 
   // ── 결과 처리 ────────────────────────────────
@@ -198,6 +233,46 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.cameras.main.shake(400, 0.012);
     this.cameras.main.flash(400, 233, 69, 96);
     this.time.delayedCall(900, () => {
+      this.scene.start('Result', { success: false, reason });
+    });
+  }
+
+  /**
+   * 선배에게 걸린 경우의 게임 오버 — 그 선배가 화면 중앙으로 달려와
+   * "뭐 하냐?" 한마디를 던지고 끝난다.
+   */
+  protected failCaught(senior: Cadet, reason: string, line = '뭐 하냐?'): void {
+    if (this.finished) return;
+    this.finished = true;
+    this.setDanger('off');
+    audio.stopAll();
+    audio.caught();
+
+    const dim = this.add
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0)
+      .setOrigin(0)
+      .setDepth(3400);
+    this.tweens.add({ targets: dim, fillAlpha: 0.55, duration: 350 });
+
+    this.tweens.killTweensOf(senior);
+    senior.setVisible(true).setAlpha(1).setDepth(3500);
+    senior.setFace('😡');
+    senior.setMotion('run');
+    this.tweens.add({
+      targets: senior,
+      x: GAME_WIDTH / 2,
+      y: GAME_HEIGHT / 2 + 140,
+      scale: 1.5,
+      duration: 420,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        senior.setMotion('idle');
+        speechBubble(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, line, 1500, 3600);
+        this.cameras.main.shake(300, 0.01);
+        audio.gameover();
+      },
+    });
+    this.time.delayedCall(1750, () => {
       this.scene.start('Result', { success: false, reason });
     });
   }

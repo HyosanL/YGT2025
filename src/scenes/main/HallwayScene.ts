@@ -11,7 +11,7 @@ import {
   drawWallClock,
   drawWindowView,
 } from '../../ui/Scenery';
-import { chance, randRange } from '../../utils/rng';
+import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type JuniorState = 'idle' | 'approaching' | 'saluting' | 'leaving';
@@ -29,6 +29,7 @@ export class HallwayScene extends BaseMainScene {
   private juniorState: JuniorState = 'idle';
   private seniorVisible = false;
   private seniorSide: SeniorSide = 'right';
+  private seniorEnterMs = 0;
   private count = 0;
   private target = 3;
   private saluteRemainingMs = 0;
@@ -153,8 +154,14 @@ export class HallwayScene extends BaseMainScene {
       }),
       onEnter: () => {
         this.seniorVisible = true;
+        this.seniorEnterMs = this.time.now;
         this.seniorSide = chance(0.5) ? 'left' : 'right';
-        this.senior.setPosition(this.seniorSide === 'right' ? SENIOR_RIGHT_X : SENIOR_LEFT_X, 500);
+        // 변칙 등장 — 문 앞이지만 매번 거리감(크기)과 위치가 다르다
+        const scale = randFloat(0.7, 0.95);
+        const baseX = this.seniorSide === 'right' ? SENIOR_RIGHT_X : SENIOR_LEFT_X;
+        this.senior
+          .setPosition(baseX + randFloat(-18, 18), 500 + Math.round((scale - 0.8) * 160))
+          .setScale(scale);
         this.senior.setVisible(true);
         this.senior.setFace('👀');
       },
@@ -226,15 +233,20 @@ export class HallwayScene extends BaseMainScene {
   private onGreet(): void {
     if (this.finished) return;
     if (this.juniorState !== 'saluting') return;
-    if (this.seniorVisible) {
-      this.senior.setFace('😡');
-      speechBubble(this, this.senior.x, 340, '너 지금 뭐 했냐?');
-      this.fail('경례를 고개 까딱으로 받는 순간, 선배와 눈이 마주쳤다.');
+    // 등장 직후 280ms 이내는 세이프 — 탭을 이미 결심한 순간 선배가 나타난
+    // '대응 불가능한 즉사'를 막는다 (다른 퀘스트의 반응 유예와 대칭)
+    if (this.seniorVisible && this.time.now - this.seniorEnterMs > 280) {
+      this.failCaught(
+        this.senior,
+        '경례를 고개 까딱으로 받는 순간, 선배와 눈이 마주쳤다.',
+        '너 지금 뭐 했냐?'
+      );
       return;
     }
     this.count += 1;
     this.updateCountText();
     audio.chime();
+    speechBubble(this, GAME_WIDTH / 2, GAME_HEIGHT - 360, '받았으~', 900);
     this.junior.setFace('😳');
     speechBubble(this, GAME_WIDTH / 2, 520, '충... 충성?');
     if (this.count >= this.target) {

@@ -376,7 +376,8 @@ export function speechBubble(
   x: number,
   y: number,
   text: string,
-  durationMs = 1200
+  durationMs = 1200,
+  depth = 800
 ): void {
   const bubble = scene.add
     .text(x, y, text, {
@@ -388,7 +389,7 @@ export function speechBubble(
       align: 'center',
     })
     .setOrigin(0.5, 1)
-    .setDepth(800);
+    .setDepth(depth);
   scene.tweens.add({
     targets: bubble,
     y: y - 20,

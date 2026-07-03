@@ -9,7 +9,7 @@ import {
   drawCeilingLight,
   drawSkyGradient,
 } from '../../ui/Scenery';
-import { chance, randRange } from '../../utils/rng';
+import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 const DOOR_X = GAME_WIDTH - 95;
@@ -247,16 +247,23 @@ export class ShowerScene extends BaseMainScene {
         this.seniorState = 'in';
         this.reacted = false;
         this.seniorSpot = chance(0.5) ? 'door' : 'curtain';
-        this.senior.setPosition(this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X, 700);
+        // 변칙 등장 — 가까이(크게) 또는 멀리(작게), 위치도 살짝 흔들린다
+        const near = chance(0.5);
+        const scale = near ? randFloat(1.0, 1.2) : randFloat(0.75, 0.9);
+        const x = (this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X) + randFloat(-24, 24);
+        this.senior.setPosition(x, near ? 724 : 664).setScale(scale);
         this.senior.setVisible(true);
-        // 옆 칸 커튼 쪽은 더 가까운 만큼 반응할 시간이 더 짧다
-        const reactMs = Q1_SHOWER.reactMs(this.day) * (this.seniorSpot === 'curtain' ? 0.7 : 1);
+        // 옆 칸 커튼 쪽은 더 가깝지만, 반응창은 터치 반응 한계(360ms) 밑으로 안 내려간다
+        const reactMs = Math.max(
+          360,
+          Q1_SHOWER.reactMs(this.day) * (this.seniorSpot === 'curtain' ? 0.7 : 1)
+        );
         this.time.delayedCall(reactMs, () => {
           if (this.finished || this.seniorState !== 'in') return;
           if (this.holding) {
             this.reacted = true;
           } else {
-            this.fail('반응이 늦었다! 노랫소리를 들켰다.');
+            this.failCaught(this.senior, '반응이 늦었다! 노랫소리를 들켰다.');
           }
         });
       },
@@ -286,7 +293,7 @@ export class ShowerScene extends BaseMainScene {
 
     // 반응에 성공해 숨은 뒤, 선배가 있는 동안 손을 떼면 발각
     if (this.seniorState === 'in' && this.reacted && !this.holding) {
-      this.fail('선배 앞에서 노래가 다시 흘러나왔다...!');
+      this.failCaught(this.senior, '선배 앞에서 노래가 다시 흘러나왔다...!');
       return;
     }
 
