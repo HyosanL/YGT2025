@@ -56,7 +56,6 @@ const game = new Phaser.Game({
     BootScene,
     TitleScene,
     DayIntroScene,
-    PauseScene,
     ResultScene,
     ShowerScene,
     HallwayScene,
@@ -66,6 +65,9 @@ const game = new Phaser.Game({
     KakaoScene,
     VoteScene,
     PhotoPickScene,
+    // 오버레이 씬은 마지막에 — Phaser는 이 배열 순서대로 렌더링하므로
+    // 앞에 두면 게임 씬 '아래'에 깔려 보이지 않는다
+    PauseScene,
   ],
 });
 

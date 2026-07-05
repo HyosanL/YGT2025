@@ -117,9 +117,6 @@ export const Q2_HALLWAY = {
 export const Q3_MICROWAVE = {
   /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 11~16초, 선배 조우 3~5회 */
   cookMs: (day: number): number => Math.round(lerp(5500, 7500, difficulty(day))),
-  /** 100% 도달 시 "삐-" 지속 시간 — gap 하한(1300ms)보다 인지+반응 여유만큼 짧아야
-   *  '삐- 중 선배 등장' 코인플립 사망이 생기지 않는다 */
-  beepMs: 800,
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
   reactMs: (day: number): number => Math.round(lerp(700, 420, difficulty(day))),
   /** 짧게 치고 빠진다 */
@@ -127,7 +124,7 @@ export const Q3_MICROWAVE = {
     Math.round(lerp(900, 1200, difficulty(day))),
     Math.round(lerp(1300, 1700, difficulty(day))),
   ],
-  /** 빨리빨리 돌아온다 (하한은 beep 800ms + 반응 여유를 보장) */
+  /** 빨리빨리 돌아온다 */
   gapMsRange: (day: number): [number, number] => [
     Math.round(lerp(1600, 1300, difficulty(day))),
     Math.round(lerp(2500, 1900, difficulty(day))),
@@ -148,14 +145,16 @@ export const Q4_WALK = {
   walkSpeed: 250,
   /** 구보 속도 (px/s) */
   runSpeed: 500,
-  /** 구보 HP 소모 (초당) — 전 구간을 구보로 내달리면 반드시 탈진하는 수치 */
-  runHpPerSec: 13,
+  /** 구보 HP 소모 (초당) — 코스의 절반만 내리 뛰어도 탈진하는 수치 */
+  runHpPerSec: 18,
   /** 걷는 동안 HP 회복 (초당) — 사각지대 걷기의 보상 */
-  walkRegenPerSec: 1.5,
+  walkRegenPerSec: 2,
   /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다 */
   graceMs: (day: number): number => Math.round(lerp(650, 430, difficulty(day))),
-  /** 도로변 선배 배치 간격 (월드 px) */
-  seniorSpacingPx: (day: number): number => Math.round(lerp(1500, 1050, difficulty(day))),
+  /** 도로변 선배 배치 간격 (월드 px) — 시야(620px)가 서로 겹칠 만큼 촘촘하다 */
+  seniorSpacingPx: (day: number): number => Math.round(lerp(1050, 760, difficulty(day))),
+  /** 같은 지점에 맞은편 선배가 하나 더 서는(시야 교차 구간) 확률 */
+  pairChance: 0.25,
   /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움) */
   vision: {
     rangePx: 620,
@@ -352,7 +351,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',
     emoji: '🍜',
-    tip: '100% 순간 "삐-" 완성음이 크게 울린다 — 선배가 지나간 직후에 완성시켜라! (소등 전까지)',
+    tip: '전자레인지 앞에서만 조리 진행 — 선배 등장 즉시 세탁실로! 소등 전에 100%를 채워라',
   },
   walk: {
     title: '태권도장까지 걸어가기',

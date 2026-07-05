@@ -137,16 +137,12 @@ export class WalkScene extends BaseMainScene {
         .setOrigin(0.5)
     );
 
-    // ── 도로변 선배 배치 ──
+    // ── 도로변 선배 배치 — 불규칙 간격 + 시야가 교차하는 구간 포함 ──
     this.guards = [];
     const spacing = Q4_WALK.seniorSpacingPx(gameState.day);
     const ampRad = Phaser.Math.DegToRad(Q4_WALK.vision.ampDeg);
-    let wy = 1150;
-    let side: 1 | -1 = chance(0.5) ? 1 : -1;
-    while (wy < this.distancePx - 300) {
-      // 대체로 좌우 번갈아 서 있다 (가끔 같은 쪽 연속)
-      side = chance(0.72) ? ((side === 1 ? -1 : 1) as 1 | -1) : side;
-      const gx = side === 1 ? GUARD_RIGHT_X : GUARD_LEFT_X;
+    const addGuard = (wy: number, side: 1 | -1): void => {
+      const gx = (side === 1 ? GUARD_RIGHT_X : GUARD_LEFT_X) + randFloat(-30, 30);
       const cadet = new Cadet(this, gx, -400, 'senior');
       cadet.setScale(0.85).setDepth(6);
       cadet.setFace('👀');
@@ -161,7 +157,17 @@ export class WalkScene extends BaseMainScene {
         turnSpeed: 0.0001,
         nextThinkMs: randFloat(0, 700), // 선배마다 다른 타이밍에 첫 방향 전환
       });
-      wy += spacing + randFloat(-260, 260);
+    };
+    // 도착 지점(무도장 입구)까지 빈 구간 없이 깔린다
+    let wy = 1150;
+    while (wy < this.distancePx + 120) {
+      const side: 1 | -1 = chance(0.5) ? 1 : -1; // 완전 무작위 — 같은 쪽 연속도 흔하다
+      addGuard(wy, side);
+      // 가끔 맞은편에 한 명 더 — 양쪽 시야가 겹치는 협곡 구간
+      if (chance(Q4_WALK.pairChance)) {
+        addGuard(wy + randFloat(-120, 200), (side === 1 ? -1 : 1) as 1 | -1);
+      }
+      wy += spacing + randFloat(-330, 330);
     }
 
     // ── HUD ──

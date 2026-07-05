@@ -33,6 +33,8 @@ export class PauseScene extends Phaser.Scene {
     this.returnTo = data.returnTo;
     this.menuItems = [];
     this.counting = false;
+    // 등록 순서와 무관하게 반드시 최상단에 렌더링 (게임 씬에 가려짐 방지)
+    this.scene.bringToTop();
 
     // 회색 처리 — 뒤의 판이 톤 다운되어 보인다
     const dim = this.add
@@ -92,29 +94,34 @@ export class PauseScene extends Phaser.Scene {
     this.menuItems = [];
 
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 180, label, {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 220, label, {
         fontFamily: FONT,
-        fontSize: '38px',
+        fontSize: '44px',
         color: COLORS.textCss,
         fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 6,
       })
       .setOrigin(0.5);
 
+    // 화면 정중앙, 아주 큰 숫자
     const numText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '', {
         fontFamily: FONT,
-        fontSize: '160px',
+        fontSize: '220px',
         color: COLORS.warnCss,
         fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 10,
       })
       .setOrigin(0.5);
 
     const tickMs = 480;
     const showNumber = (n: number): void => {
       if (n <= 0) {
-        numText.setText('시작!').setColor(COLORS.safeCss).setScale(0.6);
+        numText.setText('시작!').setColor(COLORS.safeCss).setScale(0.5);
         audio.chime();
-        this.tweens.add({ targets: numText, scale: 1.1, duration: 160, ease: 'Back.easeOut' });
+        this.tweens.add({ targets: numText, scale: 0.85, duration: 160, ease: 'Back.easeOut' });
         this.time.delayedCall(300, () => {
           this.scene.resume(this.returnTo);
           this.scene.stop();

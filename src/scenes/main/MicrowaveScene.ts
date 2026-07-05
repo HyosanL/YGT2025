@@ -19,7 +19,7 @@ const SENIOR_SPOTS = [150, 360, 570] as const;
  * 좌(세탁실=은신처)/우(전자레인지) 터치로 이동. 전자레인지 앞에서만 게이지가 찬다.
  * 선배는 예고 없이 복도의 여러 지점 중 한 곳에 갑자기 나타난다.
  * 등장 순간의 반응 유예(reactMs) 안에 세탁실로 피하지 못하면 발각.
- * 100% 도달 시 "삐-" 소리가 나는 동안은 숨어 있어도 선배가 있으면 발각.
+ * 100% 도달 = "삐-" 소리와 함께 즉시 성공. 단, 완전소등 전에 끝내야 한다.
  */
 export class MicrowaveScene extends BaseMainScene {
   private zone: Zone = 'micro';
@@ -27,8 +27,6 @@ export class MicrowaveScene extends BaseMainScene {
   private reacted = false;
   private cookProgressMs = 0;
   private cookTotalMs = 1;
-  private beeping = false;
-  private beepElapsedMs = 0;
   private lightsRemainMs = 1;
   private lightsTotalMs = 1;
   private lightsLastSec = -1;
@@ -40,7 +38,6 @@ export class MicrowaveScene extends BaseMainScene {
   private lightsFill!: Phaser.GameObjects.Graphics;
   private lightsLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
-  private preBeepText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'microwave' });
@@ -50,8 +47,6 @@ export class MicrowaveScene extends BaseMainScene {
     this.zone = 'micro';
     this.seniorState = 'away';
     this.cookProgressMs = 0;
-    this.beeping = false;
-    this.beepElapsedMs = 0;
     this.lightsLastSec = -1;
 
     // 애니풍 심야 세탁실 + 취사구역
@@ -178,37 +173,14 @@ export class MicrowaveScene extends BaseMainScene {
       .setDepth(10);
 
     this.beepText = this.add
-      .text(530, 480, '삐 ─ !! (선배가 들으면 끝!)', {
+      .text(530, 480, '삐 ─ 완성!!', {
         fontFamily: FONT,
-        fontSize: '40px',
-        color: COLORS.accentCss,
+        fontSize: '44px',
+        color: COLORS.safeCss,
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
       .setVisible(false);
-
-    // 90% 근접 시 뜨는 경고 — "삐-" 타이밍을 고르라는 안내
-    this.preBeepText = this.add
-      .text(GAME_WIDTH / 2, 200, '⚠️ 곧 "삐-" 완성음이 울린다! 선배가 지나간 직후에 완성시켜!', {
-        fontFamily: FONT,
-        fontSize: '25px',
-        color: COLORS.warnCss,
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        padding: { x: 16, y: 8 },
-        wordWrap: { width: GAME_WIDTH - 80 },
-        align: 'center',
-      })
-      .setOrigin(0.5)
-      .setDepth(11)
-      .setVisible(false);
-    this.tweens.add({
-      targets: this.preBeepText,
-      alpha: { from: 1, to: 0.55 },
-      duration: 380,
-      yoyo: true,
-      repeat: -1,
-    });
 
     this.senior = new Cadet(this, GAME_WIDTH / 2, 340, 'senior');
     this.senior.setScale(0.7).setVisible(false).setDepth(5);
@@ -220,7 +192,7 @@ export class MicrowaveScene extends BaseMainScene {
       .text(
         GAME_WIDTH / 2,
         GAME_HEIGHT - 100,
-        '◀ 왼쪽 터치 = 세탁실 숨기 · 오른쪽 터치 = 전자레인지 ▶\n100% 순간 "삐-"가 크게 울린다 — 그때 선배가 있으면 숨어 있어도 끝!',
+        '◀ 왼쪽 터치 = 세탁실 숨기 · 오른쪽 터치 = 전자레인지 ▶\n소등 전에 조리 100%를 채우면 성공!',
         {
           fontFamily: FONT,
           fontSize: '23px',
@@ -318,33 +290,22 @@ export class MicrowaveScene extends BaseMainScene {
       return;
     }
 
-    if (this.beeping) {
-      this.beepElapsedMs += delta;
-      if (this.seniorState === 'in') {
-        this.failCaught(this.senior, '"삐-" 소리를 들은 선배가 전자레인지를 열어봤다...');
-        return;
-      }
-      if (this.beepElapsedMs >= Q3_MICROWAVE.beepMs) {
-        this.succeed('라면 획득! 흔적도 없이 순삭했다.');
-      }
-      return;
-    }
-
-    // 전자레인지 앞에 있을 때만 조리 진행
+    // 전자레인지 앞에 있을 때만 조리 진행 — 100% = "삐-"와 함께 즉시 성공
     if (this.zone === 'micro') {
       this.cookProgressMs += delta;
       if (this.cookProgressMs >= this.cookTotalMs) {
-        this.beeping = true;
-        this.beepElapsedMs = 0;
         this.beepText.setVisible(true);
         this.tweens.add({
           targets: this.beepText,
           scale: { from: 1, to: 1.3 },
           duration: 200,
           yoyo: true,
-          repeat: 4,
+          repeat: 2,
         });
         audio.microwaveBeep();
+        this.player.setFace('😋');
+        this.succeed('삐- 라면 획득! 흔적도 없이 순삭했다.');
+        return;
       }
     }
 
@@ -353,7 +314,5 @@ export class MicrowaveScene extends BaseMainScene {
     this.cookFill.fillStyle(ratio > 0.9 ? COLORS.accent : COLORS.warn, 1);
     this.cookFill.fillRoundedRect(GAME_WIDTH / 2 - 244, 86, 488 * ratio, 32, 7);
     this.cookLabel.setText(`조리 ${Math.floor(ratio * 100)}%`);
-    // 완성 직전 경고 — "삐-" 타이밍을 고를 수 있게 미리 알려준다
-    this.preBeepText.setVisible(ratio >= 0.82 && !this.beeping);
   }
 }
