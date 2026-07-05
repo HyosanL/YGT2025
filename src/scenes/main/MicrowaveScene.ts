@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q3_MICROWAVE } from '../../config';
 import { audio } from '../../core/AudioManager';
+import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addVignette, drawAreaSign, drawSkyGradient, drawWasher } from '../../ui/Scenery';
 import { chance, pick, randFloat, randRange } from '../../utils/rng';
@@ -16,9 +17,10 @@ const SENIOR_SPOTS = [150, 360, 570] as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
- * 좌(세탁실=은신처)/우(전자레인지) 터치로 이동. 전자레인지 앞에서만 게이지가 찬다.
+ * [🫣 숨기] 버튼을 누르고 있는 동안 세탁실에 숨는다 (샤워장과 같은 홀드 조작).
+ * 손을 떼면 전자레인지 앞으로 돌아와 조리가 진행된다 (내부 조명 + 가동음).
  * 선배는 예고 없이 복도의 여러 지점 중 한 곳에 갑자기 나타난다.
- * 등장 순간의 반응 유예(reactMs) 안에 세탁실로 피하지 못하면 발각.
+ * 등장 순간의 반응 유예(reactMs) 안에 숨지 못하면 발각.
  * 100% 도달 = "삐-" 소리와 함께 즉시 성공. 단, 완전소등 전에 끝내야 한다.
  */
 export class MicrowaveScene extends BaseMainScene {
@@ -38,6 +40,7 @@ export class MicrowaveScene extends BaseMainScene {
   private lightsFill!: Phaser.GameObjects.Graphics;
   private lightsLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
+  private ovenLight!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super({ key: 'microwave' });
@@ -134,6 +137,12 @@ export class MicrowaveScene extends BaseMainScene {
     counter.fillRect(608, 600, 36, 14);
     counter.fillStyle(0x555b70, 1);
     for (let i = 0; i < 3; i++) counter.fillCircle(626, 638 + i * 18, 6);
+    // 조리 중에만 켜지는 내부 조명 (창 안쪽 따뜻한 빛 + 주변 은은한 글로우)
+    this.ovenLight = this.add.graphics().setVisible(false);
+    this.ovenLight.fillStyle(0xffe9b0, 0.18);
+    this.ovenLight.fillCircle(528, 640, 96);
+    this.ovenLight.fillStyle(0xffd98a, 0.6);
+    this.ovenLight.fillRoundedRect(464, 594, 128, 92, 6);
     this.add.text(530, 640, '🍜', { fontFamily: FONT, fontSize: '48px' }).setOrigin(0.5);
     drawAreaSign(this, 555, 538, '취사구역');
     // 전자레인지 위 은은한 백열등 빛
@@ -188,26 +197,23 @@ export class MicrowaveScene extends BaseMainScene {
     this.player = new Cadet(this, MICRO_X, PLAYER_Y, 'player');
     this.player.setFace('🤤');
 
-    this.add
-      .text(
-        GAME_WIDTH / 2,
-        GAME_HEIGHT - 100,
-        '◀ 왼쪽 터치 = 세탁실 숨기 · 오른쪽 터치 = 전자레인지 ▶\n소등 전에 조리 100%를 채우면 성공!',
-        {
-          fontFamily: FONT,
-          fontSize: '23px',
-          color: COLORS.subCss,
-          wordWrap: { width: GAME_WIDTH - 50 },
-          align: 'center',
-          lineSpacing: 6,
-        }
-      )
-      .setOrigin(0.5);
-
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y < 140) return; // 상단 UI(음소거 등) 영역 무시
-      this.moveTo(pointer.x < GAME_WIDTH / 2 ? 'laundry' : 'micro');
+    // 홀드 버튼 — 누르는 동안 세탁실에 숨는다 (샤워장과 같은 조작감)
+    new Button(this, GAME_WIDTH / 2, GAME_HEIGHT - 190, {
+      label: '🫣 세탁실에 숨기 (꾹)',
+      width: 480,
+      height: 150,
+      color: COLORS.accent,
+      fontSize: 40,
+      onDown: () => this.moveTo('laundry'),
+      onUp: () => this.moveTo('micro'),
     });
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 90, '누르는 동안 숨는다 · 소등 전에 조리 100%를 채우면 성공!', {
+        fontFamily: FONT,
+        fontSize: '24px',
+        color: COLORS.subCss,
+      })
+      .setOrigin(0.5);
 
     this.setupCommon();
     this.cookTotalMs = Q3_MICROWAVE.cookMs(this.day);
@@ -290,14 +296,17 @@ export class MicrowaveScene extends BaseMainScene {
       return;
     }
 
-    // 전자레인지 가동음 "위이이잉" — 앞에 서서 조리 중일 때만
-    if (this.zone === 'micro') audio.startMicrowaveHum();
+    // 전자레인지 가동음 "위이이잉" + 내부 조명 — 앞에 서서 조리 중일 때만
+    const cooking = this.zone === 'micro';
+    if (cooking) audio.startMicrowaveHum();
     else audio.stopMicrowaveHum();
+    this.ovenLight.setVisible(cooking);
 
     // 전자레인지 앞에 있을 때만 조리 진행 — 100% = "삐-"와 함께 즉시 성공
-    if (this.zone === 'micro') {
+    if (cooking) {
       this.cookProgressMs += delta;
       if (this.cookProgressMs >= this.cookTotalMs) {
+        this.ovenLight.setVisible(false); // 조리 완료 — 내부 조명 소등
         this.beepText.setVisible(true);
         this.tweens.add({
           targets: this.beepText,

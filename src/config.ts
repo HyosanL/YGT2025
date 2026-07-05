@@ -37,6 +37,11 @@ export function difficulty(day: number): number {
   return Math.min(1, 0.3 + day * 0.07);
 }
 
+/** 일차별 BGM 템포 배율 — 갈수록 빨라진다 (게임오버 후 새 판은 다시 1.0부터) */
+export function bgmTempo(day: number): number {
+  return Math.min(1.45, 1 + (day - 1) * 0.035);
+}
+
 // ─────────────────────────────────────────────
 // 메인 퀘스트 배정
 // ─────────────────────────────────────────────
@@ -150,7 +155,7 @@ export const Q3_MICROWAVE = {
 // ─────────────────────────────────────────────
 export const Q4_WALK = {
   /** 도착까지 총 거리 (월드 px) */
-  distancePx: (day: number): number => Math.round(lerp(4200, 5800, difficulty(day))),
+  distancePx: (day: number): number => Math.round(lerp(3700, 5100, difficulty(day))),
   /** 걷기 속도 (px/s) — 안전하지만 느리다 */
   walkSpeed: 250,
   /** 구보 속도 (px/s) */
@@ -168,7 +173,7 @@ export const Q4_WALK = {
   /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움).
    *  선배가 길가에서 멀리 떨어져 있어(측면 ~300px) 시야 끝자락만 도로 중앙에 닿는다 */
   vision: {
-    rangePx: 540,
+    rangePx: 430,
     halfAngleDeg: 26,
     /** 정면 기준 좌우 회전 폭 (도) */
     ampDeg: 80,
@@ -363,7 +368,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',
     emoji: '🍜',
-    tip: '전자레인지 앞에서만 조리 진행 — 선배 등장 즉시 세탁실로! 소등 전에 100%를 채워라',
+    tip: '선배가 나타나면 🫣 버튼 꾹! 나갈 때까지 유지 — 소등 전에 조리 100%를 채워라',
   },
   walk: {
     title: '태권도장까지 걸어가기',

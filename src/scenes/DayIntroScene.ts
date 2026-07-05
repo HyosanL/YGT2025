@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, QUEST_META } from '../config';
+import { bgmTempo, COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, QUEST_META } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { questManager } from '../core/QuestManager';
@@ -25,7 +25,9 @@ export class DayIntroScene extends Phaser.Scene {
     const questId: MainQuestId = questManager.pickQuestForDay(day);
     gameState.startDay(questId);
     const meta = QUEST_META[questId];
-    // 출격 준비 — 필드 BGM을 여기서부터 흘려 퀘스트로 이어지게
+    // 출격 준비 — 필드 BGM을 여기서부터 흘려 퀘스트로 이어지게.
+    // 일차가 오를수록 리듬이 빨라진다 (새 판은 다시 1.0배부터)
+    audio.setBgmTempo(bgmTempo(day));
     audio.startBgm('field');
 
     // 아침 연병장 배경

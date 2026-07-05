@@ -80,6 +80,8 @@ class AudioManagerImpl {
   private bgmKey: BgmKey | null = null;
   private bgmStep = 0;
   private bgmNextTime = 0;
+  /** BGM 템포 배율 (1 = 원래 속도) — 일차가 오를수록 키운다 */
+  private bgmTempo = 1;
 
   // 심장박동 상태
   private heartbeatTimer: number | null = null;
@@ -456,7 +458,7 @@ class AudioManagerImpl {
       src.buffer = this.songBuffer;
       src.loop = true;
       const gain = this.ctx.createGain();
-      gain.gain.value = 0.9;
+      gain.gain.value = 1.15; // 노래는 존재감 있게 (정규화 피크 -1.5dB라 클리핑 없음)
       src.connect(gain).connect(this.master);
       src.start(0, this.songOffsetSec % this.songBuffer.duration);
       this.songStartedAtSec = this.ctx.currentTime;
@@ -671,6 +673,11 @@ class AudioManagerImpl {
     this.bgmTimer = window.setInterval(() => this.scheduleBgm(), 80);
   }
 
+  /** BGM 템포 배율 설정 — 다음 스텝부터 자연스럽게 적용된다 */
+  setBgmTempo(multiplier: number): void {
+    this.bgmTempo = Math.max(0.5, Math.min(2, multiplier));
+  }
+
   stopBgm(): void {
     if (this.bgmTimer !== null) {
       window.clearInterval(this.bgmTimer);
@@ -682,19 +689,21 @@ class AudioManagerImpl {
   private scheduleBgm(): void {
     if (!this.ready || !this.bgmKey) return;
     const t = AudioManagerImpl.BGM_TRACKS[this.bgmKey];
+    // 일차가 오를수록 빨라진다
+    const step = t.stepSec / this.bgmTempo;
     // 언락 전에 시작된 경우 등 — 과거로 밀린 스케줄은 현재로 재동기화 (몰아치기 방지)
     if (this.bgmNextTime < this.now - 0.05) this.bgmNextTime = this.now + 0.05;
     while (this.bgmNextTime < this.now + 0.3) {
       const i = this.bgmStep % t.lead.length;
       const lf = t.lead[i];
       const bf = t.bass[i % t.bass.length];
-      if (lf > 0) this.tone(t.leadType, lf, this.bgmNextTime, t.stepSec * 0.85, t.leadVol);
-      if (bf > 0) this.tone(t.bassType, bf, this.bgmNextTime, t.stepSec * 0.9, t.bassVol);
+      if (lf > 0) this.tone(t.leadType, lf, this.bgmNextTime, step * 0.85, t.leadVol);
+      if (bf > 0) this.tone(t.bassType, bf, this.bgmNextTime, step * 0.9, t.bassVol);
       if (t.hatVol > 0 && i % 2 === 0) {
         this.noiseBurst(this.bgmNextTime, 0.03, t.hatVol, 6000);
       }
       this.bgmStep += 1;
-      this.bgmNextTime += t.stepSec;
+      this.bgmNextTime += step;
     }
   }
 

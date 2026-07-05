@@ -17,6 +17,7 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.lbPanel = null;
+    audio.setBgmTempo(1); // 타이틀은 항상 원래 템포
     audio.startBgm('title');
 
     // 첫 실행이면 닉네임부터 정하고 시작한다
