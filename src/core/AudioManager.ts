@@ -72,6 +72,9 @@ class AudioManagerImpl {
   // 전자레인지 가동음 ("위이이잉" — 험 + 팬 노이즈)
   private humStop: (() => void) | null = null;
 
+  // 옆방 떠드는 소리 (벽 너머 웅성거림)
+  private chatterStop: (() => void) | null = null;
+
   // 공용 노이즈 루프 버퍼 (물소리/팬 소음)
   private noiseBuf: AudioBuffer | null = null;
 
@@ -142,6 +145,7 @@ class AudioManagerImpl {
     this.songSource = null;
     this.showerSrc = null;
     this.humStop = null;
+    this.chatterStop = null;
     this.noiseBuf = null;
     this.tryDecodeSong();
   }
@@ -597,6 +601,51 @@ class AudioManagerImpl {
     this.humStop = null;
   }
 
+  /**
+   * 옆방 떠드는 소리 — 벽 너머의 웅성거림 (밴드패스 노이즈 + 느린 게인 흔들림).
+   * 매 프레임 불러도 안전 (self-heal).
+   */
+  startChatter(): void {
+    if (!this.ready || this.chatterStop || !this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    const buf = this.getNoiseBuffer();
+    if (!buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 520;
+    bp.Q.value = 1.4;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.055;
+    // 말소리처럼 오르락내리락하는 게인 흔들림
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 1.8;
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 0.03;
+    lfo.connect(lfoDepth).connect(gain.gain);
+    src.connect(bp).connect(gain).connect(this.master);
+    src.start();
+    lfo.start();
+    this.chatterStop = () => {
+      for (const node of [src, lfo]) {
+        try {
+          node.stop();
+        } catch {
+          // 이미 정지된 소스는 무시
+        }
+      }
+      gain.disconnect();
+    };
+  }
+
+  stopChatter(): void {
+    this.chatterStop?.();
+    this.chatterStop = null;
+  }
+
   private scheduleSong(): void {
     if (!this.ready || !this.songPlaying) return;
     // 언락 전에 시작됐거나 탭 전환으로 밀린 경우 — 과거 스케줄은 현재로 재동기화 (몰아치기 방지)
@@ -712,6 +761,7 @@ class AudioManagerImpl {
     this.stopSong();
     this.stopShowerNoise();
     this.stopMicrowaveHum();
+    this.stopChatter();
     this.stopHeartbeat();
     this.stopBgm();
   }

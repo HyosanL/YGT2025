@@ -13,6 +13,8 @@ export interface ButtonOptions {
   labelColor?: string;
   /** 테두리 색 (기본: 흰색 반투명) */
   strokeColor?: number;
+  /** 라벨 줄바꿈 폭 (px) — 긴 문장 선지 버튼용 */
+  wrapWidth?: number;
   onClick?: () => void;
   /** 홀드형 버튼용 (누르는 동안/떼는 순간) */
   onDown?: () => void;
@@ -49,6 +51,7 @@ export class Button extends Phaser.GameObjects.Container {
         fontSize: `${opts.fontSize ?? 32}px`,
         color: opts.labelColor ?? COLORS.textCss,
         align: 'center',
+        ...(opts.wrapWidth ? { wordWrap: { width: opts.wrapWidth } } : {}),
       })
       .setOrigin(0.5);
     this.add(this.labelText);

@@ -47,9 +47,14 @@ export interface KakaoPrompt {
 export interface VoteQuestion {
   /** 부정 중첩 난이도 (1~3) */
   level: number;
+  /** 옹성오가 보내는 상황 메시지 (투표 주제) */
+  msg: string;
+  /** 투표 카드에 표시되는 전제 + 질문 */
   q: string;
-  options: string[];
-  answer: number;
+  /** 의미상 올바른 선지 후보들 — 매판 1개가 무작위 출제 (답 암기 방지) */
+  corrects: string[];
+  /** 함정 선지 후보들 — 매판 (선지 수 - 1)개 무작위 출제 */
+  wrongs: string[];
 }
 
 export type LockerFlaw = 'tilt-blanket' | 'open-drawer' | 'sock' | 'crooked-hanger';
