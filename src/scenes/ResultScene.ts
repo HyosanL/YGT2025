@@ -76,7 +76,7 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const livesBar = new LivesBar(this, GAME_WIDTH / 2 - LivesBar.widthFor(44) / 2, 690, 44);
-    livesBar.setLives(gameState.livesSixths);
+    livesBar.setLives(gameState.livesUnits);
     this.add
       .text(GAME_WIDTH / 2, 770, `${gameState.day}일차, 다시 아침이 밝는다...`, {
         fontFamily: FONT,

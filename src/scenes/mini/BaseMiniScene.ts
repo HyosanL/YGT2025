@@ -220,10 +220,10 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setDepth(600);
     void text;
 
-    // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립 (연습 모드는 제외)
-    if (!gameState.practiceMode && gameState.addLifeSixths(2)) {
+    // 미니 퀘스트 성공 보상 — 목숨 ⅕ 적립 (연습 모드는 제외)
+    if (!gameState.practiceMode && gameState.addLifeUnits(1)) {
       const lifeText = this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅓ 적립!', {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅕ 적립!', {
           fontFamily: FONT,
           fontSize: '30px',
           color: COLORS.safeCss,
@@ -275,7 +275,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.cameras.main.shake(350, 0.009);
 
     // 연습 모드는 목숨을 깎지 않는다
-    const alive = gameState.practiceMode ? true : gameState.deductLifeSixths(MINI.failLifeSixths);
+    const alive = gameState.practiceMode ? true : gameState.deductLifeUnits(MINI.failLifeUnits);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `❌ ${reason}`, {

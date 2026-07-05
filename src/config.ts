@@ -25,6 +25,8 @@ export const GAME_HEIGHT = computeGameHeight();
 export const HP_MAX = 100;
 /** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 도박 성공으로 채운다 */
 export const LIVES_MAX = 3;
+/** 하트 1칸의 내부 단위 수 (⅕ 단위 — 미니 퀘스트 성공 보상이 1단위) */
+export const LIFE_UNITS = 5;
 
 export const FONT = "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif";
 
@@ -75,8 +77,8 @@ export const MINI = {
   chance: (day: number): number => Math.min(0.85, 0.3 + day * 0.05),
   /** 하루 최대 발생 횟수 */
   maxPerDay: 2,
-  /** 실패 시 목숨 차감 (⅙ 단위 — 6 = 1칸). 하루는 이어서 진행, 0이 되면 게임 오버 */
-  failLifeSixths: 6,
+  /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
+  failLifeUnits: 5,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
   firstDelayMs: [1500, 3000] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */

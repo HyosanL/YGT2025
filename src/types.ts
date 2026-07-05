@@ -4,14 +4,20 @@ export type MiniQuestId = 'kakao' | 'vote' | 'photo';
 export interface Settings {
   mute: boolean;
   nickname: string;
+  /** 볼륨 0~10 */
+  volMaster?: number;
+  volBgm?: number;
+  volSfx?: number;
 }
 
 export interface SaveData {
   day: number;
   hp: number;
-  /** 목숨 (⅙ 단위 정수, 6 = 하트 1개) */
+  /** 목숨 (⅕ 단위 정수, 5 = 하트 1개) */
+  livesUnits?: number;
+  /** @deprecated 구버전 저장 (⅙ 단위) — 로드 시 비율 변환 */
   livesSixths?: number;
-  /** @deprecated 구버전 저장 (⅓ 단위) — 로드 시 ×2 마이그레이션 */
+  /** @deprecated 구버전 저장 (⅓ 단위) — 로드 시 비율 변환 */
   livesThirds?: number;
   currentQuestId: MainQuestId | null;
   lastQuestId: MainQuestId | null;

@@ -59,6 +59,10 @@ type AmbientKey = keyof typeof AMBIENT_URLS;
 class AudioManagerImpl {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** 배경음악 버스 (BGM + 샤워 노래) */
+  private bgmBus: GainNode | null = null;
+  /** 효과음 버스 (SFX + 환경음) */
+  private sfxBus: GainNode | null = null;
 
   // 노래 상태 — 실음원 버퍼 재생 + 칩튠 폴백
   private songTimer: number | null = null; // 칩튠 폴백 스케줄러
@@ -149,7 +153,11 @@ class AudioManagerImpl {
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
-    this.master.gain.value = gameState.settings.mute ? 0 : 1;
+    this.bgmBus = this.ctx.createGain();
+    this.bgmBus.connect(this.master);
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.connect(this.master);
+    this.applyVolumes();
     // 새 컨텍스트의 시계는 0부터 — 스케줄러 기준 시각을 리셋해야 루프가 되살아난다
     this.songNextTime = 0;
     this.bgmNextTime = 0;
@@ -289,8 +297,16 @@ class AudioManagerImpl {
     }
   }
 
-  setMute(mute: boolean): void {
-    if (this.master) this.master.gain.value = mute ? 0 : 1;
+  setMute(_mute: boolean): void {
+    this.applyVolumes();
+  }
+
+  /** 설정(마스터/배경음악/효과음 0~10 + 음소거)을 실제 게인에 반영 */
+  applyVolumes(): void {
+    const s = gameState.settings;
+    if (this.master) this.master.gain.value = s.mute ? 0 : (s.volMaster ?? 10) / 10;
+    if (this.bgmBus) this.bgmBus.gain.value = (s.volBgm ?? 10) / 10;
+    if (this.sfxBus) this.sfxBus.gain.value = (s.volSfx ?? 10) / 10;
   }
 
   private get ready(): boolean {
@@ -305,9 +321,11 @@ class AudioManagerImpl {
     startAt: number,
     dur: number,
     vol: number,
-    freqEnd?: number
+    freqEnd?: number,
+    dest?: AudioNode
   ): void {
-    if (!this.ctx || !this.master) return;
+    const out = dest ?? this.sfxBus ?? this.master;
+    if (!this.ctx || !out) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -317,13 +335,20 @@ class AudioManagerImpl {
     }
     gain.gain.setValueAtTime(vol, startAt);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain).connect(out);
     osc.start(startAt);
     osc.stop(startAt + dur + 0.02);
   }
 
-  private noiseBurst(startAt: number, dur: number, vol: number, filterFreq = 1000): void {
-    if (!this.ctx || !this.master) return;
+  private noiseBurst(
+    startAt: number,
+    dur: number,
+    vol: number,
+    filterFreq = 1000,
+    dest?: AudioNode
+  ): void {
+    const out = dest ?? this.sfxBus ?? this.master;
+    if (!this.ctx || !out) return;
     const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
     const buffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -336,7 +361,7 @@ class AudioManagerImpl {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(vol, startAt);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
-    src.connect(filter).connect(gain).connect(this.master);
+    src.connect(filter).connect(gain).connect(out);
     src.start(startAt);
   }
 
@@ -367,7 +392,7 @@ class AudioManagerImpl {
       gain.gain.exponentialRampToValueAtTime(vol, t + 0.015);
       gain.gain.setValueAtTime(vol, t + 0.85);
       gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
-      osc.connect(gain).connect(this.master);
+      osc.connect(gain).connect(this.sfxBus ?? this.master);
       osc.start(t);
       osc.stop(t + 1.05);
     };
@@ -513,7 +538,7 @@ class AudioManagerImpl {
       src.loop = true;
       const gain = this.ctx.createGain();
       gain.gain.value = 0.85; // 물소리·효과음과 밸런스
-      src.connect(gain).connect(this.master);
+      src.connect(gain).connect(this.bgmBus ?? this.master);
       src.start(0, this.songOffsetSec % this.songBuffer.duration);
       this.songStartedAtSec = this.ctx.currentTime;
       this.songSource = src;
@@ -572,7 +597,7 @@ class AudioManagerImpl {
       src.loop = true;
       const gain = this.ctx.createGain();
       gain.gain.value = 1;
-      src.connect(gain).connect(this.master);
+      src.connect(gain).connect(this.sfxBus ?? this.master);
       src.start();
       this.showerSrc = src;
       return;
@@ -591,7 +616,7 @@ class AudioManagerImpl {
     lp.frequency.value = 2400;
     const gain = this.ctx.createGain();
     gain.gain.value = 0.07;
-    src.connect(hp).connect(lp).connect(gain).connect(this.master);
+    src.connect(hp).connect(lp).connect(gain).connect(this.sfxBus ?? this.master);
     src.start();
     this.showerSrc = src;
   }
@@ -622,7 +647,7 @@ class AudioManagerImpl {
       src.loop = true;
       const gain = ctx.createGain();
       gain.gain.value = 1;
-      src.connect(gain).connect(this.master);
+      src.connect(gain).connect(this.sfxBus ?? this.master);
       src.start();
       this.humStop = () => {
         try {
@@ -636,7 +661,7 @@ class AudioManagerImpl {
     }
     const out = ctx.createGain();
     out.gain.value = 1;
-    out.connect(this.master);
+    out.connect(this.sfxBus ?? this.master);
 
     const mkOsc = (type: OscillatorType, freq: number, vol: number): OscillatorNode => {
       const osc = ctx.createOscillator();
@@ -702,15 +727,15 @@ class AudioManagerImpl {
     bp.frequency.value = 520;
     bp.Q.value = 1.4;
     const gain = ctx.createGain();
-    gain.gain.value = 0.055;
+    gain.gain.value = 0.13;
     // 말소리처럼 오르락내리락하는 게인 흔들림
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = 1.8;
     const lfoDepth = ctx.createGain();
-    lfoDepth.gain.value = 0.03;
+    lfoDepth.gain.value = 0.07;
     lfo.connect(lfoDepth).connect(gain.gain);
-    src.connect(bp).connect(gain).connect(this.master);
+    src.connect(bp).connect(gain).connect(this.sfxBus ?? this.master);
     src.start();
     lfo.start();
     this.chatterStop = () => {
@@ -730,6 +755,18 @@ class AudioManagerImpl {
     this.chatterStop = null;
   }
 
+  /** 벽 너머 말소리 한 마디 — 웅얼웅얼 (말풍선 등장에 맞춰 호출) */
+  chatterBlip(): void {
+    if (!this.ready) return;
+    const syllables = 3 + Math.floor(Math.random() * 3);
+    let t = this.now;
+    for (let i = 0; i < syllables; i++) {
+      const freq = 165 + Math.random() * 180;
+      this.tone('sawtooth', freq, t, 0.07, 0.11, freq * (0.8 + Math.random() * 0.45));
+      t += 0.08 + Math.random() * 0.05;
+    }
+  }
+
   private scheduleSong(): void {
     if (!this.ready || !this.songPlaying) return;
     // 언락 전에 시작됐거나 탭 전환으로 밀린 경우 — 과거 스케줄은 현재로 재동기화 (몰아치기 방지)
@@ -738,10 +775,10 @@ class AudioManagerImpl {
       const melody = AudioManagerImpl.MELODY;
       const freq = melody[this.songStep % melody.length];
       if (freq > 0) {
-        this.tone('square', freq, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.9, 0.2);
+        this.tone('square', freq, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.9, 0.2, undefined, this.bgmBus ?? undefined);
         // 간단한 베이스 (한 옥타브 아래, 2스텝마다)
         if (this.songStep % 2 === 0) {
-          this.tone('triangle', freq / 2, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.8, 0.14);
+          this.tone('triangle', freq / 2, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.8, 0.14, undefined, this.bgmBus ?? undefined);
         }
       }
       this.songStep += 1;
@@ -830,10 +867,10 @@ class AudioManagerImpl {
       const i = this.bgmStep % t.lead.length;
       const lf = t.lead[i];
       const bf = t.bass[i % t.bass.length];
-      if (lf > 0) this.tone(t.leadType, lf, this.bgmNextTime, step * 0.85, t.leadVol);
-      if (bf > 0) this.tone(t.bassType, bf, this.bgmNextTime, step * 0.9, t.bassVol);
+      if (lf > 0) this.tone(t.leadType, lf, this.bgmNextTime, step * 0.85, t.leadVol, undefined, this.bgmBus ?? undefined);
+      if (bf > 0) this.tone(t.bassType, bf, this.bgmNextTime, step * 0.9, t.bassVol, undefined, this.bgmBus ?? undefined);
       if (t.hatVol > 0 && i % 2 === 0) {
-        this.noiseBurst(this.bgmNextTime, 0.03, t.hatVol, 6000);
+        this.noiseBurst(this.bgmNextTime, 0.03, t.hatVol, 6000, this.bgmBus ?? undefined);
       }
       this.bgmStep += 1;
       this.bgmNextTime += step;

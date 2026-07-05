@@ -222,6 +222,7 @@ export class WallPunchScene extends BaseMainScene {
   }
 
   private spawnChatterBubble(): void {
+    audio.chatterBlip(); // 말풍선에 맞춰 웅얼거리는 말소리
     speechBubble(
       this,
       WALL_X + randFloat(-40, 70),
@@ -316,7 +317,7 @@ export class WallPunchScene extends BaseMainScene {
       speechBubble(this, 400, 640, '조용해졌다... 취침해야겠다...', 1500, 40);
 
       // 연습 모드에서는 목숨 보상이 없다
-      const gained = gameState.practiceMode ? false : gameState.addLifeSixths(6);
+      const gained = gameState.practiceMode ? false : gameState.addLifeUnits(5);
       if (gained) {
         audio.chime();
         vibrate(HAPTIC.lifeGain);

@@ -76,7 +76,7 @@ export class DayIntroScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const livesBar = new LivesBar(this, GAME_WIDTH / 2 - LivesBar.widthFor(36) / 2, 380, 36);
-    livesBar.setLives(gameState.livesSixths);
+    livesBar.setLives(gameState.livesUnits);
 
     this.add
       .text(GAME_WIDTH / 2, 470, '오늘의 퀘스트', {

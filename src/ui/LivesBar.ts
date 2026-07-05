@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { LIVES_MAX } from '../config';
+import { LIFE_UNITS, LIVES_MAX } from '../config';
 
 /**
  * 목숨 하트 바 — 3칸.
@@ -8,7 +8,7 @@ import { LIVES_MAX } from '../config';
  */
 export class LivesBar extends Phaser.GameObjects.Container {
   private fills: Phaser.GameObjects.Text[] = [];
-  private lastSixths = -1;
+  private lastUnits = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number, size = 40) {
     super(scene, x, y);
@@ -31,12 +31,12 @@ export class LivesBar extends Phaser.GameObjects.Container {
     return LIVES_MAX * (size + 12) - 12 + size * 0.2;
   }
 
-  /** @param sixths 목숨 (⅙ 단위 — 6 = 하트 1개) */
-  setLives(sixths: number): void {
-    if (sixths === this.lastSixths) return;
-    this.lastSixths = sixths;
+  /** @param units 목숨 (⅕ 단위 — LIFE_UNITS = 하트 1개) */
+  setLives(units: number): void {
+    if (units === this.lastUnits) return;
+    this.lastUnits = units;
     this.fills.forEach((fill, i) => {
-      const frac = Phaser.Math.Clamp(sixths / 6 - i, 0, 1);
+      const frac = Phaser.Math.Clamp(units / LIFE_UNITS - i, 0, 1);
       if (frac <= 0) {
         fill.setVisible(false);
         return;

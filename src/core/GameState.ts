@@ -1,9 +1,15 @@
-import { HP_MAX, LIVES_MAX } from '../config';
+import { HP_MAX, LIFE_UNITS, LIVES_MAX } from '../config';
 import type { MainQuestId, SaveData, Settings } from '../types';
 
 const STORAGE_KEY = 'ygt2025_save_v1';
 
-const DEFAULT_SETTINGS: Settings = { mute: false, nickname: '' };
+const DEFAULT_SETTINGS: Settings = {
+  mute: false,
+  nickname: '',
+  volMaster: 10,
+  volBgm: 10,
+  volSfx: 10,
+};
 
 /**
  * 게임 전역 상태 싱글턴 (localStorage 동기화).
@@ -12,10 +18,10 @@ const DEFAULT_SETTINGS: Settings = { mute: false, nickname: '' };
 class GameStateImpl {
   day = 1;
   hp = HP_MAX;
-  /** 목숨 (⅙ 단위 정수 — 6 = 하트 1개, 최대 LIVES_MAX*6).
-   *  새 판은 1칸(6)으로 시작. 벽치기 성공 +6, 미니 퀘스트 성공 +2(⅓), 실패 -3(½).
-   *  사망 시 6 소모 후 온전한 하트가 남아야 부활. */
-  livesSixths = 6;
+  /** 목숨 (⅕ 단위 정수 — LIFE_UNITS(5) = 하트 1개, 최대 LIVES_MAX*5).
+   *  새 판은 1칸(5)으로 시작. 벽치기 성공 +5, 미니 퀘스트 성공 +1(⅕), 실패 -5(1칸).
+   *  사망 시 5 소모 후 온전한 하트가 남아야 부활. */
+  livesUnits = LIFE_UNITS;
   currentQuestId: MainQuestId | null = null;
   lastQuestId: MainQuestId | null = null;
   bestDay = 0;
@@ -38,13 +44,16 @@ class GameStateImpl {
       const data = JSON.parse(raw) as Partial<SaveData>;
       this.day = typeof data.day === 'number' && data.day >= 1 ? Math.floor(data.day) : 1;
       this.hp = typeof data.hp === 'number' ? data.hp : HP_MAX;
-      const rawSixths =
-        typeof data.livesSixths === 'number'
-          ? data.livesSixths
-          : typeof data.livesThirds === 'number'
-            ? data.livesThirds * 2 // 구버전 저장(⅓ 단위) 마이그레이션
-            : 6;
-      this.livesSixths = Math.max(0, Math.min(LIVES_MAX * 6, Math.floor(rawSixths)));
+      // 구버전 저장 단위(⅙/⅓) → ⅕ 단위 마이그레이션 (하트 개수 비율 유지)
+      const rawUnits =
+        typeof data.livesUnits === 'number'
+          ? data.livesUnits
+          : typeof data.livesSixths === 'number'
+            ? Math.round((data.livesSixths / 6) * LIFE_UNITS)
+            : typeof data.livesThirds === 'number'
+              ? Math.round((data.livesThirds / 3) * LIFE_UNITS)
+              : LIFE_UNITS;
+      this.livesUnits = Math.max(0, Math.min(LIVES_MAX * LIFE_UNITS, Math.floor(rawUnits)));
       this.currentQuestId = data.currentQuestId ?? null;
       this.lastQuestId = data.lastQuestId ?? null;
       this.bestDay = typeof data.bestDay === 'number' ? data.bestDay : 0;
@@ -60,7 +69,7 @@ class GameStateImpl {
     const data: SaveData = {
       day: this.day,
       hp: this.hp,
-      livesSixths: this.livesSixths,
+      livesUnits: this.livesUnits,
       currentQuestId: this.currentQuestId,
       lastQuestId: this.lastQuestId,
       bestDay: this.bestDay,
@@ -79,7 +88,7 @@ class GameStateImpl {
   newRun(): void {
     this.day = 1;
     this.hp = HP_MAX;
-    this.livesSixths = 6;
+    this.livesUnits = LIFE_UNITS;
     this.currentQuestId = null;
     this.lastQuestId = null;
     this.totalPlayMs = 0;
@@ -175,32 +184,32 @@ class GameStateImpl {
 
   // ── 목숨 ─────────────────────────────────────
 
-  /** 목숨 추가 (⅙ 단위). 이미 가득이면 false */
-  addLifeSixths(sixths: number): boolean {
-    const max = LIVES_MAX * 6;
-    if (this.livesSixths >= max) return false;
-    this.livesSixths = Math.min(max, this.livesSixths + sixths);
+  /** 목숨 추가 (⅕ 단위). 이미 가득이면 false */
+  addLifeUnits(units: number): boolean {
+    const max = LIVES_MAX * LIFE_UNITS;
+    if (this.livesUnits >= max) return false;
+    this.livesUnits = Math.min(max, this.livesUnits + units);
     this.save();
     return true;
   }
 
-  /** 목숨 차감 (⅙ 단위) — 차감 후에도 살아 있으면 true (0이면 사망) */
-  deductLifeSixths(sixths: number): boolean {
-    this.livesSixths = Math.max(0, this.livesSixths - sixths);
+  /** 목숨 차감 (⅕ 단위) — 차감 후에도 살아 있으면 true (0이면 사망) */
+  deductLifeUnits(units: number): boolean {
+    this.livesUnits = Math.max(0, this.livesUnits - units);
     this.save();
-    return this.livesSixths > 0;
+    return this.livesUnits > 0;
   }
 
   /**
-   * 사망 처리 — 목숨 1칸(6)을 소모하고, 소모 후에도 '온전한 하트'(6 이상)가
-   * 남아 있어야 부활(true). 예: 7/6 하트 → 부활 불가, 2칸 이상 → 부활.
+   * 사망 처리 — 목숨 1칸(5)을 소모하고, 소모 후에도 '온전한 하트'(5 이상)가
+   * 남아 있어야 부활(true). 예: 1⅕칸 → ⅕ 남으니 사망, 2칸 → 1칸 남아 부활.
    * 죽기 전까지 버틴 시간은 리더보드 생존시간에 합산해 둔다.
    */
   tryRevive(): boolean {
     this.foldSegment();
-    this.livesSixths = Math.max(0, this.livesSixths - 6);
+    this.livesUnits = Math.max(0, this.livesUnits - LIFE_UNITS);
     this.save();
-    return this.livesSixths >= 6;
+    return this.livesUnits >= LIFE_UNITS;
   }
 
   setNickname(nickname: string): void {
@@ -210,6 +219,18 @@ class GameStateImpl {
 
   setMute(mute: boolean): void {
     this.settings.mute = mute;
+    this.save();
+  }
+
+  /** 볼륨 설정 (0~10) — 호출측에서 audio.applyVolumes()로 반영 */
+  setVolume(kind: 'master' | 'bgm' | 'sfx', value: number): void {
+    const v = Math.max(0, Math.min(10, Math.round(value)));
+    if (kind === 'master') {
+      this.settings.volMaster = v;
+      // 마스터를 직접 만지면 음소거는 해제된 것으로 본다 (0 = 사실상 음소거)
+      if (v > 0) this.settings.mute = false;
+    } else if (kind === 'bgm') this.settings.volBgm = v;
+    else this.settings.volSfx = v;
     this.save();
   }
 }
