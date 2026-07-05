@@ -28,16 +28,16 @@ export class VoteScene extends BaseMiniScene {
 
     audio.ding();
 
-    // ── 훈육관 메시지 (좌측 흰 버블) ──
+    // ── 옹성오 선배 메시지 (좌측 흰 버블) ──
     const msgY = PANEL.y + 258;
     const avatar = this.add.graphics();
     avatar.fillStyle(0x5a6b7e, 1);
     avatar.fillRoundedRect(PANEL.x + 34, msgY - 36, 60, 60, 22);
     this.add
-      .text(PANEL.x + 64, msgY - 6, '🪖', { fontFamily: FONT, fontSize: '30px' })
+      .text(PANEL.x + 64, msgY - 6, '😤', { fontFamily: FONT, fontSize: '30px' })
       .setOrigin(0.5);
     this.add
-      .text(PANEL.x + 108, msgY - 54, '훈육관', {
+      .text(PANEL.x + 108, msgY - 54, '옹성오', {
         fontFamily: FONT,
         fontSize: '21px',
         color: KAKAO.sub,

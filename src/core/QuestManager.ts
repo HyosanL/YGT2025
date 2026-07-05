@@ -1,4 +1,4 @@
-import { MINI, MINI_QUEST_KEYS, WALLPUNCH_CHANCE, WALLPUNCH_UNLOCK_DAY } from '../config';
+import { MINI, MINI_QUEST_KEYS, WALLPUNCH_UNLOCK_DAY } from '../config';
 import type { MainQuestId, MiniQuestId } from '../types';
 import { chance, pick, randRange } from '../utils/rng';
 import { gameState } from './GameState';
@@ -9,21 +9,12 @@ const BASE_POOL: MainQuestId[] = ['shower', 'hallway', 'microwave', 'walk'];
  * 메인 퀘스트 선택/순환과 미니 퀘스트 발생 판정.
  */
 class QuestManagerImpl {
-  /**
-   * 오늘의 메인 퀘스트 선택 — 전날과 중복 금지.
-   * 벽치기는 해금 일차부터 매일 고정 확률(15%)로 굴리고,
-   * 안 나오면 나머지 4종에서 균등 선택.
-   */
+  /** 오늘의 메인 퀘스트 선택 — 전날과 중복 금지, 5일차부터 벽치기도 동일 확률로 편입 */
   pickQuestForDay(day: number): MainQuestId {
-    if (
-      day >= WALLPUNCH_UNLOCK_DAY &&
-      gameState.lastQuestId !== 'wallpunch' &&
-      chance(WALLPUNCH_CHANCE)
-    ) {
-      return 'wallpunch';
-    }
-    const candidates = BASE_POOL.filter((q) => q !== gameState.lastQuestId);
-    return pick(candidates.length > 0 ? candidates : BASE_POOL);
+    const pool: MainQuestId[] =
+      day >= WALLPUNCH_UNLOCK_DAY ? [...BASE_POOL, 'wallpunch'] : [...BASE_POOL];
+    const candidates = pool.filter((q) => q !== gameState.lastQuestId);
+    return pick(candidates.length > 0 ? candidates : pool);
   }
 
   /**

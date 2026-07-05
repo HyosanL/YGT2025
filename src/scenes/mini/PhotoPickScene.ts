@@ -28,22 +28,36 @@ export class PhotoPickScene extends BaseMiniScene {
     this.setupOverlay(M3_PHOTO.roomTitle, 'kakao');
     audio.ding();
 
-    // 선배의 분노 메시지 (좌측 흰 버블)
+    // 옹성오 선배의 분노 메시지 (아바타 + 이름 + 좌측 흰 버블)
+    const msgY = PANEL.y + 232;
+    const avatar = this.add.graphics();
+    avatar.fillStyle(0x5a6b7e, 1);
+    avatar.fillRoundedRect(PANEL.x + 34, msgY - 32, 60, 60, 22);
+    this.add
+      .text(PANEL.x + 64, msgY - 2, '😡', { fontFamily: FONT, fontSize: '30px' })
+      .setOrigin(0.5);
+    this.add
+      .text(PANEL.x + 108, msgY - 50, '옹성오', {
+        fontFamily: FONT,
+        fontSize: '21px',
+        color: KAKAO.sub,
+      })
+      .setOrigin(0, 0.5);
     const bubble = this.add.graphics();
     bubble.fillStyle(KAKAO.bubbleWhite, 1);
-    bubble.fillRoundedRect(PANEL.x + 30, PANEL.y + 200, PANEL.w - 60, 64, 16);
+    bubble.fillRoundedRect(PANEL.x + 108, msgY - 26, PANEL.w - 168, 58, 16);
     bubble.fillTriangle(
-      PANEL.x + 30,
-      PANEL.y + 210,
-      PANEL.x + 18,
-      PANEL.y + 222,
-      PANEL.x + 30,
-      PANEL.y + 234
+      PANEL.x + 108,
+      msgY - 18,
+      PANEL.x + 96,
+      msgY - 6,
+      PANEL.x + 108,
+      msgY + 6
     );
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 232, `😡 ${M3_PHOTO.seniorMsg}`, {
+      .text(PANEL.x + 108 + (PANEL.w - 168) / 2, msgY + 3, M3_PHOTO.seniorMsg, {
         fontFamily: FONT,
-        fontSize: '27px',
+        fontSize: '25px',
         color: KAKAO.textDark,
         fontStyle: 'bold',
       })

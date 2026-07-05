@@ -84,7 +84,7 @@ class AudioManagerImpl {
   private silentPlaying = false;
 
   // 좀비 컨텍스트 감지 (state는 running인데 시계가 멈춰 소리가 안 나는 iOS 버그)
-  private lastCtxTime = -1;
+  private zombieCheckPending = false;
 
   /**
    * 오디오 언락 리스너 설치 — 앱 시작 시 1회 호출.
@@ -98,8 +98,10 @@ class AudioManagerImpl {
     window.addEventListener('keydown', tryUnlock);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
+        // 탭/앱 전환 복귀 — resume 시도 + 시계가 멈춘 좀비 컨텍스트면 재생성
         this.resumeIfSuspended();
         this.resumeSilentLoop();
+        this.scheduleZombieCheck();
       } else {
         // 백그라운드에서는 무음 루프를 쉬게 한다 (복귀 시 재개)
         this.silentEl?.pause();
@@ -113,7 +115,7 @@ class AudioManagerImpl {
     if (!this.ctx) {
       this.createContext();
     } else {
-      this.detectZombieContext();
+      this.scheduleZombieCheck();
     }
     this.resumeIfSuspended();
     this.ensureSilentLoop();
@@ -168,22 +170,27 @@ class AudioManagerImpl {
   }
 
   /**
-   * iOS에서 오디오 세션을 뺏겼다 돌려받으면 state는 'running'인데
+   * iOS/사파리에서 앱·탭 전환 후 돌아오면 state는 'running'인데
    * currentTime이 멈춰 소리가 안 나는 좀비 상태가 될 수 있다.
-   * 제스처 두 번에 걸쳐 시계가 그대로면 컨텍스트를 새로 만든다.
-   * (모든 소리가 신스 즉석 생성이라 재생성 비용이 없다)
+   * 350ms 뒤에도 시계가 그대로면 컨텍스트를 즉시 새로 만든다.
+   * (사운드가 전부 신스/버퍼 재생이라 재생성 비용이 없고,
+   *  재생성 직후 suspended 상태여도 다음 제스처에서 자동 resume된다)
    */
-  private detectZombieContext(): void {
-    if (!this.ctx || this.ctx.state !== 'running') return;
-    const t = this.ctx.currentTime;
-    if (t > 0 && t === this.lastCtxTime) {
-      void this.ctx.close().catch(() => undefined);
-      this.ctx = null;
-      this.master = null;
-      this.createContext();
-      return;
-    }
-    this.lastCtxTime = t;
+  private scheduleZombieCheck(): void {
+    if (this.zombieCheckPending || !this.ctx || this.ctx.state !== 'running') return;
+    this.zombieCheckPending = true;
+    const t0 = this.ctx.currentTime;
+    window.setTimeout(() => {
+      this.zombieCheckPending = false;
+      if (!this.ctx || this.ctx.state !== 'running') return;
+      if (this.ctx.currentTime === t0) {
+        void this.ctx.close().catch(() => undefined);
+        this.ctx = null;
+        this.master = null;
+        this.createContext();
+        this.resumeIfSuspended();
+      }
+    }, 350);
   }
 
   private resumeIfSuspended(): void {
