@@ -128,7 +128,6 @@ class AudioManagerImpl {
     this.master = this.ctx.createGain();
     this.master.connect(this.ctx.destination);
     this.master.gain.value = gameState.settings.mute ? 0 : 1;
-    this.lastCtxTime = -1;
     // 새 컨텍스트의 시계는 0부터 — 스케줄러 기준 시각을 리셋해야 루프가 되살아난다
     this.songNextTime = 0;
     this.bgmNextTime = 0;
