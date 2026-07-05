@@ -8,7 +8,7 @@ export interface PauseSceneData {
   returnTo: string;
   /** 'menu' = 일시정지 메뉴, 'countdown' = 즉시 카운트다운 (미니퀘스트 복귀용) */
   mode: 'menu' | 'countdown';
-  /** 카운트다운 시작 숫자 (기본: menu 3 / countdown 2) */
+  /** 카운트다운 시작 숫자 (기본 3) */
   count?: number;
   /** 카운트다운 위에 띄울 안내 문구 */
   label?: string;
@@ -17,7 +17,8 @@ export interface PauseSceneData {
 /**
  * 일시정지 오버레이 + 재개 카운트다운.
  * 메인 씬을 pause한 위에 launch되며, 카운트다운이 끝나야 resume한다.
- * 카운트 중에는 뒤의 판이 흐리게 보여 손가락을 미리 자리잡을 수 있다.
+ * 회색 반투명 처리라 뒤의 판이 보여 손가락을 미리 자리잡을 수 있다.
+ * 카운트다운은 3→2→1→시작! 총 ~1.7초의 빠른 템포.
  */
 export class PauseScene extends Phaser.Scene {
   private returnTo = '';
@@ -33,8 +34,9 @@ export class PauseScene extends Phaser.Scene {
     this.menuItems = [];
     this.counting = false;
 
+    // 회색 처리 — 뒤의 판이 톤 다운되어 보인다
     const dim = this.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55)
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x585c68, 0.6)
       .setOrigin(0)
       .setInteractive(); // 하위 씬으로의 입력 차단
     void dim;
@@ -43,7 +45,7 @@ export class PauseScene extends Phaser.Scene {
       this.buildMenu();
       addMuteButton(this);
     } else {
-      this.startCountdown(data.count ?? 2, data.label ?? '곧 재개!');
+      this.startCountdown(data.count ?? 3, data.label ?? '곧 재개!');
     }
   }
 
@@ -82,7 +84,7 @@ export class PauseScene extends Phaser.Scene {
     this.menuItems = [title, resumeBtn, quitBtn];
   }
 
-  /** N → ... → 1 → GO! 후 메인 씬 resume */
+  /** N → ... → 1 → 시작! 총 ~1.7초의 빠른 카운트다운 후 메인 씬 resume */
   private startCountdown(from: number, label: string): void {
     if (this.counting) return;
     this.counting = true;
@@ -90,10 +92,10 @@ export class PauseScene extends Phaser.Scene {
     this.menuItems = [];
 
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 190, label, {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 180, label, {
         fontFamily: FONT,
-        fontSize: '40px',
-        color: COLORS.subCss,
+        fontSize: '38px',
+        color: COLORS.textCss,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -101,27 +103,27 @@ export class PauseScene extends Phaser.Scene {
     const numText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '', {
         fontFamily: FONT,
-        fontSize: '170px',
+        fontSize: '160px',
         color: COLORS.warnCss,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
-    const tickMs = 900;
+    const tickMs = 480;
     const showNumber = (n: number): void => {
       if (n <= 0) {
-        numText.setText('GO!').setColor(COLORS.safeCss).setScale(0.6);
+        numText.setText('시작!').setColor(COLORS.safeCss).setScale(0.6);
         audio.chime();
-        this.tweens.add({ targets: numText, scale: 1.2, duration: 200, ease: 'Back.easeOut' });
-        this.time.delayedCall(350, () => {
+        this.tweens.add({ targets: numText, scale: 1.1, duration: 160, ease: 'Back.easeOut' });
+        this.time.delayedCall(300, () => {
           this.scene.resume(this.returnTo);
           this.scene.stop();
         });
         return;
       }
-      numText.setText(`${n}`).setColor(COLORS.warnCss).setScale(1.4).setAlpha(0.4);
+      numText.setText(`${n}`).setColor(COLORS.warnCss).setScale(1.3).setAlpha(0.5);
       audio.tick();
-      this.tweens.add({ targets: numText, scale: 1, alpha: 1, duration: 220, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: numText, scale: 1, alpha: 1, duration: 160, ease: 'Cubic.easeOut' });
       this.time.delayedCall(tickMs, () => showNumber(n - 1));
     };
     showNumber(from);

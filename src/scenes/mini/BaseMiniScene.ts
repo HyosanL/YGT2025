@@ -39,8 +39,9 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.lastSecond = -1;
     this.pulseMs = 0;
 
+    // 회색 처리된 본 게임 위에 미니 퀘스트 패널이 뜬다
     const dim = this.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75)
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x4a4d58, 0.72)
       .setOrigin(0)
       .setInteractive(); // 하위 씬으로의 입력 차단
     void dim;
@@ -149,14 +150,14 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   }
 
   /**
-   * 곧바로 본 게임으로 던지지 않고 짧은 카운트다운(2→1→GO)으로
-   * 손가락과 시선을 재정비할 시간을 준 뒤 resume한다.
+   * 곧바로 본 게임으로 던지지 않고 회색 화면 위 빠른 카운트다운(3→2→1→시작!,
+   * 총 ~1.7초)으로 손가락과 시선을 재정비할 시간을 준 뒤 resume한다.
    */
   private returnWithCountdown(): void {
     this.scene.launch('Pause', {
       returnTo: this.returnTo,
       mode: 'countdown',
-      count: 2,
+      count: 3,
       label: '본 임무로 복귀!',
     });
     this.scene.stop();

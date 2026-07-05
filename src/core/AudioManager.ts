@@ -65,8 +65,12 @@ class AudioManagerImpl {
   // 심장박동 상태
   private heartbeatTimer: number | null = null;
 
-  // iOS 무음 스위치 대응 상태
-  private silentKicked = false;
+  // iOS 무음 스위치 대응: 루프로 계속 재생해 두는 무음 <audio>
+  private silentEl: HTMLAudioElement | null = null;
+  private silentPlaying = false;
+
+  // 좀비 컨텍스트 감지 (state는 running인데 시계가 멈춰 소리가 안 나는 iOS 버그)
+  private lastCtxTime = -1;
 
   /**
    * 오디오 언락 리스너 설치 — 앱 시작 시 1회 호출.
@@ -79,22 +83,58 @@ class AudioManagerImpl {
     window.addEventListener('touchend', tryUnlock, { passive: true });
     window.addEventListener('keydown', tryUnlock);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.resumeIfSuspended();
+      if (document.visibilityState === 'visible') {
+        this.resumeIfSuspended();
+        this.resumeSilentLoop();
+      } else {
+        // 백그라운드에서는 무음 루프를 쉬게 한다 (복귀 시 재개)
+        this.silentEl?.pause();
+        this.silentPlaying = false;
+      }
     });
   }
 
   /** 사용자 제스처에서 호출 (모바일 autoplay 정책 대응) */
   unlock(): void {
     if (!this.ctx) {
-      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) return;
-      this.ctx = new Ctor();
-      this.master = this.ctx.createGain();
-      this.master.connect(this.ctx.destination);
-      this.master.gain.value = gameState.settings.mute ? 0 : 1;
+      this.createContext();
+    } else {
+      this.detectZombieContext();
     }
     this.resumeIfSuspended();
-    this.kickSilentMedia();
+    this.ensureSilentLoop();
+  }
+
+  private createContext(): void {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    this.ctx = new Ctor();
+    this.master = this.ctx.createGain();
+    this.master.connect(this.ctx.destination);
+    this.master.gain.value = gameState.settings.mute ? 0 : 1;
+    this.lastCtxTime = -1;
+    // 새 컨텍스트의 시계는 0부터 — 스케줄러 기준 시각을 리셋해야 루프가 되살아난다
+    this.songNextTime = 0;
+    this.bgmNextTime = 0;
+  }
+
+  /**
+   * iOS에서 오디오 세션을 뺏겼다 돌려받으면 state는 'running'인데
+   * currentTime이 멈춰 소리가 안 나는 좀비 상태가 될 수 있다.
+   * 제스처 두 번에 걸쳐 시계가 그대로면 컨텍스트를 새로 만든다.
+   * (모든 소리가 신스 즉석 생성이라 재생성 비용이 없다)
+   */
+  private detectZombieContext(): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const t = this.ctx.currentTime;
+    if (t > 0 && t === this.lastCtxTime) {
+      void this.ctx.close().catch(() => undefined);
+      this.ctx = null;
+      this.master = null;
+      this.createContext();
+      return;
+    }
+    this.lastCtxTime = t;
   }
 
   private resumeIfSuspended(): void {
@@ -108,26 +148,36 @@ class AudioManagerImpl {
 
   /**
    * iOS에서 무음(진동) 스위치가 켜져 있으면 Web Audio가 통째로 음소거된다.
-   * 사용자 제스처 안에서 짧은 무음 <audio>를 한 번 재생하면 오디오 세션이
-   * '미디어 재생' 카테고리로 승격되어 이후 Web Audio 소리가 정상 출력된다.
+   * 무음 <audio>를 '루프로 계속' 재생해 두면 오디오 세션이 미디어 재생으로
+   * 유지되어 Web Audio가 정상 출력된다 (unmute.js 패턴).
+   * 일회성 재생은 끝나는 순간 세션을 회수당해 오히려 소리가 끊긴다 — 반드시 루프.
    */
-  private kickSilentMedia(): void {
-    if (this.silentKicked) return;
+  private ensureSilentLoop(): void {
     try {
-      const el = document.createElement('audio');
-      el.setAttribute('playsinline', '');
-      el.src = buildSilentWavUrl();
-      el.volume = 0.01;
-      const p = el.play();
-      if (p !== undefined) {
-        this.silentKicked = true;
-        p.catch(() => {
-          // 제스처 밖에서 불렸으면 실패 — 다음 제스처에서 재시도
-          this.silentKicked = false;
-        });
+      if (!this.silentEl) {
+        const el = document.createElement('audio');
+        el.setAttribute('playsinline', '');
+        el.src = buildSilentWavUrl();
+        el.loop = true;
+        el.preload = 'auto';
+        this.silentEl = el;
       }
+      this.resumeSilentLoop();
     } catch {
       // 지원하지 않는 환경은 조용히 무시
+    }
+  }
+
+  private resumeSilentLoop(): void {
+    const el = this.silentEl;
+    if (!el || this.silentPlaying) return;
+    const p = el.play();
+    if (p !== undefined) {
+      this.silentPlaying = true;
+      p.catch(() => {
+        // 제스처 밖이면 실패할 수 있다 — 다음 제스처에서 재시도
+        this.silentPlaying = false;
+      });
     }
   }
 

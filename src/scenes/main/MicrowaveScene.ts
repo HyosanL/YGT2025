@@ -40,6 +40,7 @@ export class MicrowaveScene extends BaseMainScene {
   private lightsFill!: Phaser.GameObjects.Graphics;
   private lightsLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
+  private preBeepText!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'microwave' });
@@ -177,14 +178,37 @@ export class MicrowaveScene extends BaseMainScene {
       .setDepth(10);
 
     this.beepText = this.add
-      .text(530, 480, '삐 ─ !!', {
+      .text(530, 480, '삐 ─ !! (선배가 들으면 끝!)', {
         fontFamily: FONT,
-        fontSize: '44px',
+        fontSize: '40px',
         color: COLORS.accentCss,
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
       .setVisible(false);
+
+    // 90% 근접 시 뜨는 경고 — "삐-" 타이밍을 고르라는 안내
+    this.preBeepText = this.add
+      .text(GAME_WIDTH / 2, 200, '⚠️ 곧 "삐-" 완성음이 울린다! 선배가 지나간 직후에 완성시켜!', {
+        fontFamily: FONT,
+        fontSize: '25px',
+        color: COLORS.warnCss,
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        padding: { x: 16, y: 8 },
+        wordWrap: { width: GAME_WIDTH - 80 },
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(11)
+      .setVisible(false);
+    this.tweens.add({
+      targets: this.preBeepText,
+      alpha: { from: 1, to: 0.55 },
+      duration: 380,
+      yoyo: true,
+      repeat: -1,
+    });
 
     this.senior = new Cadet(this, GAME_WIDTH / 2, 340, 'senior');
     this.senior.setScale(0.7).setVisible(false).setDepth(5);
@@ -193,13 +217,19 @@ export class MicrowaveScene extends BaseMainScene {
     this.player.setFace('🤤');
 
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 100, '◀ 왼쪽 터치 = 세탁실 숨기 · 오른쪽 터치 = 전자레인지 ▶', {
-        fontFamily: FONT,
-        fontSize: '24px',
-        color: COLORS.subCss,
-        wordWrap: { width: GAME_WIDTH - 60 },
-        align: 'center',
-      })
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT - 100,
+        '◀ 왼쪽 터치 = 세탁실 숨기 · 오른쪽 터치 = 전자레인지 ▶\n100% 순간 "삐-"가 크게 울린다 — 그때 선배가 있으면 숨어 있어도 끝!',
+        {
+          fontFamily: FONT,
+          fontSize: '23px',
+          color: COLORS.subCss,
+          wordWrap: { width: GAME_WIDTH - 50 },
+          align: 'center',
+          lineSpacing: 6,
+        }
+      )
       .setOrigin(0.5);
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -323,5 +353,7 @@ export class MicrowaveScene extends BaseMainScene {
     this.cookFill.fillStyle(ratio > 0.9 ? COLORS.accent : COLORS.warn, 1);
     this.cookFill.fillRoundedRect(GAME_WIDTH / 2 - 244, 86, 488 * ratio, 32, 7);
     this.cookLabel.setText(`조리 ${Math.floor(ratio * 100)}%`);
+    // 완성 직전 경고 — "삐-" 타이밍을 고를 수 있게 미리 알려준다
+    this.preBeepText.setVisible(ratio >= 0.82 && !this.beeping);
   }
 }

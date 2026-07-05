@@ -18,14 +18,20 @@ interface Guard {
   x: number;
   /** 시선 기준 각 (도로 중앙을 향함) */
   baseAngle: number;
-  /** 스윕 위상/주기 — 선배마다 달라 패턴 암기가 안 통한다 */
-  phaseMs: number;
-  periodMs: number;
+  /** 현재 시선 각 */
+  gaze: number;
+  /** 지금 회전해 가고 있는 목표 각 */
+  targetGaze: number;
+  /** 회전 속도 (rad/ms) — 스냅 턴이면 몇 배로 빨라진다 */
+  turnSpeed: number;
+  /** 다음 방향 전환 시각 (elapsedMs 기준) */
+  nextThinkMs: number;
 }
 
 /**
  * Q4. 태권도장까지 가기 — 탑다운 잠입.
- * 길가에 늘어선 선배들의 시선이 CCTV처럼 좌우로 회전한다.
+ * 길가에 늘어선 선배들의 시선이 CCTV처럼 회전하되 '변칙적'이다:
+ * 수시로 새 목표각을 골라 돌아보고, 가끔은 몇 배속으로 홱 돌아본다 (일차↑ = 더 빠르고 잦게).
  * 시야(부채꼴)에 걸린 채 '걷고' 있으면 유예(graceMs) 후 발각 — 구보 중이면 안전.
  * 구보는 HP를 태우고, 사각지대 걷기는 HP를 회복한다. 관리 실패 = 탈진.
  */
@@ -134,7 +140,7 @@ export class WalkScene extends BaseMainScene {
     // ── 도로변 선배 배치 ──
     this.guards = [];
     const spacing = Q4_WALK.seniorSpacingPx(gameState.day);
-    const basePeriod = Q4_WALK.vision.sweepPeriodMs(gameState.day);
+    const ampRad = Phaser.Math.DegToRad(Q4_WALK.vision.ampDeg);
     let wy = 1150;
     let side: 1 | -1 = chance(0.5) ? 1 : -1;
     while (wy < this.distancePx - 300) {
@@ -144,13 +150,16 @@ export class WalkScene extends BaseMainScene {
       const cadet = new Cadet(this, gx, -400, 'senior');
       cadet.setScale(0.85).setDepth(6);
       cadet.setFace('👀');
+      const baseAngle = side === 1 ? Math.PI : 0; // 도로 중앙을 향해
       this.guards.push({
         cadet,
         worldY: wy,
         x: gx,
-        baseAngle: side === 1 ? Math.PI : 0, // 도로 중앙을 향해
-        phaseMs: randFloat(0, 20000),
-        periodMs: basePeriod * randFloat(0.85, 1.25),
+        baseAngle,
+        gaze: baseAngle + randFloat(-ampRad, ampRad),
+        targetGaze: baseAngle + randFloat(-ampRad, ampRad),
+        turnSpeed: 0.0001,
+        nextThinkMs: randFloat(0, 700), // 선배마다 다른 타이밍에 첫 방향 전환
       });
       wy += spacing + randFloat(-260, 260);
     }
@@ -285,10 +294,14 @@ export class WalkScene extends BaseMainScene {
     });
     this.dojang.setY(PLAYER_Y - (this.distancePx + 430 - this.progressPx));
 
-    // ── 선배 시야 판정 ──
-    const half = Phaser.Math.DegToRad(Q4_WALK.vision.halfAngleDeg);
-    const amp = Phaser.Math.DegToRad(Q4_WALK.vision.sweepAmpDeg);
-    const range = Q4_WALK.vision.rangePx;
+    // ── 선배 시야 판정 (변칙 회전) ──
+    const vision = Q4_WALK.vision;
+    const half = Phaser.Math.DegToRad(vision.halfAngleDeg);
+    const amp = Phaser.Math.DegToRad(vision.ampDeg);
+    const range = vision.rangePx;
+    const baseTurn = Phaser.Math.DegToRad(vision.turnDegPerSec(this.day)) / 1000; // rad/ms
+    const thinkRange = vision.thinkMsRange(this.day);
+    const snapP = vision.snapChance(this.day);
     let anySpot = false;
     let spotter: Cadet | null = null;
     this.coneG.clear();
@@ -299,12 +312,21 @@ export class WalkScene extends BaseMainScene {
       g.cadet.setVisible(onScreen);
       if (!onScreen) continue;
 
-      const gaze =
-        g.baseAngle + Math.sin(((this.elapsedMs + g.phaseMs) / g.periodMs) * Math.PI * 2) * amp;
+      // 수시로 새 목표각을 고른다 — 가끔은 몇 배속 스냅 턴으로 홱 돌아본다
+      if (this.elapsedMs >= g.nextThinkMs) {
+        g.nextThinkMs = this.elapsedMs + randFloat(thinkRange[0], thinkRange[1]);
+        g.targetGaze = g.baseAngle + randFloat(-amp, amp);
+        g.turnSpeed = baseTurn * randFloat(0.75, 1.5) * (chance(snapP) ? 3 : 1);
+      }
+      const diff = Phaser.Math.Angle.Wrap(g.targetGaze - g.gaze);
+      const step = g.turnSpeed * delta;
+      g.gaze = Math.abs(diff) <= step ? g.targetGaze : g.gaze + Math.sign(diff) * step;
+
       const dx = PLAYER_X - g.x;
       const dy = PLAYER_Y - sy;
       const dist = Math.hypot(dx, dy);
-      const inCone = dist < range && Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - gaze)) < half;
+      const inCone =
+        dist < range && Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - g.gaze)) < half;
       if (inCone) {
         anySpot = true;
         spotter = g.cadet;
@@ -313,7 +335,7 @@ export class WalkScene extends BaseMainScene {
 
       // 시야 부채꼴 — 평소엔 노랑, 나를 비추는 중엔 빨강
       this.coneG.fillStyle(inCone ? 0xe94560 : 0xffd166, inCone ? 0.2 : 0.11);
-      this.coneG.slice(g.x, sy, range, gaze - half, gaze + half, false);
+      this.coneG.slice(g.x, sy, range, g.gaze - half, g.gaze + half, false);
       this.coneG.fillPath();
     }
 

@@ -84,38 +84,31 @@ export const Q1_SHOWER = {
 } as const;
 
 // ─────────────────────────────────────────────
-// Q2. 복도에서 경례 대신 인사로 받기
+// Q2. 복도 인사/경례 판별 — 견장 줄 수(1=후배, 2=동기, 3=선배)를 보고
+// 제한시간 안에 올바른 응대를 골라야 한다. 후배 인사만 카운트.
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 필요 성공 횟수 (3~4회, 일차 비례) */
+  /** 필요 성공 횟수 = 후배 경례를 인사로 받은 횟수 (3~4회, 일차 비례) */
   targetCount: (day: number): number => Math.min(4, 3 + Math.floor((day - 1) / 8)),
-  /** 후배 접근 시간 */
-  approachMs: (day: number): number => Math.round(lerp(1400, 900, difficulty(day))),
-  /** 경례 후 응답 허용 시간 */
-  saluteWindowMs: (day: number): number => Math.round(lerp(1800, 1200, difficulty(day))),
-  /** 후배 사이 간격 범위 */
-  juniorGapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(800, 500, difficulty(day))),
-    Math.round(lerp(1400, 900, difficulty(day))),
+  /** 접근 시간 — 빠른 템포 */
+  approachMs: (day: number): number => Math.round(lerp(700, 480, difficulty(day))),
+  /** 한 명당 응답 제한시간 — 안에 인사든 경례든 해야 한다 */
+  responseMs: (day: number): number => Math.round(lerp(1500, 950, difficulty(day))),
+  /** 다음 사람까지 간격 */
+  gapMsRange: (day: number): [number, number] => [
+    Math.round(lerp(400, 250, difficulty(day))),
+    Math.round(lerp(750, 450, difficulty(day))),
   ],
-  /** 선배 체류 시간 범위 (선배는 예고 없이 등장한다) — 짧게 치고 빠진다 */
-  seniorStayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(900, 1200, difficulty(day))),
-    Math.round(lerp(1300, 1800, difficulty(day))),
-  ],
-  /** 선배 등장 간격 범위 — 빨리빨리 돌아온다 */
-  seniorGapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1600, 1100, difficulty(day))),
-    Math.round(lerp(2800, 1900, difficulty(day))),
-  ],
-  /** 선경례 굴욕 페널티 */
-  hpPreemptiveSalute: 10,
-  /** 경례 무시(타임아웃) 페널티 */
-  hpIgnoreSalute: 5,
-  /** 선배도 없는데 후배 경례를 경례로 받아버린 굴욕 페널티 */
-  hpWrongSalute: 18,
-  /** 선배가 아예 안 나타나는 후배 사이클 비율 (일차가 갈수록 감소) */
-  noSeniorChance: (day: number): number => Math.max(0.18, 0.4 - day * 0.015),
+  /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
+  seniorShare: (day: number): number => Math.min(0.34, 0.15 + day * 0.012),
+  /** 동기(2줄) 출현 비율 */
+  peerShare: 0.26,
+  /** 후배에게 경례해버린 굴욕 페널티 */
+  hpSaluteJunior: 18,
+  /** 동기에게 경례해버린 굴욕 페널티 */
+  hpSalutePeer: 12,
+  /** 응답 타임아웃 페널티 (후배/동기 — 선배 무시는 즉시 게임 오버) */
+  hpTimeout: 8,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -163,14 +156,21 @@ export const Q4_WALK = {
   graceMs: (day: number): number => Math.round(lerp(650, 430, difficulty(day))),
   /** 도로변 선배 배치 간격 (월드 px) */
   seniorSpacingPx: (day: number): number => Math.round(lerp(1500, 1050, difficulty(day))),
-  /** CCTV 시야 설정 */
+  /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움) */
   vision: {
     rangePx: 620,
     halfAngleDeg: 26,
-    /** 시선이 왕복하는 주기 */
-    sweepPeriodMs: (day: number): number => Math.round(lerp(2800, 2000, difficulty(day))),
     /** 정면 기준 좌우 회전 폭 (도) */
-    sweepAmpDeg: 80,
+    ampDeg: 80,
+    /** 시선 회전 속도 (도/초) — 일차가 오를수록 빨라진다 */
+    turnDegPerSec: (day: number): number => lerp(90, 230, difficulty(day)),
+    /** 방향 전환(새 목표각 선택) 간격 (ms) — 일차가 오를수록 잦아진다 */
+    thinkMsRange: (day: number): [number, number] => [
+      Math.round(lerp(900, 420, difficulty(day))),
+      Math.round(lerp(1700, 850, difficulty(day))),
+    ],
+    /** 홱 돌아보기(3배속 스냅 회전) 확률 */
+    snapChance: (day: number): number => lerp(0.15, 0.5, difficulty(day)),
   },
 } as const;
 
@@ -345,14 +345,14 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
     tip: '노래는 자동 재생 — 선배가 나타나면 ⏸ 꾹! 나갈 때까지 유지',
   },
   hallway: {
-    title: '복도에서 경례 대신 인사로 받기',
+    title: '복도에서 어깨힘주고 인사받기',
     emoji: '🫡',
-    tip: '후배 경례는 🙇 인사로 받아야 카운트 — 선배가 보이면 🫡 경례로!',
+    tip: '견장 줄 수를 봐라! 1줄 후배·2줄 동기 → 🙇 인사, 3줄 선배 → 🫡 경례. 후배 인사만 카운트!',
   },
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',
     emoji: '🍜',
-    tip: '선배 등장 즉시 세탁실로! 단, 완전소등 전에 "삐-"까지 끝내야 한다',
+    tip: '100% 순간 "삐-" 완성음이 크게 울린다 — 선배가 지나간 직후에 완성시켜라! (소등 전까지)',
   },
   walk: {
     title: '태권도장까지 걸어가기',

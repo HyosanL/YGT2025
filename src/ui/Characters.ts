@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { FONT } from '../config';
 
-export type CadetKind = 'player' | 'junior' | 'senior';
+export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
 export type CadetMotion = 'idle' | 'walk' | 'run' | 'dance' | 'salute';
 
-interface CadetStyle {
+export interface CadetStyle {
   uniform: number;
   uniformDark: number;
   trousers: number;
@@ -18,6 +18,10 @@ interface CadetStyle {
   scale: number;
   face: string;
   label: string;
+  /** 왼팔 완장 (기본: 선배만) */
+  armband: boolean;
+  /** 큰 정모 (기본: 선배만) */
+  bigCap: boolean;
 }
 
 const STYLE: Record<CadetKind, CadetStyle> = {
@@ -34,6 +38,8 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     scale: 1.0,
     face: '😏',
     label: '기태 (2학년)',
+    armband: false,
+    bigCap: false,
   },
   junior: {
     uniform: 0x4ecca3,
@@ -48,6 +54,24 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     scale: 0.85,
     face: '😳',
     label: '후배 (1학년)',
+    armband: false,
+    bigCap: false,
+  },
+  peer: {
+    uniform: 0x3a6ea5,
+    uniformDark: 0x2b5680,
+    trousers: 0x24384f,
+    shoe: 0x14141c,
+    cap: 0x1f3b5c,
+    capBand: 0xffd700,
+    skin: 0xffe0c2,
+    hair: 0x241c14,
+    rank: 2,
+    scale: 1.0,
+    face: '🙂',
+    label: '동기 (2학년)',
+    armband: false,
+    bigCap: false,
   },
   senior: {
     uniform: 0x8b1e3f,
@@ -62,6 +86,8 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     scale: 1.2,
     face: '😠',
     label: '선배 (3학년)',
+    armband: true,
+    bigCap: true,
   },
 };
 
@@ -88,9 +114,17 @@ export class Cadet extends Phaser.GameObjects.Container {
   private phaseTween: Phaser.Tweens.Tween | null = null;
   private style: CadetStyle;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, kind: CadetKind, showLabel = false) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    kind: CadetKind,
+    showLabel = false,
+    styleOverride?: Partial<CadetStyle>
+  ) {
     super(scene, x, y);
-    const st = STYLE[kind];
+    // 오버라이드로 제복 색·완장 등 '학년 티'를 지울 수 있다 (견장 판별 게임용)
+    const st: CadetStyle = { ...STYLE[kind], ...styleOverride };
     this.style = st;
     const s = st.scale;
     const u = (n: number): number => n * s;
@@ -155,8 +189,8 @@ export class Cadet extends Phaser.GameObjects.Container {
     torso.strokeRoundedRect(u(-52), u(-62), u(104), u(96), u(16));
     this.rig.add(torso);
 
-    // 팔 (어깨 피벗) — 선배는 왼팔에 완장
-    this.leftArm = this.buildArm(scene, u(-50), s, kind === 'senior');
+    // 팔 (어깨 피벗) — 완장은 스타일 소관 (기본: 선배)
+    this.leftArm = this.buildArm(scene, u(-50), s, st.armband);
     this.rightArm = this.buildArm(scene, u(50), s, false);
     this.rig.add(this.leftArm);
     this.rig.add(this.rightArm);
@@ -173,8 +207,8 @@ export class Cadet extends Phaser.GameObjects.Container {
     // 앞머리
     hg.fillStyle(st.hair, 1);
     hg.fillRect(u(-38), u(-32), u(76), u(10));
-    // 정모 (선배는 크라운도 챙도 크다)
-    const big = kind === 'senior';
+    // 정모 (큰 정모는 스타일 소관 — 기본: 선배)
+    const big = st.bigCap;
     hg.fillStyle(st.cap, 1);
     if (big) hg.fillRoundedRect(u(-48), u(-64), u(96), u(34), u(12));
     else hg.fillRoundedRect(u(-44), u(-60), u(88), u(30), u(10));
