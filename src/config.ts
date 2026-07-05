@@ -173,7 +173,7 @@ export const Q4_WALK = {
   /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움).
    *  선배가 길가에서 멀리 떨어져 있어(측면 ~300px) 시야 끝자락만 도로 중앙에 닿는다 */
   vision: {
-    rangePx: 430,
+    rangePx: 470,
     halfAngleDeg: 26,
     /** 정면 기준 좌우 회전 폭 (도) */
     ampDeg: 80,

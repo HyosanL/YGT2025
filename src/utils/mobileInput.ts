@@ -30,6 +30,12 @@ export interface HiddenInputOptions {
     color: string;
     caretColor: string;
   }>;
+  /**
+   * 입력창 바로 위에 붙는 안내 라벨 (예: 따라 쳐야 할 문장).
+   * DOM이라 가상 키보드가 올라와도 입력창과 함께 화면에 남는다 —
+   * 캔버스에 그린 텍스트는 키보드에 가려질 수 있는 문제의 해결책.
+   */
+  label?: { text: string; background: string; color: string };
 }
 
 export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
@@ -57,6 +63,30 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     zIndex: '30',
   } satisfies Partial<CSSStyleDeclaration>);
 
+  // 입력창 위에 붙는 안내 라벨 (선택)
+  let labelEl: HTMLDivElement | null = null;
+  if (opts.label) {
+    labelEl = document.createElement('div');
+    labelEl.textContent = opts.label.text;
+    Object.assign(labelEl.style, {
+      position: 'fixed',
+      boxSizing: 'border-box',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: opts.label.background,
+      color: opts.label.color,
+      fontWeight: 'bold',
+      borderRadius: '12px',
+      padding: '0 10px',
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      zIndex: '30',
+      pointerEvents: 'none',
+    } satisfies Partial<CSSStyleDeclaration>);
+    document.body.appendChild(labelEl);
+  }
+
   /** 게임 좌표 → 실제 CSS 좌표 (캔버스 FIT 스케일/레터박스 반영) */
   const reposition = (): void => {
     const canvas = document.querySelector<HTMLCanvasElement>('#app canvas');
@@ -66,19 +96,30 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     const sy = r.height / GAME_HEIGHT;
     const rect = opts.rect ?? { x: 60, y: GAME_HEIGHT - 150, w: GAME_WIDTH - 120, h: 90 };
     const h = rect.h * sy;
+    const labelH = labelEl ? Math.max(30, h * 0.85) : 0;
+    const labelGap = labelEl ? 6 : 0;
     let top = r.top + rect.y * sy;
     // iOS는 키보드가 떠도 레이아웃 뷰포트가 안 줄어든다 — 키보드에 가려질 위치면
-    // 보이는 영역(visualViewport) 하단 바로 위로 끌어올린다
+    // 보이는 영역(visualViewport) 하단 바로 위로 끌어올린다 (라벨 포함)
     const vv = window.visualViewport;
     if (vv) {
       const maxTop = vv.offsetTop + vv.height - h - 12;
-      if (top > maxTop) top = Math.max(12, maxTop);
+      if (top > maxTop) top = Math.max(12 + labelH + labelGap, maxTop);
     }
-    el.style.left = `${r.left + rect.x * sx}px`;
+    const left = r.left + rect.x * sx;
+    const width = rect.w * sx;
+    el.style.left = `${left}px`;
     el.style.top = `${top}px`;
-    el.style.width = `${rect.w * sx}px`;
+    el.style.width = `${width}px`;
     el.style.height = `${h}px`;
     el.style.fontSize = `${Math.max(16, Math.round(h * 0.42))}px`;
+    if (labelEl) {
+      labelEl.style.left = `${left}px`;
+      labelEl.style.width = `${width}px`;
+      labelEl.style.height = `${labelH}px`;
+      labelEl.style.top = `${top - labelH - labelGap}px`;
+      labelEl.style.fontSize = `${Math.max(15, Math.round(labelH * 0.48))}px`;
+    }
   };
 
   const handleInput = (): void => opts.onInput(el.value);
@@ -128,6 +169,7 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
       window.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+      labelEl?.remove();
       el.remove();
     },
   };

@@ -78,32 +78,13 @@ export class KakaoScene extends BaseMiniScene {
       })
       .setOrigin(0, 0.5);
 
-    // ── 보낼 답장 (우측: 노란 내 버블 미리보기) ──
+    // 보낼 답장 문장은 캔버스가 아니라 입력창 위의 DOM 라벨(노란 버블)로 표시한다
+    // — 가상 키보드가 올라와도 입력창과 함께 화면에 남아 항상 보인다
     this.add
-      .text(GAME_WIDTH / 2, msgY + 106, '👇 이 문장을 그대로 입력해서 전송! (느낌표까지)', {
+      .text(GAME_WIDTH / 2, msgY + 118, '👇 노란 문장을 그대로 입력해서 전송! (느낌표까지)', {
         fontFamily: FONT,
         fontSize: '25px',
         color: '#4a5568',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
-    const targetBg = this.add.graphics();
-    targetBg.fillStyle(KAKAO.yellow, 1);
-    targetBg.fillRoundedRect(PANEL.x + 40, msgY + 142, PANEL.w - 80, 76, 18);
-    // 내 버블 꼬리 (우측)
-    targetBg.fillTriangle(
-      PANEL.x + PANEL.w - 40,
-      msgY + 152,
-      PANEL.x + PANEL.w - 28,
-      msgY + 164,
-      PANEL.x + PANEL.w - 40,
-      msgY + 176
-    );
-    this.add
-      .text(GAME_WIDTH / 2, msgY + 180, this.prompt.reply, {
-        fontFamily: FONT,
-        fontSize: '31px',
-        color: KAKAO.textBrown,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -140,6 +121,8 @@ export class KakaoScene extends BaseMiniScene {
         color: KAKAO.textDark,
         caretColor: '#d4a017',
       },
+      // 따라 칠 문장 — 키보드가 올라와도 입력창 위에 붙어 항상 보인다
+      label: { text: this.prompt.reply, background: '#fee500', color: KAKAO.textBrown },
     });
     this.hiddenInput.focus();
 

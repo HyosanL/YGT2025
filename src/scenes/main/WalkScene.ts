@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q4_WALK } from '../../config';
 import { gameState } from '../../core/GameState';
+import { showToast } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
@@ -41,6 +42,8 @@ export class WalkScene extends BaseMainScene {
   private distancePx = 1;
   private elapsedMs = 0;
   private holding = false;
+  /** 탈진 상태 — HP가 바닥나면 죽는 대신 당분간 못 뛴다 (회복하면 해제) */
+  private exhausted = false;
   private spottedMs = 0;
   private graceMs = 500;
   /** 미니퀘스트/일시정지 복귀 직후 잠깐의 판정 면제 */
@@ -65,6 +68,7 @@ export class WalkScene extends BaseMainScene {
     this.progressPx = 0;
     this.elapsedMs = 0;
     this.holding = false;
+    this.exhausted = false;
     this.spottedMs = 0;
     this.spotSafeUntilMs = 0;
     this.dangerOn = false;
@@ -257,6 +261,7 @@ export class WalkScene extends BaseMainScene {
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (p.y < 110) return; // 상단 UI(일시정지/음소거) 영역
+      if (this.exhausted) return; // 탈진 중에는 못 뛴다 — 회복하면 자동 해제
       this.holding = true;
     });
     this.input.on('pointerup', () => {
@@ -279,15 +284,25 @@ export class WalkScene extends BaseMainScene {
     this.elapsedMs += delta;
 
     // ── 이동 & HP ──
+    // 탈진 즉사는 없다: HP가 바닥나면 강제 걷기(탈진)로 전환되고,
+    // 사각지대에서 걸으며 회복해야 다시 뛸 수 있다 (불가피한 죽음 방지)
     const speed = this.holding ? Q4_WALK.runSpeed : Q4_WALK.walkSpeed;
     this.progressPx += (speed * delta) / 1000;
     if (this.holding) {
-      if (gameState.damage((Q4_WALK.runHpPerSec * delta) / 1000)) {
-        this.fail('무리한 구보로 탈진해서 쓰러졌다...');
-        return;
+      const drain = (Q4_WALK.runHpPerSec * delta) / 1000;
+      gameState.damage(Math.min(drain, Math.max(0, gameState.hp - 1)));
+      if (gameState.hp <= 1.01) {
+        this.holding = false;
+        this.exhausted = true;
+        this.player.setFace('😵');
+        showToast(this, '숨이 턱 끝까지 찼다... 당분간 못 뛴다!', COLORS.warnCss);
       }
     } else {
       gameState.heal((Q4_WALK.walkRegenPerSec * delta) / 1000);
+      if (this.exhausted && gameState.hp >= 20) {
+        this.exhausted = false;
+        showToast(this, '숨 골랐다 — 다시 뛸 수 있다!');
+      }
     }
 
     if (this.progressPx >= this.distancePx) {
@@ -388,10 +403,18 @@ export class WalkScene extends BaseMainScene {
     this.progressFill.fillRoundedRect(GAME_WIDTH / 2 - 214, 86, 428 * ratio, 28, 7);
 
     this.stateText.setText(
-      this.holding ? '🏃 구보 중!! (HP 소모)' : '🚶 걷는 중 (화면을 꾹 누르면 구보 · HP 회복)'
+      this.exhausted
+        ? '😵 탈진! HP 20까지 회복해야 뛴다 — 사각지대로!'
+        : this.holding
+          ? '🏃 구보 중!! (HP 소모)'
+          : '🚶 걷는 중 (화면을 꾹 누르면 구보 · HP 회복)'
     );
-    this.stateText.setColor(this.holding ? COLORS.warnCss : COLORS.textCss);
-    this.player.setFace(this.holding ? '😤' : '😏');
+    this.stateText.setColor(
+      this.exhausted ? COLORS.accentCss : this.holding ? COLORS.warnCss : COLORS.textCss
+    );
+    if (!this.exhausted) {
+      this.player.setFace(this.holding ? '😤' : '😏');
+    }
     this.player.setMotion(this.holding ? 'run' : 'walk');
   }
 }

@@ -145,10 +145,6 @@ export class MicrowaveScene extends BaseMainScene {
     this.ovenLight.fillRoundedRect(464, 594, 128, 92, 6);
     this.add.text(530, 640, '🍜', { fontFamily: FONT, fontSize: '48px' }).setOrigin(0.5);
     drawAreaSign(this, 555, 538, '취사구역');
-    // 전자레인지 위 은은한 백열등 빛
-    const glow = this.add.graphics();
-    glow.fillStyle(0xffe9a8, 0.06);
-    glow.fillCircle(555, 580, 190);
     addVignette(this, 0.3);
 
     // 조리 게이지
