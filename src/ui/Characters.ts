@@ -28,13 +28,15 @@ export interface CadetStyle {
   belt?: number;
 }
 
+// 공군사관생도 근무복 모티브 — 남색 근무복 + 개리슨모(약모).
+// 학년 구분은 견장 막대 수 + 파이핑/완장 색으로.
 const STYLE: Record<CadetKind, CadetStyle> = {
   player: {
-    uniform: 0x3a6ea5,
-    uniformDark: 0x2b5680,
-    trousers: 0x24384f,
+    uniform: 0x223154,
+    uniformDark: 0x18233d,
+    trousers: 0x1b2540,
     shoe: 0x14141c,
-    cap: 0x1f3b5c,
+    cap: 0x1c2946,
     capBand: 0xffd700,
     skin: 0xffd9b3,
     hair: 0x2a2018,
@@ -46,12 +48,12 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     bigCap: false,
   },
   junior: {
-    uniform: 0x4ecca3,
-    uniformDark: 0x379e7d,
-    trousers: 0x27594a,
+    uniform: 0x2e3f6a,
+    uniformDark: 0x223154,
+    trousers: 0x24304f,
     shoe: 0x14141c,
-    cap: 0x2e6e58,
-    capBand: 0xd9f2e6,
+    cap: 0x263659,
+    capBand: 0xd9e2f2,
     skin: 0xffe0c2,
     hair: 0x2a2018,
     rank: 1,
@@ -62,11 +64,11 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     bigCap: false,
   },
   peer: {
-    uniform: 0x3a6ea5,
-    uniformDark: 0x2b5680,
-    trousers: 0x24384f,
+    uniform: 0x223154,
+    uniformDark: 0x18233d,
+    trousers: 0x1b2540,
     shoe: 0x14141c,
-    cap: 0x1f3b5c,
+    cap: 0x1c2946,
     capBand: 0xffd700,
     skin: 0xffe0c2,
     hair: 0x241c14,
@@ -78,11 +80,11 @@ const STYLE: Record<CadetKind, CadetStyle> = {
     bigCap: false,
   },
   senior: {
-    uniform: 0x8b1e3f,
-    uniformDark: 0x6e1631,
-    trousers: 0x33101e,
+    uniform: 0x1a2440,
+    uniformDark: 0x111a30,
+    trousers: 0x141c32,
     shoe: 0x0d0d12,
-    cap: 0x232328,
+    cap: 0x141f38,
     capBand: 0xe94560,
     skin: 0xffd0a8,
     hair: 0x1c1712,
@@ -235,24 +237,33 @@ export class Cadet extends Phaser.GameObjects.Container {
       hg.fillStyle(0xffffff, 0.08);
       hg.fillEllipse(u(-14), u(-34), u(30), u(9));
     } else {
-      // 정모 (큰 정모는 스타일 소관 — 기본: 선배)
+      // 개리슨모(약모) — 머리에 낮게 얹힌 접힌 모자. 선배(bigCap)는 조금 크다
       const big = st.bigCap;
+      const gw = big ? 47 : 42; // 절반 폭
+      const capTop = big ? -68 : -63;
+      const capBot = -38;
       hg.fillStyle(st.cap, 1);
-      if (big) hg.fillRoundedRect(u(-48), u(-64), u(96), u(34), u(12));
-      else hg.fillRoundedRect(u(-44), u(-60), u(88), u(30), u(10));
-      hg.fillStyle(st.capBand, 1);
-      hg.fillRect(u(big ? -48 : -44), u(-36), u(big ? 96 : 88), u(6));
-      hg.fillStyle(0x101016, 1);
-      if (big) hg.fillRoundedRect(u(-52), u(-30), u(104), u(9), u(4));
-      else hg.fillRoundedRect(u(-36), u(-30), u(72), u(7), u(3));
-      // 정모 크라운 하이라이트
-      hg.fillStyle(0xffffff, 0.15);
-      hg.fillEllipse(u(-14), u(big ? -54 : -50), u(34), u(9));
-      // 모표 (금색 날개)
+      hg.fillPoints(
+        [
+          new Phaser.Geom.Point(u(-gw), u(capBot)),
+          new Phaser.Geom.Point(u(-gw + 12), u(capTop)),
+          new Phaser.Geom.Point(u(gw - 12), u(capTop)),
+          new Phaser.Geom.Point(u(gw), u(capBot)),
+        ],
+        true
+      );
+      // 중앙 접힘(크리스) 라인
+      hg.lineStyle(u(2), 0x000000, 0.25);
+      hg.lineBetween(0, u(capTop + 2), 0, u(capBot - 2));
+      // 위 능선 파이핑 (학년 색)
+      hg.lineStyle(u(3), st.capBand, 1);
+      hg.lineBetween(u(-gw + 12), u(capTop + 1), u(gw - 12), u(capTop + 1));
+      // 아래 가장자리 셰이딩
+      hg.lineStyle(u(2), 0x000000, 0.2);
+      hg.lineBetween(u(-gw + 2), u(capBot), u(gw - 2), u(capBot));
+      // 앞 좌측 모표 (작은 금장)
       hg.fillStyle(0xffd700, 1);
-      hg.fillCircle(0, u(-46), u(5));
-      hg.fillTriangle(u(-11), u(-44), u(-3), u(-49), u(-3), u(-41));
-      hg.fillTriangle(u(11), u(-44), u(3), u(-49), u(3), u(-41));
+      hg.fillCircle(u(-24), u(-46), u(4.5));
     }
     head.add(hg);
 

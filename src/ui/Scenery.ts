@@ -262,7 +262,7 @@ export function drawDoor(
   }
 }
 
-/** 관물대 (2문 캐비닛) */
+/** 옷장 (2문 캐비닛) */
 export function drawLockerCabinet(
   scene: Phaser.Scene,
   x: number,

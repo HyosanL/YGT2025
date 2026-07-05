@@ -207,7 +207,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     void text;
 
     // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립
-    if (gameState.addLifeThirds(1)) {
+    if (gameState.addLifeSixths(2)) {
       const lifeText = this.add
         .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅓ 적립!', {
           fontFamily: FONT,
@@ -239,25 +239,55 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.scene.stop();
   }
 
+  /**
+   * 실패 = 목숨 반 칸 차감 후 하루는 이어서 진행.
+   * 차감으로 목숨이 0이 되면 그대로 게임 오버.
+   */
   protected finishFail(reason: string): void {
     if (this.done) return;
     this.done = true;
     this.stopTimer();
 
-    if (MINI.failMode === 'gameover') {
-      audio.caught();
-      audio.gameover();
-      vibrate(HAPTIC.fail);
-      this.cameras.main.shake(400, 0.01);
-      this.cameras.main.flash(400, 233, 69, 96);
-      this.time.delayedCall(1100, () => {
+    audio.caught();
+    audio.buzz();
+    vibrate(HAPTIC.fail);
+    this.cameras.main.shake(350, 0.009);
+
+    const alive = gameState.deductLifeSixths(MINI.failLifeSixths);
+
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `❌ ${reason}`, {
+        fontFamily: FONT,
+        fontSize: '38px',
+        color: COLORS.accentCss,
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: { x: 30, y: 20 },
+        wordWrap: { width: GAME_WIDTH - 140 },
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(600);
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 110, '💔 목숨 반 칸이 날아갔다!', {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: COLORS.warnCss,
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: { x: 20, y: 10 },
+      })
+      .setOrigin(0.5)
+      .setDepth(600);
+
+    this.time.delayedCall(1300, () => {
+      if (!alive) {
+        // 목숨이 바닥났다 — 진짜 게임 오버
         this.scene.stop(this.returnTo);
-        this.scene.start('Result', { success: false, reason });
-      });
-    } else {
-      gameState.damage(MINI.failHpPenalty);
-      audio.buzz();
-      this.time.delayedCall(700, () => this.returnWithCountdown());
-    }
+        this.scene.start('Result', { success: false, reason: `${reason} 목숨이 바닥났다.` });
+        return;
+      }
+      this.returnWithCountdown();
+    });
   }
 }

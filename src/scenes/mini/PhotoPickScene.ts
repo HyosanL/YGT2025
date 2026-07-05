@@ -15,9 +15,9 @@ interface LockerResult {
 
 /**
  * M3. 단체 채팅방 사진 고르기.
- * 고르기 모드: 사진 N장 중 제대로 정리된 관물대 1장 터치 (3초)
+ * 고르기 모드: 사진 N장 중 제대로 정리된 옷장 1장 터치 (3초)
  * 틀린그림찾기 모드: 사진 1장에서 잘못된 부분을 직접 터치 (5초)
- * 관물대 일러스트는 절차 생성 — 카톡 캡처 제공 시 교체 가능.
+ * 옷장 일러스트는 절차 생성 — 카톡 캡처 제공 시 교체 가능.
  */
 export class PhotoPickScene extends BaseMiniScene {
   constructor() {
@@ -123,7 +123,7 @@ export class PhotoPickScene extends BaseMiniScene {
         if (i === correctIndex) {
           this.finishSuccess('정답! "그래, 이렇게 하라고."');
         } else {
-          this.finishFail('엉망인 관물대를 골라버렸다... "눈이 없냐?"');
+          this.finishFail('엉망인 옷장을 골라버렸다... "눈이 없냐?"');
         }
       });
     }
@@ -176,7 +176,7 @@ export class PhotoPickScene extends BaseMiniScene {
     );
   }
 
-  // ── 관물대 절차 생성 ─────────────────────────
+  // ── 옷장 절차 생성 ─────────────────────────
 
   private drawLocker(x: number, y: number, scale: number, flaw: LockerFlaw | null): LockerResult {
     const c = this.add.container(x, y).setScale(scale);
@@ -212,8 +212,8 @@ export class PhotoPickScene extends BaseMiniScene {
     c.add(rod);
     for (let i = 0; i < 2; i++) {
       const ux = i === 0 ? -45 : 45;
-      const uniform = this.add.rectangle(ux, 12, 62, 104, 0x1f3b5c);
-      uniform.setStrokeStyle(2, 0x142a42);
+      const uniform = this.add.rectangle(ux, 12, 62, 104, 0x223154);
+      uniform.setStrokeStyle(2, 0x141f38);
       if (flaw === 'crooked-hanger' && i === 1) {
         uniform.setAngle(17);
         uniform.y = 22;

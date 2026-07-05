@@ -54,7 +54,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.hpBar = new HpBar(this);
     // 목숨 하트 (HP 바 아래) — 부분 채움 + 반투명 빈 하트
     this.livesBar = new LivesBar(this, 26, 70, 38);
-    this.livesBar.setLives(gameState.livesThirds);
+    this.livesBar.setLives(gameState.livesSixths);
     addMuteButton(this);
     this.createPauseButton();
     this.createDangerVignette();
@@ -147,7 +147,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     // scene.pause()와 같은 프레임에 tick이 한 번 더 돌며 노래를 되살리는 것을 방지
     if (this.finished || this.resumeContext !== null) return;
     this.hpBar.setHp(gameState.hp);
-    this.livesBar.setLives(gameState.livesThirds);
+    this.livesBar.setLives(gameState.livesSixths);
     this.tick(delta);
   }
 

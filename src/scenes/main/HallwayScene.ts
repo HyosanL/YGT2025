@@ -21,13 +21,13 @@ type CycleState = 'idle' | 'approaching' | 'waiting' | 'resolved';
 const WATCHER_RIGHT_X = GAME_WIDTH - 115;
 const WATCHER_LEFT_X = 115;
 
-/** 학년 티(제복 색·완장·정모·체격·표정)를 지운 공통 룩 — 판별 단서는 견장 줄 수뿐 */
+/** 학년 티(파이핑 색·완장·모자 크기·체격·표정)를 지운 공통 근무복 룩 — 판별 단서는 견장 줄 수뿐 */
 const NEUTRAL_STYLE: Partial<CadetStyle> = {
-  uniform: 0x3a6ea5,
-  uniformDark: 0x2b5680,
-  trousers: 0x24384f,
+  uniform: 0x223154,
+  uniformDark: 0x18233d,
+  trousers: 0x1b2540,
   shoe: 0x14141c,
-  cap: 0x1f3b5c,
+  cap: 0x1c2946,
   capBand: 0xffd700,
   skin: 0xffdcb8,
   hair: 0x241c14,

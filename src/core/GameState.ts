@@ -12,10 +12,10 @@ const DEFAULT_SETTINGS: Settings = { mute: false, nickname: '' };
 class GameStateImpl {
   day = 1;
   hp = HP_MAX;
-  /** 목숨 (⅓ 단위 정수 — 3 = 하트 1개, 최대 LIVES_MAX*3).
-   *  새 판은 1칸(3)으로 시작. 벽치기 도박 성공 +3, 미니 퀘스트 성공 +1.
-   *  사망 시 3 소모 후 남아 있으면 부활. */
-  livesThirds = 3;
+  /** 목숨 (⅙ 단위 정수 — 6 = 하트 1개, 최대 LIVES_MAX*6).
+   *  새 판은 1칸(6)으로 시작. 벽치기 성공 +6, 미니 퀘스트 성공 +2(⅓), 실패 -3(½).
+   *  사망 시 6 소모 후 온전한 하트가 남아야 부활. */
+  livesSixths = 6;
   currentQuestId: MainQuestId | null = null;
   lastQuestId: MainQuestId | null = null;
   bestDay = 0;
@@ -36,10 +36,13 @@ class GameStateImpl {
       const data = JSON.parse(raw) as Partial<SaveData>;
       this.day = typeof data.day === 'number' && data.day >= 1 ? Math.floor(data.day) : 1;
       this.hp = typeof data.hp === 'number' ? data.hp : HP_MAX;
-      this.livesThirds =
-        typeof data.livesThirds === 'number'
-          ? Math.max(0, Math.min(LIVES_MAX * 3, Math.floor(data.livesThirds)))
-          : 3;
+      const rawSixths =
+        typeof data.livesSixths === 'number'
+          ? data.livesSixths
+          : typeof data.livesThirds === 'number'
+            ? data.livesThirds * 2 // 구버전 저장(⅓ 단위) 마이그레이션
+            : 6;
+      this.livesSixths = Math.max(0, Math.min(LIVES_MAX * 6, Math.floor(rawSixths)));
       this.currentQuestId = data.currentQuestId ?? null;
       this.lastQuestId = data.lastQuestId ?? null;
       this.bestDay = typeof data.bestDay === 'number' ? data.bestDay : 0;
@@ -55,7 +58,7 @@ class GameStateImpl {
     const data: SaveData = {
       day: this.day,
       hp: this.hp,
-      livesThirds: this.livesThirds,
+      livesSixths: this.livesSixths,
       currentQuestId: this.currentQuestId,
       lastQuestId: this.lastQuestId,
       bestDay: this.bestDay,
@@ -74,7 +77,7 @@ class GameStateImpl {
   newRun(): void {
     this.day = 1;
     this.hp = HP_MAX;
-    this.livesThirds = 3;
+    this.livesSixths = 6;
     this.currentQuestId = null;
     this.lastQuestId = null;
     this.totalPlayMs = 0;
@@ -158,25 +161,32 @@ class GameStateImpl {
 
   // ── 목숨 ─────────────────────────────────────
 
-  /** 목숨 추가 (⅓ 단위). 이미 가득이면 false */
-  addLifeThirds(thirds: number): boolean {
-    const max = LIVES_MAX * 3;
-    if (this.livesThirds >= max) return false;
-    this.livesThirds = Math.min(max, this.livesThirds + thirds);
+  /** 목숨 추가 (⅙ 단위). 이미 가득이면 false */
+  addLifeSixths(sixths: number): boolean {
+    const max = LIVES_MAX * 6;
+    if (this.livesSixths >= max) return false;
+    this.livesSixths = Math.min(max, this.livesSixths + sixths);
     this.save();
     return true;
   }
 
+  /** 목숨 차감 (⅙ 단위) — 차감 후에도 살아 있으면 true (0이면 사망) */
+  deductLifeSixths(sixths: number): boolean {
+    this.livesSixths = Math.max(0, this.livesSixths - sixths);
+    this.save();
+    return this.livesSixths > 0;
+  }
+
   /**
-   * 사망 처리 — 목숨 1칸(3)을 소모하고, 소모 후에도 '온전한 하트'(3 이상)가
-   * 남아 있어야 부활(true). 예: 7/3 → 4/3 부활 ✓, 4/3 → 1/3 사망 ✗.
+   * 사망 처리 — 목숨 1칸(6)을 소모하고, 소모 후에도 '온전한 하트'(6 이상)가
+   * 남아 있어야 부활(true). 예: 7/6 하트 → 부활 불가, 2칸 이상 → 부활.
    * 죽기 전까지 버틴 시간은 리더보드 생존시간에 합산해 둔다.
    */
   tryRevive(): boolean {
     this.foldSegment();
-    this.livesThirds = Math.max(0, this.livesThirds - 3);
+    this.livesSixths = Math.max(0, this.livesSixths - 6);
     this.save();
-    return this.livesThirds >= 3;
+    return this.livesSixths >= 6;
   }
 
   setNickname(nickname: string): void {

@@ -75,9 +75,8 @@ export const MINI = {
   chance: (day: number): number => Math.min(0.85, 0.3 + day * 0.05),
   /** 하루 최대 발생 횟수 */
   maxPerDay: 2,
-  /** 'gameover' = 실패 시 즉시 게임 오버, 'hp' = HP 페널티로 전환 가능 */
-  failMode: 'gameover' as 'gameover' | 'hp',
-  failHpPenalty: 40,
+  /** 실패 시 목숨 차감 (⅙ 단위 — 3 = 반 칸). 하루는 이어서 진행, 0이 되면 게임 오버 */
+  failLifeSixths: 3,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
   firstDelayMs: [1500, 3000] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */
@@ -127,10 +126,10 @@ export const Q2_HALLWAY = {
   seniorShare: (day: number): number => Math.min(0.34, 0.15 + day * 0.012),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
-  /** 후배에게 경례해버린 굴욕 페널티 (문가 선배가 볼 때는 정석 대응이라 무penalty) */
-  hpSaluteJunior: 18,
-  /** 동기에게 경례해버린 굴욕 페널티 */
-  hpSalutePeer: 12,
+  /** 후배에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 (문가 선배가 볼 때는 정석 대응이라 무penalty) */
+  hpSaluteJunior: 55,
+  /** 동기에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
+  hpSalutePeer: 55,
   /** 응답 타임아웃 페널티 (후배/동기 — 선배 무시는 즉시 게임 오버) */
   hpTimeout: 8,
   /** 문가 감시 선배 체류 시간 — 이 동안 후배 인사를 하면 발각 */
@@ -228,7 +227,7 @@ export const M1_KAKAO = {
   panicMs: 4000,
   /** 일차별 문장 티어: 길수록 높은 티어 */
   tier: (day: number): number => Math.min(2, Math.floor((day - 1) / 5)),
-  // 군대 답장의 기본 — 반드시 느낌표로 끝난다 (느낌표 누락 = 오타 취급)
+  // 생도 답장의 기본 — "예!"로 받고 문장마다 느낌표 (누락 = 오타 취급)
   prompts: [
     // tier 0 — 짧음
     { msg: '야 지금 어디냐', reply: '생활관입니다!', tier: 0 },
@@ -237,17 +236,17 @@ export const M1_KAKAO = {
     { msg: '오늘 훈련 어땠냐', reply: '힘들었습니다!', tier: 0 },
     { msg: '지금 뭐 하냐', reply: '공부 중입니다!', tier: 0 },
     // tier 1 — 중간
-    { msg: '10분 뒤에 생활관 앞으로 와라', reply: '네 알겠습니다!', tier: 1 },
-    { msg: '아까 복도에서 왜 인사 안 했냐', reply: '죄송합니다 못 봤습니다!', tier: 1 },
-    { msg: '내 관물대에서 뭐 가져갔냐', reply: '아닙니다 안 가져갔습니다!', tier: 1 },
-    { msg: '지금 바로 내려올 수 있냐', reply: '지금 바로 가겠습니다!', tier: 1 },
+    { msg: '10분 뒤에 생활관 앞으로 와라', reply: '예! 알겠습니다!', tier: 1 },
+    { msg: '아까 복도에서 왜 인사 안 했냐', reply: '죄송합니다! 못 봤습니다!', tier: 1 },
+    { msg: '내 옷장에서 뭐 가져갔냐', reply: '아닙니다! 안 가져갔습니다!', tier: 1 },
+    { msg: '지금 바로 내려올 수 있냐', reply: '예! 지금 바로 가겠습니다!', tier: 1 },
     { msg: '어제 소등 후에 뭐 했냐', reply: '바로 취침했습니다!', tier: 1 },
     // tier 2 — 김
-    { msg: '단체 채팅방에 올라온 공지 확인했냐', reply: '죄송합니다 지금 확인했습니다!', tier: 2 },
+    { msg: '단체 채팅방에 올라온 공지 확인했냐', reply: '죄송합니다! 지금 확인했습니다!', tier: 2 },
     { msg: '이번 주말 외박 신청서 왜 안 냈냐', reply: '내일 아침에 바로 제출하겠습니다!', tier: 2 },
     { msg: '후배들 군기가 빠진 것 같지 않냐', reply: '제가 잘 챙기도록 하겠습니다!', tier: 2 },
-    { msg: '샤워장에서 노랫소리 들렸다는데 아는 거 있냐', reply: '아닙니다 저는 모르는 일입니다!', tier: 2 },
-    { msg: '내일 태권도 시합 준비는 잘 되고 있냐', reply: '네 열심히 준비하고 있습니다!', tier: 2 },
+    { msg: '샤워장에서 노랫소리 들렸다는데 아는 거 있냐', reply: '아닙니다! 저는 모르는 일입니다!', tier: 2 },
+    { msg: '내일 태권도 시합 준비는 잘 되고 있냐', reply: '예! 열심히 준비하고 있습니다!', tier: 2 },
   ] as KakaoPrompt[],
 } as const;
 
@@ -405,7 +404,7 @@ export const M2_VOTE = {
 export const M3_PHOTO = {
   roomTitle: '너네 장난하냐?',
   seniorMsg: '내가 이렇게 방 정리하라고 시켰냐?',
-  chooseInstruction: '제대로 정리된 관물대를 고르세요',
+  chooseInstruction: '제대로 정리된 옷장을 고르세요',
   spotInstruction: '잘못된 부분을 터치하세요',
   /** 고르기 모드 제한 시간 */
   chooseTimeMs: 4500,

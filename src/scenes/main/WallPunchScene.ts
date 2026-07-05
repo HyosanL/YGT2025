@@ -89,7 +89,7 @@ export class WallPunchScene extends BaseMainScene {
     drawWindowView(this, GAME_WIDTH - 230, 170, 170, 230, { night: true });
     drawLightShaft(this, GAME_WIDTH - 145, 412, 170, GAME_WIDTH - 210, 940, 330, 0xbdd7ee, 0.07);
 
-    // 관물대 + 출입문 (선배가 벌컥 열고 들어올 그 문)
+    // 옷장 + 출입문 (선배가 벌컥 열고 들어올 그 문)
     drawLockerCabinet(this, 350, 700, 0.9);
     drawDoor(this, GAME_WIDTH - 160, 430, 130, 240, 0x6e5236, '복도');
     addVignette(this, 0.35);
@@ -304,7 +304,7 @@ export class WallPunchScene extends BaseMainScene {
       this.player.setFace('😌');
       speechBubble(this, 400, 640, '조용해졌다... 취침해야겠다...', 1500, 40);
 
-      const gained = gameState.addLifeThirds(3);
+      const gained = gameState.addLifeSixths(6);
       if (gained) {
         audio.chime();
         vibrate(HAPTIC.lifeGain);
