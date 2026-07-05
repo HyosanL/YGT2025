@@ -4,6 +4,7 @@ import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { addMuteButton, Button } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
+import { showHelpPanel } from '../ui/HelpPanel';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { drawBarracks, drawFlagpole, drawMountains } from '../ui/Scenery';
 import { askNickname } from '../utils/nicknameDialog';
@@ -163,73 +164,9 @@ export class TitleScene extends Phaser.Scene {
       this.helpPanel = null;
       return;
     }
-    const panel = this.add.container(0, 0).setDepth(3000);
-    this.helpPanel = panel;
-
-    const dim = this.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7)
-      .setOrigin(0)
-      .setInteractive();
-    panel.add(dim);
-
-    const bg = this.add.graphics();
-    bg.fillStyle(COLORS.panel, 0.97);
-    bg.fillRoundedRect(40, 130, GAME_WIDTH - 80, 960, 24);
-    panel.add(bg);
-
-    panel.add(
-      this.add
-        .text(GAME_WIDTH / 2, 190, '📖 게임 설명', {
-          fontFamily: FONT,
-          fontSize: '40px',
-          color: COLORS.textCss,
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5)
-    );
-
-    const lines = [
-      ['🎯 목표', '공사 2학년 생도 기태로 하루하루 버텨라.\n선배에게 걸리면 그날로 끝이다.'],
-      ['📅 하루', '매일 퀘스트 1개 + 불시에 날아오는 미니 퀘스트(카톡).\n일차가 오를수록 모든 게 빨라진다.'],
-      [
-        '❤️ 목숨',
-        '최대 3칸, 시작은 1칸. 죽으면 1칸 소모 —\n소모 후에도 온전한 하트가 남아야 그 날 아침으로 부활.\n미니 퀘스트 성공 +⅓ · 벽치기 도박 성공 +1',
-      ],
-      ['🫡 경례', '견장 줄 수로 판별: 1줄 후배·2줄 동기는 인사,\n3줄 선배에게는 경례. 문가 선배가 볼 땐 인사 금지!'],
-      ['🏆 기록', '일차 높은 순 → 같은 일차면 오래 버틴 순.\n신기록은 자동으로 리더보드에 올라간다.'],
-    ] as const;
-    let y = 265;
-    for (const [head, body] of lines) {
-      panel.add(
-        this.add.text(80, y, head, {
-          fontFamily: FONT,
-          fontSize: '30px',
-          color: COLORS.warnCss,
-          fontStyle: 'bold',
-        })
-      );
-      panel.add(
-        this.add.text(80, y + 42, body, {
-          fontFamily: FONT,
-          fontSize: '24px',
-          color: COLORS.textCss,
-          lineSpacing: 8,
-          wordWrap: { width: GAME_WIDTH - 170 },
-        })
-      );
-      y += 42 + (body.split('\n').length * 33 + 36);
-    }
-
-    const closeBtn = new Button(this, GAME_WIDTH / 2, 1020, {
-      label: '닫기',
-      width: 280,
-      height: 88,
-      onClick: () => {
-        panel.destroy();
-        this.helpPanel = null;
-      },
+    this.helpPanel = showHelpPanel(this, () => {
+      this.helpPanel = null;
     });
-    panel.add(closeBtn);
   }
 
   private toggleLeaderboard(): void {

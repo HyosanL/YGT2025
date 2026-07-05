@@ -7,6 +7,7 @@ import { addMuteButton, showToast } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { HpBar } from '../../ui/HpBar';
 import { LivesBar } from '../../ui/LivesBar';
+import { HAPTIC, vibrate } from '../../utils/haptics';
 
 export interface SeniorLoopParams {
   gapMs: number;
@@ -142,11 +143,12 @@ export abstract class BaseMainScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (!this.finished) {
-      this.hpBar.setHp(gameState.hp);
-      this.livesBar.setLives(gameState.livesThirds);
-      this.tick(delta);
-    }
+    // resumeContext가 설정된 프레임 = 미니퀘스트/일시정지 진입 직후 —
+    // scene.pause()와 같은 프레임에 tick이 한 번 더 돌며 노래를 되살리는 것을 방지
+    if (this.finished || this.resumeContext !== null) return;
+    this.hpBar.setHp(gameState.hp);
+    this.livesBar.setLives(gameState.livesThirds);
+    this.tick(delta);
   }
 
   /** 서브클래스별 프레임 로직 */
@@ -288,6 +290,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.setDanger('off');
     audio.stopAll();
     audio.fanfare();
+    vibrate(HAPTIC.success);
     this.cameras.main.flash(300, 78, 204, 163);
     this.time.delayedCall(550, () => {
       this.scene.start('Result', { success: true, reason: message });
@@ -300,6 +303,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     audio.stopAll();
     audio.caught();
     audio.gameover();
+    vibrate(HAPTIC.fail);
     this.cameras.main.shake(400, 0.012);
     this.cameras.main.flash(400, 233, 69, 96);
     this.time.delayedCall(900, () => {
@@ -317,6 +321,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.setDanger('off');
     audio.stopAll();
     audio.caught();
+    vibrate(HAPTIC.fail);
 
     const dim = this.add
       .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0)
@@ -353,6 +358,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     const dead = gameState.damage(amount);
     if (message) {
       audio.buzz();
+      vibrate(HAPTIC.damage);
       showToast(this, message, COLORS.warnCss);
       this.cameras.main.shake(200, 0.006);
     }

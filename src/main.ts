@@ -41,8 +41,8 @@ if (bootParams.has('nick')) {
 // 모바일 autoplay 정책: 제스처마다 오디오 컨텍스트 해제 시도.
 // iOS는 백그라운드 복귀/전화 인터럽트 후 컨텍스트가 다시 잠기므로 once가 아니라 항상 건다.
 audio.installAutoUnlock();
-// 샤워장 노래 실음원 프리로드 (첫 제스처 후 디코드)
-audio.preloadSong();
+// 실음원 프리로드 — 샤워장 노래 + 물소리 + 전자레인지 (첫 제스처 후 디코드)
+audio.preloadAudio();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

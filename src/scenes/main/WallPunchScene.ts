@@ -11,6 +11,7 @@ import {
   drawLockerCabinet,
   drawWindowView,
 } from '../../ui/Scenery';
+import { HAPTIC, vibrate } from '../../utils/haptics';
 import { chance, pick, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -306,6 +307,7 @@ export class WallPunchScene extends BaseMainScene {
       const gained = gameState.addLifeThirds(3);
       if (gained) {
         audio.chime();
+        vibrate(HAPTIC.lifeGain);
         const lifeText = this.add
           .text(GAME_WIDTH / 2 + 60, 560, '❤️ 목숨 +1', {
             fontFamily: FONT,

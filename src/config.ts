@@ -4,7 +4,24 @@ import type { KakaoPrompt, MainQuestId, VoteQuestion } from './types';
 // 화면 / 공통
 // ─────────────────────────────────────────────
 export const GAME_WIDTH = 720;
-export const GAME_HEIGHT = 1280;
+
+/**
+ * 게임 높이 — 기기 화면 비율에 맞춰 부팅 시 1회 계산 (기준 1280 = 9:16).
+ * 요즘 폰(9:19.5 등)은 세로가 더 길어 고정 1280이면 위아래가 비는데,
+ * 높이를 비율대로 늘려 그리면 레터박스 없이 화면을 꽉 채운다.
+ * 씬들은 배경을 GAME_HEIGHT까지 칠하고 하단 UI를 GAME_HEIGHT 기준으로
+ * 앵커하므로 자동으로 대응된다.
+ */
+function computeGameHeight(): number {
+  if (typeof window === 'undefined') return 1280;
+  const app = document.getElementById('app');
+  const w = (app?.clientWidth || window.innerWidth) ?? GAME_WIDTH;
+  const h = (app?.clientHeight || window.innerHeight) ?? 1280;
+  const byAspect = Math.round((GAME_WIDTH * h) / Math.max(1, w));
+  return Math.max(1280, Math.min(1600, byAspect));
+}
+export const GAME_HEIGHT = computeGameHeight();
+
 export const HP_MAX = 100;
 /** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 도박 성공으로 채운다 */
 export const LIVES_MAX = 3;

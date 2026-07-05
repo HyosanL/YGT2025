@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, MINI } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
+import { HAPTIC, vibrate } from '../../utils/haptics';
 import type { MiniSceneData } from '../../types';
 
 export const PANEL = { x: 40, y: 150, w: GAME_WIDTH - 80, h: 980 } as const;
@@ -47,6 +48,9 @@ export abstract class BaseMiniScene extends Phaser.Scene {
 
   /** 백드롭 + 패널 + 타이틀 생성. create() 첫 줄에서 호출할 것 */
   protected setupOverlay(title: string, theme: MiniTheme = 'dark'): void {
+    // 미니 퀘스트 동안 본 게임의 노래/가동음은 반드시 멈춘다 (방어적 이중 처리)
+    audio.setSongPlaying(false);
+    audio.stopMicrowaveHum();
     this.done = false;
     this.theme = theme;
     this.timerActive = false;
@@ -188,6 +192,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.done = true;
     this.stopTimer();
     audio.chime();
+    vibrate(HAPTIC.miniSuccess);
     const text = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `✅ ${message}`, {
         fontFamily: FONT,
@@ -242,6 +247,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     if (MINI.failMode === 'gameover') {
       audio.caught();
       audio.gameover();
+      vibrate(HAPTIC.fail);
       this.cameras.main.shake(400, 0.01);
       this.cameras.main.flash(400, 233, 69, 96);
       this.time.delayedCall(1100, () => {

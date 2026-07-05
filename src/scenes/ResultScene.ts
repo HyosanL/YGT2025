@@ -6,6 +6,7 @@ import { submitScore } from '../core/Leaderboard';
 import { addMuteButton, Button } from '../ui/Button';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { LivesBar } from '../ui/LivesBar';
+import { HAPTIC, vibrate } from '../utils/haptics';
 import { askNickname } from '../utils/nicknameDialog';
 import type { ResultSceneData } from '../types';
 
@@ -85,6 +86,7 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     audio.chime();
+    vibrate(HAPTIC.revive);
     this.time.delayedCall(1800, advance);
     this.input.once('pointerdown', advance);
   }

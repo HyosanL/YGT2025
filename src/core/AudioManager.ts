@@ -43,6 +43,13 @@ function buildSilentWavUrl(): string {
 /** 샤워장 노래 실음원 (1.25배속 + 욕실 리버브 가공본) */
 const SONG_URL = '/audio/shower-song.mp3';
 
+/** 실음원 환경음 — 로드 실패 시 신스 폴백 */
+const AMBIENT_URLS = {
+  water: '/audio/shower-water.mp3',
+  microwave: '/audio/microwave-hum.mp3',
+} as const;
+type AmbientKey = keyof typeof AMBIENT_URLS;
+
 /**
  * Web Audio 기반 사운드 매니저 (싱글턴).
  * SFX/BGM은 신디사이저로 즉석 생성, 샤워장 노래는 실음원(mp3)을
@@ -66,17 +73,22 @@ class AudioManagerImpl {
   private songOffsetSec = 0;
   private songStartedAtSec = 0;
 
-  // 샤워기 물소리 (필터 노이즈 루프)
+  // 샤워기 물소리 (실음원 or 필터 노이즈 루프)
   private showerSrc: AudioBufferSourceNode | null = null;
 
-  // 전자레인지 가동음 ("위이이잉" — 험 + 팬 노이즈)
+  // 전자레인지 가동음 (실음원 or 험 + 팬 노이즈)
   private humStop: (() => void) | null = null;
 
   // 옆방 떠드는 소리 (벽 너머 웅성거림)
   private chatterStop: (() => void) | null = null;
 
-  // 공용 노이즈 루프 버퍼 (물소리/팬 소음)
+  // 공용 노이즈 루프 버퍼 (신스 폴백용)
   private noiseBuf: AudioBuffer | null = null;
+
+  // 실음원 환경음 버퍼
+  private ambientData = new Map<AmbientKey, ArrayBuffer>();
+  private ambientBuf = new Map<AmbientKey, AudioBuffer>();
+  private ambientPending = new Set<AmbientKey>();
 
   // BGM 루프 상태
   private bgmTimer: number | null = null;
@@ -147,38 +159,66 @@ class AudioManagerImpl {
     this.humStop = null;
     this.chatterStop = null;
     this.noiseBuf = null;
-    this.tryDecodeSong();
+    this.tryDecodeAll();
   }
 
   // ── 실음원 로드/디코드 ────────────────────────
 
-  /** 앱 시작 시 1회 호출 — 노래 파일을 미리 받아 두고 컨텍스트가 생기면 디코드 */
-  preloadSong(): void {
-    if (this.songData || this.songBuffer) return;
-    void fetch(SONG_URL)
-      .then((res) => (res.ok ? res.arrayBuffer() : null))
-      .then((buf) => {
-        if (!buf) return;
-        this.songData = buf;
-        this.tryDecodeSong();
-      })
-      .catch(() => undefined); // 오프라인 등 — 칩튠 폴백으로 진행
+  /** 앱 시작 시 1회 호출 — 음원들을 미리 받아 두고 컨텍스트가 생기면 디코드 */
+  preloadAudio(): void {
+    if (!this.songData && !this.songBuffer) {
+      void fetch(SONG_URL)
+        .then((res) => (res.ok ? res.arrayBuffer() : null))
+        .then((buf) => {
+          if (!buf) return;
+          this.songData = buf;
+          this.tryDecodeAll();
+        })
+        .catch(() => undefined); // 오프라인 등 — 칩튠 폴백으로 진행
+    }
+    for (const key of Object.keys(AMBIENT_URLS) as AmbientKey[]) {
+      if (this.ambientData.has(key) || this.ambientBuf.has(key)) continue;
+      void fetch(AMBIENT_URLS[key])
+        .then((res) => (res.ok ? res.arrayBuffer() : null))
+        .then((buf) => {
+          if (!buf) return;
+          this.ambientData.set(key, buf);
+          this.tryDecodeAll();
+        })
+        .catch(() => undefined); // 실패 시 신스 폴백
+    }
   }
 
-  private tryDecodeSong(): void {
-    if (!this.ctx || !this.songData || this.songBuffer || this.songDecodePending) return;
-    this.songDecodePending = true;
-    // decodeAudioData가 버퍼를 detach하는 브라우저가 있어 사본을 넘긴다
-    this.ctx.decodeAudioData(
-      this.songData.slice(0),
-      (decoded) => {
-        this.songBuffer = decoded;
-        this.songDecodePending = false;
-      },
-      () => {
-        this.songDecodePending = false;
-      }
-    );
+  private tryDecodeAll(): void {
+    if (!this.ctx) return;
+    if (this.songData && !this.songBuffer && !this.songDecodePending) {
+      this.songDecodePending = true;
+      // decodeAudioData가 버퍼를 detach하는 브라우저가 있어 사본을 넘긴다
+      this.ctx.decodeAudioData(
+        this.songData.slice(0),
+        (decoded) => {
+          this.songBuffer = decoded;
+          this.songDecodePending = false;
+        },
+        () => {
+          this.songDecodePending = false;
+        }
+      );
+    }
+    for (const [key, data] of this.ambientData) {
+      if (this.ambientBuf.has(key) || this.ambientPending.has(key)) continue;
+      this.ambientPending.add(key);
+      this.ctx.decodeAudioData(
+        data.slice(0),
+        (decoded) => {
+          this.ambientBuf.set(key, decoded);
+          this.ambientPending.delete(key);
+        },
+        () => {
+          this.ambientPending.delete(key);
+        }
+      );
+    }
   }
 
   /**
@@ -462,7 +502,7 @@ class AudioManagerImpl {
       src.buffer = this.songBuffer;
       src.loop = true;
       const gain = this.ctx.createGain();
-      gain.gain.value = 1.15; // 노래는 존재감 있게 (정규화 피크 -1.5dB라 클리핑 없음)
+      gain.gain.value = 0.85; // 물소리·효과음과 밸런스
       src.connect(gain).connect(this.master);
       src.start(0, this.songOffsetSec % this.songBuffer.duration);
       this.songStartedAtSec = this.ctx.currentTime;
@@ -514,6 +554,20 @@ class AudioManagerImpl {
   /** 호출 시점에 컨텍스트가 없으면 무시 — 매 프레임 불러도 안전 (self-heal) */
   startShowerNoise(): void {
     if (!this.ready || this.showerSrc || !this.ctx || !this.master) return;
+    // 실음원(진짜 샤워기 소리)이 준비돼 있으면 그걸 쓴다
+    const real = this.ambientBuf.get('water');
+    if (real) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = real;
+      src.loop = true;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 1;
+      src.connect(gain).connect(this.master);
+      src.start();
+      this.showerSrc = src;
+      return;
+    }
+    // 폴백: 필터 노이즈
     const buf = this.getNoiseBuffer();
     if (!buf) return;
     const src = this.ctx.createBufferSource();
@@ -544,12 +598,32 @@ class AudioManagerImpl {
   }
 
   /**
-   * 전자레인지 가동음 "위이이잉" — 트랜스포머 험(60/120Hz) + 팬 노이즈.
+   * 전자레인지 가동음 "위이이잉" — 실음원 우선, 폴백은 험(60/120Hz) + 팬 노이즈.
    * 조리 중일 때만 켜고, 피하면 끈다. 매 프레임 불러도 안전 (self-heal).
    */
   startMicrowaveHum(): void {
     if (!this.ready || this.humStop || !this.ctx || !this.master) return;
     const ctx = this.ctx;
+    // 실음원(진짜 전자레인지 소리)이 준비돼 있으면 그걸 쓴다
+    const real = this.ambientBuf.get('microwave');
+    if (real) {
+      const src = ctx.createBufferSource();
+      src.buffer = real;
+      src.loop = true;
+      const gain = ctx.createGain();
+      gain.gain.value = 1;
+      src.connect(gain).connect(this.master);
+      src.start();
+      this.humStop = () => {
+        try {
+          src.stop();
+        } catch {
+          // 이미 정지된 소스는 무시
+        }
+        gain.disconnect();
+      };
+      return;
+    }
     const out = ctx.createGain();
     out.gain.value = 1;
     out.connect(this.master);
