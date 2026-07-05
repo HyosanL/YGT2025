@@ -103,12 +103,22 @@ export const Q2_HALLWAY = {
   seniorShare: (day: number): number => Math.min(0.34, 0.15 + day * 0.012),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
-  /** 후배에게 경례해버린 굴욕 페널티 */
+  /** 후배에게 경례해버린 굴욕 페널티 (문가 선배가 볼 때는 정석 대응이라 무penalty) */
   hpSaluteJunior: 18,
   /** 동기에게 경례해버린 굴욕 페널티 */
   hpSalutePeer: 12,
   /** 응답 타임아웃 페널티 (후배/동기 — 선배 무시는 즉시 게임 오버) */
   hpTimeout: 8,
+  /** 문가 감시 선배 체류 시간 — 이 동안 후배 인사를 하면 발각 */
+  watcherStayMsRange: (day: number): [number, number] => [
+    Math.round(lerp(900, 1200, difficulty(day))),
+    Math.round(lerp(1400, 1800, difficulty(day))),
+  ],
+  /** 문가 감시 선배 등장 간격 */
+  watcherGapMsRange: (day: number): [number, number] => [
+    Math.round(lerp(1500, 1000, difficulty(day))),
+    Math.round(lerp(2800, 1800, difficulty(day))),
+  ],
 } as const;
 
 // ─────────────────────────────────────────────
@@ -346,7 +356,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   hallway: {
     title: '복도에서 어깨힘주고 인사받기',
     emoji: '🫡',
-    tip: '견장 줄 수를 봐라! 1줄 후배·2줄 동기 → 🙇 인사, 3줄 선배 → 🫡 경례. 후배 인사만 카운트!',
+    tip: '견장 1줄 후배·2줄 동기 → 🙇 인사, 3줄 선배 → 🫡 경례. 단, 문가 선배가 볼 때 후배 인사는 발각!',
   },
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',
