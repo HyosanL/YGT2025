@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
+import { gameState } from '../core/GameState';
 import { addMuteButton, Button } from '../ui/Button';
 
 export interface PauseSceneData {
@@ -77,6 +78,8 @@ export class PauseScene extends Phaser.Scene {
       color: COLORS.panelLight,
       fontSize: 30,
       onClick: () => {
+        // 일시정지가 걸어둔 시계 홀드 해제 (씬을 resume하지 않고 떠나는 경로)
+        gameState.releaseClock();
         audio.stopAll();
         this.scene.stop(this.returnTo);
         this.scene.start('Title');

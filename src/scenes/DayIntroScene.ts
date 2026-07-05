@@ -5,6 +5,7 @@ import { gameState } from '../core/GameState';
 import { questManager } from '../core/QuestManager';
 import { addMuteButton } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
+import { LivesBar } from '../ui/LivesBar';
 import { drawBarracks, drawCloud, drawFlagpole, drawMountains } from '../ui/Scenery';
 import type { MainQuestId } from '../types';
 
@@ -74,13 +75,8 @@ export class DayIntroScene extends Phaser.Scene {
         color: COLORS.safeCss,
       })
       .setOrigin(0.5);
-    this.add
-      .text(GAME_WIDTH / 2, 398, `목숨  ${gameState.livesDisplay}`, {
-        fontFamily: FONT,
-        fontSize: '28px',
-        color: COLORS.textCss,
-      })
-      .setOrigin(0.5);
+    const livesBar = new LivesBar(this, GAME_WIDTH / 2 - LivesBar.widthFor(36) / 2, 380, 36);
+    livesBar.setLives(gameState.livesThirds);
 
     this.add
       .text(GAME_WIDTH / 2, 470, '오늘의 퀘스트', {

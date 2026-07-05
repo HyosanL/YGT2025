@@ -5,6 +5,7 @@ import { gameState } from '../core/GameState';
 import { submitScore } from '../core/Leaderboard';
 import { addMuteButton, Button } from '../ui/Button';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
+import { LivesBar } from '../ui/LivesBar';
 import { askNickname } from '../utils/nicknameDialog';
 import type { ResultSceneData } from '../types';
 
@@ -67,12 +68,14 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(GAME_WIDTH / 2, 670, `남은 목숨  ${gameState.livesDisplay}`, {
+      .text(GAME_WIDTH / 2, 660, '남은 목숨', {
         fontFamily: FONT,
-        fontSize: '36px',
-        color: COLORS.textCss,
+        fontSize: '28px',
+        color: COLORS.subCss,
       })
       .setOrigin(0.5);
+    const livesBar = new LivesBar(this, GAME_WIDTH / 2 - LivesBar.widthFor(44) / 2, 690, 44);
+    livesBar.setLives(gameState.livesThirds);
     this.add
       .text(GAME_WIDTH / 2, 770, `${gameState.day}일차, 다시 아침이 밝는다...`, {
         fontFamily: FONT,

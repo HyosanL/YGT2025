@@ -6,6 +6,7 @@ import { questManager } from '../../core/QuestManager';
 import { addMuteButton, showToast } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { HpBar } from '../../ui/HpBar';
+import { LivesBar } from '../../ui/LivesBar';
 
 export interface SeniorLoopParams {
   gapMs: number;
@@ -31,7 +32,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
   protected hpBar!: HpBar;
   protected finished = false;
   protected day = 1;
-  private livesText!: Phaser.GameObjects.Text;
+  private livesBar!: LivesBar;
   private miniActive = false;
   private resumeContext: 'mini' | 'pause' | null = null;
   private dangerG!: Phaser.GameObjects.Graphics;
@@ -50,10 +51,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.seniorTimer = null;
     this.day = gameState.day;
     this.hpBar = new HpBar(this);
-    // 목숨 표시 (HP 바 아래)
-    this.livesText = this.add
-      .text(28, 72, gameState.livesDisplay, { fontFamily: FONT, fontSize: '26px' })
-      .setDepth(1000);
+    // 목숨 하트 (HP 바 아래) — 부분 채움 + 반투명 빈 하트
+    this.livesBar = new LivesBar(this, 26, 70, 38);
+    this.livesBar.setLives(gameState.livesThirds);
     addMuteButton(this);
     this.createPauseButton();
     this.createDangerVignette();
@@ -87,12 +87,19 @@ export abstract class BaseMainScene extends Phaser.Scene {
     btn.on('pointerdown', () => this.openPauseMenu());
   }
 
+  /** 백그라운드 전환 등 외부에서 강제 일시정지가 필요할 때 (내부 가드 동일) */
+  autoPause(): void {
+    this.openPauseMenu();
+  }
+
   private openPauseMenu(): void {
     // resumeContext가 남아 있으면 이미 일시정지/미니 진입이 진행 중 (연타 가드)
     if (this.finished || this.miniActive || this.resumeContext !== null || this.scene.isPaused()) {
       return;
     }
     this.resumeContext = 'pause';
+    // 일시정지 중에는 생존시간 시계도 멈춘다 (시간 부풀리기 방지)
+    gameState.holdClock();
     // 진행 중인 선배 조우를 정리해 두면 재개 카운트다운 후 동결된 판정이 터지지 않는다
     this.clearSeniorEncounter();
     // 샤워 노래·전자레인지 가동음은 씬 pause와 무관하게 흐르므로 명시적으로 정지
@@ -137,8 +144,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (!this.finished) {
       this.hpBar.setHp(gameState.hp);
-      const lives = gameState.livesDisplay;
-      if (this.livesText.text !== lives) this.livesText.setText(lives);
+      this.livesBar.setLives(gameState.livesThirds);
       this.tick(delta);
     }
   }
@@ -189,6 +195,10 @@ export abstract class BaseMainScene extends Phaser.Scene {
       // pause 직전 진행 중인 선배 조우/판정을 강제 종료 — 복귀 직후
       // 동결됐던 반응 판정이 터져 대응 불가로 죽는 상황을 방지한다
       this.clearSeniorEncounter();
+      // 샤워 노래·전자레인지 가동음은 씬 pause와 무관하게 흐르므로 정지
+      // (본 임무 복귀 후 tick이 다시 켠다)
+      audio.setSongPlaying(false);
+      audio.stopMicrowaveHum();
       this.resumeContext = 'mini';
       const mini = questManager.pickMini();
       this.scene.launch(mini, { returnTo: this.scene.key });
@@ -212,6 +222,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
       return;
     }
     if (ctx === 'pause') {
+      // 일시정지 해제 — 생존시간 시계 재개
+      gameState.releaseClock();
       if (this.finished) return;
       // 일시정지로 정리했던 선배 사이클 재가동 (카운트다운이 이미 마음의 준비를 줬다)
       this.scheduleSeniorCycle(400);

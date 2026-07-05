@@ -4,6 +4,7 @@ import { COLORS, GAME_HEIGHT, GAME_WIDTH } from './config';
 import { audio } from './core/AudioManager';
 import { gameState } from './core/GameState';
 import { BootScene } from './scenes/BootScene';
+import { BaseMainScene } from './scenes/main/BaseMainScene';
 import { TitleScene } from './scenes/TitleScene';
 import { DayIntroScene } from './scenes/DayIntroScene';
 import { PauseScene } from './scenes/PauseScene';
@@ -71,6 +72,19 @@ const game = new Phaser.Game({
     // 앞에 두면 게임 씬 '아래'에 깔려 보이지 않는다
     PauseScene,
   ],
+});
+
+// 다른 앱/탭으로 떠나면 자동 일시정지 + 생존시간 시계 정지.
+// (벽시계 기반 플레이 시간이 자리를 비운 사이 불어나는 것을 막는다)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    gameState.holdClock();
+    for (const scene of game.scene.getScenes(true)) {
+      if (scene instanceof BaseMainScene) scene.autoPause();
+    }
+  } else {
+    gameState.releaseClock();
+  }
 });
 
 // iOS 주소창 접힘/가상 키보드/회전 시 뷰포트가 바뀌어도 캔버스가 잘리지 않게 재계산

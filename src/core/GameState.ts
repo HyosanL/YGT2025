@@ -26,6 +26,8 @@ class GameStateImpl {
 
   /** 현재 플레이 구간 시작 시각 (0이면 구간 아님) */
   private segmentStart = 0;
+  /** 플레이 시계 홀드 카운트 (일시정지/백그라운드) — 0일 때만 시간이 흐른다 */
+  private clockHolds = 0;
 
   load(): void {
     try {
@@ -77,6 +79,7 @@ class GameStateImpl {
     this.lastQuestId = null;
     this.totalPlayMs = 0;
     this.segmentStart = 0;
+    this.clockHolds = 0; // 혹시 남아 있던 홀드 정리 (안전장치)
     this.save();
   }
 
@@ -84,7 +87,7 @@ class GameStateImpl {
   startDay(questId: MainQuestId): void {
     this.hp = HP_MAX;
     this.currentQuestId = questId;
-    this.segmentStart = Date.now();
+    this.segmentStart = this.clockHolds === 0 ? Date.now() : 0;
     this.save();
   }
 
@@ -92,6 +95,23 @@ class GameStateImpl {
     if (this.segmentStart > 0) {
       this.totalPlayMs += Date.now() - this.segmentStart;
       this.segmentStart = 0;
+    }
+  }
+
+  /**
+   * 플레이 시계 정지 (일시정지 메뉴/백그라운드 전환).
+   * 벽시계 기반 생존시간이 탭을 떠난 사이에 불어나는 것을 막는다.
+   */
+  holdClock(): void {
+    if (this.clockHolds === 0) this.foldSegment();
+    this.clockHolds += 1;
+  }
+
+  /** 플레이 시계 재개 — 모든 홀드가 풀리면 이어서 측정 */
+  releaseClock(): void {
+    this.clockHolds = Math.max(0, this.clockHolds - 1);
+    if (this.clockHolds === 0 && this.currentQuestId && this.segmentStart === 0) {
+      this.segmentStart = Date.now();
     }
   }
 
@@ -148,25 +168,15 @@ class GameStateImpl {
   }
 
   /**
-   * 사망 처리 — 목숨 1칸(3)을 소모하고, 남아 있으면 부활 가능(true).
-   * 시작 목숨 1칸으로 죽으면 0이 되어 부활 불가.
+   * 사망 처리 — 목숨 1칸(3)을 소모하고, 소모 후에도 '온전한 하트'(3 이상)가
+   * 남아 있어야 부활(true). 예: 7/3 → 4/3 부활 ✓, 4/3 → 1/3 사망 ✗.
    * 죽기 전까지 버틴 시간은 리더보드 생존시간에 합산해 둔다.
    */
   tryRevive(): boolean {
     this.foldSegment();
     this.livesThirds = Math.max(0, this.livesThirds - 3);
     this.save();
-    return this.livesThirds > 0;
-  }
-
-  /** 목숨 표시 문자열 — ❤️(가득) + ⅓/⅔(부분) + 🖤(빈 칸) */
-  get livesDisplay(): string {
-    const full = Math.floor(this.livesThirds / 3);
-    const rem = this.livesThirds % 3;
-    const empty = LIVES_MAX - full - (rem > 0 ? 1 : 0);
-    return (
-      '❤️'.repeat(full) + (rem === 1 ? '⅓' : rem === 2 ? '⅔' : '') + '🖤'.repeat(Math.max(0, empty))
-    );
+    return this.livesThirds >= 3;
   }
 
   setNickname(nickname: string): void {

@@ -204,7 +204,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립
     if (gameState.addLifeThirds(1)) {
       const lifeText = this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, `❤️ 목숨 +⅓  (${gameState.livesDisplay})`, {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅓ 적립!', {
           fontFamily: FONT,
           fontSize: '30px',
           color: COLORS.safeCss,
