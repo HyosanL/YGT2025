@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, GAME_WIDTH, M3_PHOTO } from '../../config';
+import { FONT, GAME_WIDTH, M3_PHOTO } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import type { LockerFlaw } from '../../types';
 import { chance, pick, randInt, shuffle } from '../../utils/rng';
-import { BaseMiniScene, PANEL } from './BaseMiniScene';
+import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 
 const FLAWS: LockerFlaw[] = ['tilt-blanket', 'open-drawer', 'sock', 'crooked-hanger'];
 
@@ -25,18 +25,26 @@ export class PhotoPickScene extends BaseMiniScene {
   }
 
   create(): void {
-    this.setupOverlay(`📸 "${M3_PHOTO.roomTitle}"`);
+    this.setupOverlay(M3_PHOTO.roomTitle, 'kakao');
     audio.ding();
 
-    // 선배의 분노 메시지
+    // 선배의 분노 메시지 (좌측 흰 버블)
     const bubble = this.add.graphics();
-    bubble.fillStyle(0xffffff, 0.95);
-    bubble.fillRoundedRect(PANEL.x + 30, PANEL.y + 145, PANEL.w - 60, 64, 16);
+    bubble.fillStyle(KAKAO.bubbleWhite, 1);
+    bubble.fillRoundedRect(PANEL.x + 30, PANEL.y + 200, PANEL.w - 60, 64, 16);
+    bubble.fillTriangle(
+      PANEL.x + 30,
+      PANEL.y + 210,
+      PANEL.x + 18,
+      PANEL.y + 222,
+      PANEL.x + 30,
+      PANEL.y + 234
+    );
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 177, `😡 ${M3_PHOTO.seniorMsg}`, {
+      .text(GAME_WIDTH / 2, PANEL.y + 232, `😡 ${M3_PHOTO.seniorMsg}`, {
         fontFamily: FONT,
         fontSize: '27px',
-        color: '#1a1a2e',
+        color: KAKAO.textDark,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -53,10 +61,10 @@ export class PhotoPickScene extends BaseMiniScene {
 
   private createChooseMode(): void {
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 250, `👉 ${M3_PHOTO.chooseInstruction}`, {
+      .text(GAME_WIDTH / 2, PANEL.y + 300, `👉 ${M3_PHOTO.chooseInstruction}`, {
         fontFamily: FONT,
         fontSize: '30px',
-        color: COLORS.warnCss,
+        color: '#c2410c',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -69,7 +77,7 @@ export class PhotoPickScene extends BaseMiniScene {
     const rows = Math.ceil(count / cols);
     const scale = rows >= 3 ? 0.46 : 0.6;
     const cellH = rows >= 3 ? 225 : 310;
-    const startY = PANEL.y + 300 + (rows >= 3 ? 110 : 160);
+    const startY = PANEL.y + 340 + (rows >= 3 ? 110 : 160);
 
     for (let i = 0; i < count; i++) {
       const col = i % cols;
@@ -87,7 +95,8 @@ export class PhotoPickScene extends BaseMiniScene {
         .text(x - 118 * scale, y - 178 * scale - 28, `${i + 1}`, {
           fontFamily: FONT,
           fontSize: '28px',
-          color: COLORS.subCss,
+          color: KAKAO.sub,
+          fontStyle: 'bold',
         })
         .setOrigin(0, 0.5);
 
@@ -114,17 +123,17 @@ export class PhotoPickScene extends BaseMiniScene {
 
   private createSpotMode(): void {
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 250, `👉 ${M3_PHOTO.spotInstruction}`, {
+      .text(GAME_WIDTH / 2, PANEL.y + 300, `👉 ${M3_PHOTO.spotInstruction}`, {
         fontFamily: FONT,
         fontSize: '30px',
-        color: COLORS.warnCss,
+        color: '#c2410c',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     const flaw = pick(FLAWS);
     const cx = GAME_WIDTH / 2;
-    const cy = PANEL.y + 640;
+    const cy = PANEL.y + 665;
     const scale = 1.5;
     const { flawRect } = this.drawLocker(cx, cy, scale, flaw);
 

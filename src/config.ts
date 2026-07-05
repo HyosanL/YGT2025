@@ -40,8 +40,10 @@ export function difficulty(day: number): number {
 // ─────────────────────────────────────────────
 // 메인 퀘스트 배정
 // ─────────────────────────────────────────────
-/** 벽치기(Q5)가 풀에 포함되는 일차 */
-export const WALLPUNCH_UNLOCK_DAY = 10;
+/** 벽치기(Q5)가 등장하기 시작하는 일차 */
+export const WALLPUNCH_UNLOCK_DAY = 5;
+/** 벽치기 등장 확률 (해금 이후 매일 고정 확률, 나머지는 일반 풀에서 선택) */
+export const WALLPUNCH_CHANCE = 0.15;
 
 // ─────────────────────────────────────────────
 // 미니 퀘스트 발생 규칙
@@ -161,13 +163,14 @@ export const Q4_WALK = {
   walkRegenPerSec: 2,
   /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다 */
   graceMs: (day: number): number => Math.round(lerp(650, 430, difficulty(day))),
-  /** 도로변 선배 배치 간격 (월드 px) — 시야(620px)가 서로 겹칠 만큼 촘촘하다 */
-  seniorSpacingPx: (day: number): number => Math.round(lerp(1050, 760, difficulty(day))),
+  /** 도로변 선배 배치 간격 (월드 px) — 시야가 서로 겹치는 구간이 생길 만큼 촘촘하다 */
+  seniorSpacingPx: (day: number): number => Math.round(lerp(1200, 850, difficulty(day))),
   /** 같은 지점에 맞은편 선배가 하나 더 서는(시야 교차 구간) 확률 */
-  pairChance: 0.25,
-  /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움) */
+  pairChance: 0.2,
+  /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움).
+   *  선배가 길가에서 멀리 떨어져 있어(측면 ~300px) 시야 끝자락만 도로 중앙에 닿는다 */
   vision: {
-    rangePx: 620,
+    rangePx: 540,
     halfAngleDeg: 26,
     /** 정면 기준 좌우 회전 폭 (도) */
     ampDeg: 80,
@@ -207,25 +210,26 @@ export const M1_KAKAO = {
   panicMs: 4000,
   /** 일차별 문장 티어: 길수록 높은 티어 */
   tier: (day: number): number => Math.min(2, Math.floor((day - 1) / 5)),
+  // 군대 답장의 기본 — 반드시 느낌표로 끝난다 (느낌표 누락 = 오타 취급)
   prompts: [
     // tier 0 — 짧음
-    { msg: '야 지금 어디냐', reply: '생활관입니다', tier: 0 },
-    { msg: '내일 아침 점호 몇 시지', reply: '6시입니다', tier: 0 },
-    { msg: '답장 왜 이렇게 늦냐', reply: '죄송합니다', tier: 0 },
-    { msg: '오늘 훈련 어땠냐', reply: '힘들었습니다', tier: 0 },
-    { msg: '지금 뭐 하냐', reply: '공부 중입니다', tier: 0 },
+    { msg: '야 지금 어디냐', reply: '생활관입니다!', tier: 0 },
+    { msg: '내일 아침 점호 몇 시지', reply: '6시입니다!', tier: 0 },
+    { msg: '답장 왜 이렇게 늦냐', reply: '죄송합니다!', tier: 0 },
+    { msg: '오늘 훈련 어땠냐', reply: '힘들었습니다!', tier: 0 },
+    { msg: '지금 뭐 하냐', reply: '공부 중입니다!', tier: 0 },
     // tier 1 — 중간
-    { msg: '10분 뒤에 생활관 앞으로 와라', reply: '네 알겠습니다', tier: 1 },
-    { msg: '아까 복도에서 왜 인사 안 했냐', reply: '죄송합니다 못 봤습니다', tier: 1 },
-    { msg: '내 관물대에서 뭐 가져갔냐', reply: '아닙니다 안 가져갔습니다', tier: 1 },
-    { msg: '지금 바로 내려올 수 있냐', reply: '지금 바로 가겠습니다', tier: 1 },
-    { msg: '어제 소등 후에 뭐 했냐', reply: '바로 취침했습니다', tier: 1 },
+    { msg: '10분 뒤에 생활관 앞으로 와라', reply: '네 알겠습니다!', tier: 1 },
+    { msg: '아까 복도에서 왜 인사 안 했냐', reply: '죄송합니다 못 봤습니다!', tier: 1 },
+    { msg: '내 관물대에서 뭐 가져갔냐', reply: '아닙니다 안 가져갔습니다!', tier: 1 },
+    { msg: '지금 바로 내려올 수 있냐', reply: '지금 바로 가겠습니다!', tier: 1 },
+    { msg: '어제 소등 후에 뭐 했냐', reply: '바로 취침했습니다!', tier: 1 },
     // tier 2 — 김
-    { msg: '단체 채팅방에 올라온 공지 확인했냐', reply: '죄송합니다 지금 확인했습니다', tier: 2 },
-    { msg: '이번 주말 외박 신청서 왜 안 냈냐', reply: '내일 아침에 바로 제출하겠습니다', tier: 2 },
-    { msg: '후배들 군기가 빠진 것 같지 않냐', reply: '제가 잘 챙기도록 하겠습니다', tier: 2 },
-    { msg: '샤워장에서 노랫소리 들렸다는데 아는 거 있냐', reply: '아닙니다 저는 모르는 일입니다', tier: 2 },
-    { msg: '내일 태권도 시합 준비는 잘 되고 있냐', reply: '네 열심히 준비하고 있습니다', tier: 2 },
+    { msg: '단체 채팅방에 올라온 공지 확인했냐', reply: '죄송합니다 지금 확인했습니다!', tier: 2 },
+    { msg: '이번 주말 외박 신청서 왜 안 냈냐', reply: '내일 아침에 바로 제출하겠습니다!', tier: 2 },
+    { msg: '후배들 군기가 빠진 것 같지 않냐', reply: '제가 잘 챙기도록 하겠습니다!', tier: 2 },
+    { msg: '샤워장에서 노랫소리 들렸다는데 아는 거 있냐', reply: '아닙니다 저는 모르는 일입니다!', tier: 2 },
+    { msg: '내일 태권도 시합 준비는 잘 되고 있냐', reply: '네 열심히 준비하고 있습니다!', tier: 2 },
   ] as KakaoPrompt[],
 } as const;
 

@@ -23,6 +23,13 @@ export interface HiddenInputOptions {
   /** 게임 좌표(720×1280 기준) 배치 영역 — 캔버스 스케일에 맞춰 CSS로 환산.
    *  생략하면 화면 하단의 반투명 스트립으로 배치한다. */
   rect?: { x: number; y: number; w: number; h: number };
+  /** 테마별 외형 오버라이드 (기본: 어두운 게임 테마) */
+  style?: Partial<{
+    background: string;
+    border: string;
+    color: string;
+    caretColor: string;
+  }>;
 }
 
 export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
@@ -37,11 +44,11 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
   Object.assign(el.style, {
     position: 'fixed',
     boxSizing: 'border-box',
-    background: 'rgba(13, 20, 36, 0.96)',
-    border: '2px solid rgba(255, 180, 0, 0.75)',
+    background: opts.style?.background ?? 'rgba(13, 20, 36, 0.96)',
+    border: opts.style?.border ?? '2px solid rgba(255, 180, 0, 0.75)',
     borderRadius: '12px',
-    color: '#f5f5f5',
-    caretColor: '#ffb400',
+    color: opts.style?.color ?? '#f5f5f5',
+    caretColor: opts.style?.caretColor ?? '#ffb400',
     textAlign: 'center',
     outline: 'none',
     padding: '0 10px',

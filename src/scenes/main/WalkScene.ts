@@ -5,12 +5,13 @@ import { Cadet } from '../../ui/Characters';
 import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
-const ROAD_L = 150;
-const ROAD_R = 570;
+const ROAD_L = 110;
+const ROAD_R = 610;
 const PLAYER_X = (ROAD_L + ROAD_R) / 2;
 const PLAYER_Y = 960;
-const GUARD_LEFT_X = ROAD_L + 62;
-const GUARD_RIGHT_X = ROAD_R - 62;
+// 선배는 길가 잔디에 멀찍이 서 있다 — 측면 거리(~300px) 덕에 시야 끝자락만 도로에 닿는다
+const GUARD_LEFT_X = 58;
+const GUARD_RIGHT_X = GAME_WIDTH - 58;
 
 interface Guard {
   cadet: Cadet;
@@ -95,21 +96,21 @@ export class WalkScene extends BaseMainScene {
       this.dashes.push(d);
     }
 
-    // 길가 장식 (수풀/가로등 느낌) — 월드 스크롤에 맞춰 재활용
+    // 길가 장식 (수풀) — 가장자리로 바짝 붙여 선배 자리와 겹치지 않게
     this.sideDecor = [];
     for (let i = 0; i < 8; i++) {
       const c = this.add.container(0, 0).setDepth(1);
       const g = this.add.graphics();
       const leftSide = i % 2 === 0;
-      const bx = leftSide ? 62 : GAME_WIDTH - 62;
+      const bx = leftSide ? 22 : GAME_WIDTH - 22;
       g.fillStyle(0x2e5e3e, 1);
-      g.fillCircle(0, 0, 34);
-      g.fillCircle(-24, 14, 24);
-      g.fillCircle(26, 12, 26);
+      g.fillCircle(0, 0, 26);
+      g.fillCircle(-16, 12, 18);
+      g.fillCircle(18, 10, 20);
       g.fillStyle(0x4e8d55, 1);
-      g.fillCircle(6, -8, 20);
+      g.fillCircle(4, -6, 15);
       c.add(g);
-      c.setX(bx + randFloat(-14, 14));
+      c.setX(bx + randFloat(-8, 8));
       this.sideDecor.push(c);
     }
 
@@ -142,7 +143,7 @@ export class WalkScene extends BaseMainScene {
     const spacing = Q4_WALK.seniorSpacingPx(gameState.day);
     const ampRad = Phaser.Math.DegToRad(Q4_WALK.vision.ampDeg);
     const addGuard = (wy: number, side: 1 | -1): void => {
-      const gx = (side === 1 ? GUARD_RIGHT_X : GUARD_LEFT_X) + randFloat(-30, 30);
+      const gx = (side === 1 ? GUARD_RIGHT_X : GUARD_LEFT_X) + randFloat(-18, 18);
       const cadet = new Cadet(this, gx, -400, 'senior');
       cadet.setScale(0.85).setDepth(6);
       cadet.setFace('👀');

@@ -1,18 +1,18 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, GAME_WIDTH, M1_KAKAO } from '../../config';
+import { FONT, GAME_WIDTH, M1_KAKAO } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import type { KakaoPrompt } from '../../types';
 import { createHiddenInput, type HiddenInput } from '../../utils/mobileInput';
 import { pick } from '../../utils/rng';
-import { BaseMiniScene, PANEL } from './BaseMiniScene';
+import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 import { Button } from '../../ui/Button';
 
 /**
- * M1. 카톡 답장하기 — 제한 시간 안에 제시된 문장을 정확히 타이핑.
+ * M1. 카톡 답장하기 — 제한 시간 안에 제시된 문장을 정확히 타이핑 (느낌표까지!).
+ * 카톡풍 채팅방 디자인: 하늘색 배경 + 상대(흰) 버블 + 내(노랑) 버블.
  * 게임 좌표에 맞춰 겹쳐 놓은 '보이는' <input>이 키보드를 띄운다 (직접 탭 가능해 확실).
  * 키보드 포커스(또는 첫 입력) 확인 후 타이머 시작.
- * 실제 카톡 캡처 이미지는 사용자 제공 예정(src/assets/img/kakao/) — 그 전까지 메신저풍 목업.
  */
 export class KakaoScene extends BaseMiniScene {
   private prompt!: KakaoPrompt;
@@ -26,7 +26,7 @@ export class KakaoScene extends BaseMiniScene {
 
   create(): void {
     this.timerStarted = false;
-    this.setupOverlay('💬 선배의 카톡!');
+    this.setupOverlay('김선배', 'kakao');
 
     const tier = M1_KAKAO.tier(gameState.day);
     const pool = M1_KAKAO.prompts.filter((p) => p.tier === tier);
@@ -34,58 +34,85 @@ export class KakaoScene extends BaseMiniScene {
 
     audio.ding();
 
-    // 채팅방 헤더
-    const header = this.add.graphics();
-    header.fillStyle(0x1f2a44, 1);
-    header.fillRoundedRect(PANEL.x + 20, PANEL.y + 140, PANEL.w - 40, 70, 12);
+    // ── 상대 메시지 (좌측: 아바타 + 이름 + 흰 버블 + 시각) ──
+    const msgY = PANEL.y + 300;
+    const avatar = this.add.graphics();
+    avatar.fillStyle(0x7d8a99, 1);
+    avatar.fillRoundedRect(PANEL.x + 34, msgY - 38, 64, 64, 24);
     this.add
-      .text(PANEL.x + 50, PANEL.y + 175, '😠 김선배', {
+      .text(PANEL.x + 66, msgY - 6, '😠', { fontFamily: FONT, fontSize: '34px' })
+      .setOrigin(0.5);
+    this.add
+      .text(PANEL.x + 112, msgY - 58, '김선배', {
         fontFamily: FONT,
-        fontSize: '30px',
-        color: COLORS.textCss,
-        fontStyle: 'bold',
+        fontSize: '22px',
+        color: KAKAO.sub,
       })
       .setOrigin(0, 0.5);
 
-    // 선배 메시지 버블 (좌측)
-    const msgY = PANEL.y + 260;
     const bubble = this.add.graphics();
-    bubble.fillStyle(0xffffff, 0.95);
-    const msgWidth = Math.min(480, this.prompt.msg.length * 30 + 60);
-    bubble.fillRoundedRect(PANEL.x + 30, msgY - 34, msgWidth, 68, 18);
+    const msgWidth = Math.min(440, this.prompt.msg.length * 28 + 56);
+    bubble.fillStyle(KAKAO.bubbleWhite, 1);
+    bubble.fillRoundedRect(PANEL.x + 112, msgY - 32, msgWidth, 64, 16);
+    // 말풍선 꼬리
+    bubble.fillTriangle(
+      PANEL.x + 112,
+      msgY - 24,
+      PANEL.x + 100,
+      msgY - 12,
+      PANEL.x + 112,
+      msgY - 4
+    );
     this.add
-      .text(PANEL.x + 30 + msgWidth / 2, msgY, this.prompt.msg, {
+      .text(PANEL.x + 112 + msgWidth / 2, msgY, this.prompt.msg, {
         fontFamily: FONT,
-        fontSize: '28px',
-        color: '#1a1a2e',
+        fontSize: '27px',
+        color: KAKAO.textDark,
       })
       .setOrigin(0.5);
-
-    // 입력할 답장 안내
     this.add
-      .text(GAME_WIDTH / 2, msgY + 110, '👇 이 문장을 그대로 입력해서 전송!', {
+      .text(PANEL.x + 118 + msgWidth, msgY + 22, '오후 9:47', {
         fontFamily: FONT,
-        fontSize: '26px',
-        color: COLORS.subCss,
+        fontSize: '18px',
+        color: KAKAO.sub,
+      })
+      .setOrigin(0, 0.5);
+
+    // ── 보낼 답장 (우측: 노란 내 버블 미리보기) ──
+    this.add
+      .text(GAME_WIDTH / 2, msgY + 106, '👇 이 문장을 그대로 입력해서 전송! (느낌표까지)', {
+        fontFamily: FONT,
+        fontSize: '25px',
+        color: '#4a5568',
+        fontStyle: 'bold',
       })
       .setOrigin(0.5);
     const targetBg = this.add.graphics();
-    targetBg.fillStyle(0xf7e600, 0.9);
-    targetBg.fillRoundedRect(PANEL.x + 40, msgY + 150, PANEL.w - 80, 76, 18);
+    targetBg.fillStyle(KAKAO.yellow, 1);
+    targetBg.fillRoundedRect(PANEL.x + 40, msgY + 142, PANEL.w - 80, 76, 18);
+    // 내 버블 꼬리 (우측)
+    targetBg.fillTriangle(
+      PANEL.x + PANEL.w - 40,
+      msgY + 152,
+      PANEL.x + PANEL.w - 28,
+      msgY + 164,
+      PANEL.x + PANEL.w - 40,
+      msgY + 176
+    );
     this.add
-      .text(GAME_WIDTH / 2, msgY + 188, this.prompt.reply, {
+      .text(GAME_WIDTH / 2, msgY + 180, this.prompt.reply, {
         fontFamily: FONT,
-        fontSize: '32px',
-        color: '#1a1a2e',
+        fontSize: '31px',
+        color: KAKAO.textBrown,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.hintText = this.add
-      .text(GAME_WIDTH / 2, msgY + 400, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
+      .text(GAME_WIDTH / 2, msgY + 392, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
         fontFamily: FONT,
         fontSize: '24px',
-        color: COLORS.warnCss,
+        color: '#c0392b',
       })
       .setOrigin(0.5);
 
@@ -93,7 +120,9 @@ export class KakaoScene extends BaseMiniScene {
       label: '📨 전송',
       width: 320,
       height: 100,
-      color: COLORS.safe,
+      color: KAKAO.yellow,
+      labelColor: KAKAO.textBrown,
+      strokeColor: 0xd6c200,
       fontSize: 36,
       onClick: () => this.send(),
     });
@@ -104,7 +133,13 @@ export class KakaoScene extends BaseMiniScene {
       onInput: (value) => this.onTyped(value),
       onEnter: () => this.send(),
       onFocus: () => this.beginCountdown(),
-      rect: { x: PANEL.x + 40, y: msgY + 260, w: PANEL.w - 80, h: 90 },
+      rect: { x: PANEL.x + 40, y: msgY + 252, w: PANEL.w - 80, h: 88 },
+      style: {
+        background: '#ffffff',
+        border: '2px solid #9fb3c4',
+        color: KAKAO.textDark,
+        caretColor: '#d4a017',
+      },
     });
     this.hiddenInput.focus();
 
@@ -141,8 +176,8 @@ export class KakaoScene extends BaseMiniScene {
       this.finishSuccess('세이프! 답장 완료.');
       return;
     }
-    // 올바른 진행이면 흰색, 오타면 빨간색
-    this.hiddenInput?.setColor(target.startsWith(value) ? COLORS.textCss : COLORS.accentCss);
+    // 올바른 진행이면 검정, 오타면 빨간색
+    this.hiddenInput?.setColor(target.startsWith(value) ? KAKAO.textDark : '#e94560');
   }
 
   private send(): void {
