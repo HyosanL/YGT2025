@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, FONT } from '../config';
 import { audio } from '../core/AudioManager';
-import { gameState } from '../core/GameState';
 
 export interface ButtonOptions {
   label: string;
@@ -116,23 +115,6 @@ export class Button extends Phaser.GameObjects.Container {
     this.drawBg(color);
     return this;
   }
-}
-
-/** 우상단 음소거 토글 버튼 (모든 씬 공통) */
-export function addMuteButton(scene: Phaser.Scene): Phaser.GameObjects.Text {
-  const label = (): string => (gameState.settings.mute ? '🔇' : '🔊');
-  const btn = scene.add
-    .text(720 - 24, 24, label(), { fontFamily: FONT, fontSize: '44px' })
-    .setOrigin(1, 0)
-    .setDepth(1000)
-    .setInteractive({ useHandCursor: true });
-  btn.on('pointerdown', () => {
-    const mute = !gameState.settings.mute;
-    gameState.setMute(mute);
-    audio.setMute(mute);
-    btn.setText(label());
-  });
-  return btn;
 }
 
 /** 화면 중앙 하단에 잠깐 떠오르는 토스트 텍스트 */

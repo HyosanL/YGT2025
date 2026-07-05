@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
-import { addMuteButton, Button } from '../ui/Button';
+import { Button } from '../ui/Button';
+import { showVolumePanel } from '../ui/VolumePanel';
 
 export interface PauseSceneData {
   /** 카운트다운이 끝나면 resume할 씬 키 */
@@ -13,6 +14,8 @@ export interface PauseSceneData {
   count?: number;
   /** 카운트다운 위에 띄울 안내 문구 */
   label?: string;
+  /** 메뉴 진입 즉시 소리 설정 패널을 연다 (인게임 🔊 버튼 경로) */
+  openVolume?: boolean;
 }
 
 /**
@@ -25,6 +28,7 @@ export class PauseScene extends Phaser.Scene {
   private returnTo = '';
   private menuItems: Phaser.GameObjects.GameObject[] = [];
   private counting = false;
+  private volPanel: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super({ key: 'Pause' });
@@ -34,6 +38,7 @@ export class PauseScene extends Phaser.Scene {
     this.returnTo = data.returnTo;
     this.menuItems = [];
     this.counting = false;
+    this.volPanel = null;
     // 등록 순서와 무관하게 반드시 최상단에 렌더링 (게임 씬에 가려짐 방지)
     this.scene.bringToTop();
 
@@ -46,10 +51,20 @@ export class PauseScene extends Phaser.Scene {
 
     if (data.mode === 'menu') {
       this.buildMenu();
-      addMuteButton(this);
+      if (data.openVolume) this.openVolume();
     } else {
       this.startCountdown(data.count ?? 3, data.label ?? '곧 재개!');
     }
+  }
+
+  /** 소리 설정 — 조절하는 동안은 들리게 잠깐 무음을 풀고, 닫으면 다시 무음 */
+  private openVolume(): void {
+    if (this.volPanel) return;
+    audio.setPauseMuted(false);
+    this.volPanel = showVolumePanel(this, () => {
+      this.volPanel = null;
+      audio.setPauseMuted(true);
+    });
   }
 
   private buildMenu(): void {
@@ -71,28 +86,40 @@ export class PauseScene extends Phaser.Scene {
       onClick: () => this.startCountdown(3, '준비!'),
     });
 
-    const quitBtn = new Button(this, GAME_WIDTH / 2, 780, {
+    const volumeBtn = new Button(this, GAME_WIDTH / 2, 760, {
+      label: '🔊 소리 설정',
+      width: 440,
+      height: 96,
+      color: COLORS.panelLight,
+      fontSize: 32,
+      onClick: () => this.openVolume(),
+    });
+
+    const quitBtn = new Button(this, GAME_WIDTH / 2, 890, {
       label: '🏳 포기하고 타이틀로',
       width: 440,
-      height: 100,
+      height: 96,
       color: COLORS.panelLight,
       fontSize: 30,
       onClick: () => {
-        // 일시정지가 걸어둔 시계 홀드 해제 (씬을 resume하지 않고 떠나는 경로)
+        // 일시정지가 걸어둔 시계 홀드/무음 해제 (씬을 resume하지 않고 떠나는 경로)
         gameState.releaseClock();
+        audio.setPauseMuted(false);
         audio.stopAll();
         this.scene.stop(this.returnTo);
         this.scene.start('Title');
       },
     });
 
-    this.menuItems = [title, resumeBtn, quitBtn];
+    this.menuItems = [title, resumeBtn, volumeBtn, quitBtn];
   }
 
   /** N → ... → 1 → 시작! 총 ~1.7초의 빠른 카운트다운 후 메인 씬 resume */
   private startCountdown(from: number, label: string): void {
     if (this.counting) return;
     this.counting = true;
+    // 재개 준비 — 일시정지 무음 해제 (카운트다운 틱부터 들린다)
+    audio.setPauseMuted(false);
     for (const item of this.menuItems) item.destroy();
     this.menuItems = [];
 

@@ -133,3 +133,24 @@ export function showVolumePanel(scene: Phaser.Scene, onClose: () => void): Phase
 
   return root;
 }
+
+/** 우측 상단 🔊 소리 설정 버튼 — 탭하면 볼륨 패널 토글 (음소거 토글의 후임) */
+export function addVolumeButton(scene: Phaser.Scene): void {
+  let panel: Phaser.GameObjects.Container | null = null;
+  const btn = scene.add
+    .text(GAME_WIDTH - 24, 24, '🔊', { fontFamily: FONT, fontSize: '44px' })
+    .setOrigin(1, 0)
+    .setPadding(10)
+    .setDepth(1000)
+    .setInteractive({ useHandCursor: true });
+  btn.on('pointerdown', () => {
+    if (panel) {
+      panel.destroy();
+      panel = null;
+      return;
+    }
+    panel = showVolumePanel(scene, () => {
+      panel = null;
+    });
+  });
+}

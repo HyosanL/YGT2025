@@ -3,9 +3,10 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { submitScore } from '../core/Leaderboard';
-import { addMuteButton, Button } from '../ui/Button';
+import { Button } from '../ui/Button';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { LivesBar } from '../ui/LivesBar';
+import { addVolumeButton } from '../ui/VolumePanel';
 import { HAPTIC, vibrate } from '../utils/haptics';
 import { askNickname } from '../utils/nicknameDialog';
 import type { ResultSceneData } from '../types';
@@ -28,7 +29,7 @@ export class ResultScene extends Phaser.Scene {
     } else {
       this.showGameOver(data);
     }
-    addMuteButton(this);
+    addVolumeButton(this);
   }
 
   /** 부활 연출 — 목숨 1칸을 쓰고 같은 일차를 다시 시작한다 */

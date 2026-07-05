@@ -7,7 +7,7 @@ import { Cadet } from '../ui/Characters';
 import { showHelpPanel } from '../ui/HelpPanel';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { drawBarracks, drawFlagpole, drawMountains } from '../ui/Scenery';
-import { showVolumePanel } from '../ui/VolumePanel';
+import { addVolumeButton } from '../ui/VolumePanel';
 import { askNickname } from '../utils/nicknameDialog';
 
 interface TitleSceneData {
@@ -20,7 +20,6 @@ interface TitleSceneData {
 export class TitleScene extends Phaser.Scene {
   private lbPanel: Phaser.GameObjects.Container | null = null;
   private helpPanel: Phaser.GameObjects.Container | null = null;
-  private volPanel: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super({ key: 'Title' });
@@ -29,7 +28,6 @@ export class TitleScene extends Phaser.Scene {
   create(data?: TitleSceneData): void {
     this.lbPanel = null;
     this.helpPanel = null;
-    this.volPanel = null;
     gameState.endPractice(); // 어떤 경로로 돌아왔든 연습 플래그 정리
     audio.setBgmTempo(1); // 타이틀은 항상 원래 템포
     audio.startBgm('title');
@@ -176,22 +174,7 @@ export class TitleScene extends Phaser.Scene {
     });
 
     // 우측 상단 소리 아이콘 — 음소거 토글 대신 '소리 설정' 패널을 연다 (역할 전환)
-    const volBtn = this.add
-      .text(GAME_WIDTH - 24, 24, '🔊', { fontFamily: FONT, fontSize: '44px' })
-      .setOrigin(1, 0)
-      .setPadding(10)
-      .setDepth(1000)
-      .setInteractive({ useHandCursor: true });
-    volBtn.on('pointerdown', () => {
-      if (this.volPanel) {
-        this.volPanel.destroy();
-        this.volPanel = null;
-        return;
-      }
-      this.volPanel = showVolumePanel(this, () => {
-        this.volPanel = null;
-      });
-    });
+    addVolumeButton(this);
   }
 
   private toggleHelp(): void {

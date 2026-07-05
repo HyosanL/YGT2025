@@ -112,6 +112,11 @@ class AudioManagerImpl {
   // 좀비 컨텍스트 감지 (state는 running인데 시계가 멈춰 소리가 안 나는 iOS 버그)
   private zombieCheckPending = false;
 
+  /** 일시정지 중 전체 무음 (게임 재개 시 해제) */
+  private pauseMuted = false;
+  /** 백그라운드(탭/앱 이탈) 중 전체 무음 — 복귀 시 자동 해제 */
+  private hiddenMuted = false;
+
   /**
    * 오디오 언락 리스너 설치 — 앱 시작 시 1회 호출.
    * iOS는 백그라운드 복귀·전화 인터럽트 후 AudioContext가 다시 잠기므로
@@ -124,16 +129,26 @@ class AudioManagerImpl {
     window.addEventListener('keydown', tryUnlock);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
-        // 탭/앱 전환 복귀 — resume 시도 + 시계가 멈춘 좀비 컨텍스트면 재생성
+        // 탭/앱 전환 복귀 — 무음 해제 + resume 시도 + 좀비 컨텍스트면 재생성
+        this.hiddenMuted = false;
+        this.applyVolumes();
         this.resumeIfSuspended();
         this.resumeSilentLoop();
         this.scheduleZombieCheck();
       } else {
-        // 백그라운드에서는 무음 루프를 쉬게 한다 (복귀 시 재개)
+        // 백그라운드 = 타이틀 포함 어디서든 전체 무음 (복귀 시 해제)
+        this.hiddenMuted = true;
+        this.applyVolumes();
         this.silentEl?.pause();
         this.silentPlaying = false;
       }
     });
+  }
+
+  /** 일시정지 중 전체 무음 토글 — 재개(카운트다운 시작) 때 해제된다 */
+  setPauseMuted(muted: boolean): void {
+    this.pauseMuted = muted;
+    this.applyVolumes();
   }
 
   /** 사용자 제스처에서 호출 (모바일 autoplay 정책 대응) */
@@ -301,10 +316,11 @@ class AudioManagerImpl {
     this.applyVolumes();
   }
 
-  /** 설정(마스터/배경음악/효과음 0~10 + 음소거)을 실제 게인에 반영 */
+  /** 설정(마스터/배경음악/효과음 0~10)과 일시정지/백그라운드 무음을 실제 게인에 반영 */
   applyVolumes(): void {
     const s = gameState.settings;
-    if (this.master) this.master.gain.value = s.mute ? 0 : (s.volMaster ?? 10) / 10;
+    const silenced = s.mute || this.pauseMuted || this.hiddenMuted;
+    if (this.master) this.master.gain.value = silenced ? 0 : (s.volMaster ?? 10) / 10;
     if (this.bgmBus) this.bgmBus.gain.value = (s.volBgm ?? 10) / 10;
     if (this.sfxBus) this.sfxBus.gain.value = (s.volSfx ?? 10) / 10;
   }

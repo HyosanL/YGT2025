@@ -3,7 +3,6 @@ import { bgmTempo, COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, QUEST_META } from '../
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { questManager } from '../core/QuestManager';
-import { addMuteButton } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
 import { LivesBar } from '../ui/LivesBar';
 import { drawBarracks, drawCloud, drawFlagpole, drawMountains } from '../ui/Scenery';
@@ -133,12 +132,8 @@ export class DayIntroScene extends Phaser.Scene {
         color: COLORS.subCss,
       })
       .setOrigin(0.5);
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.y < 100 && p.x > GAME_WIDTH - 130) return; // 음소거 버튼 영역은 무시
-      this.startQuest(questId);
-    });
-
-    addMuteButton(this);
+    // 짧은 스플래시라 별도 설정 버튼은 없다 — 어디를 탭해도 바로 시작
+    this.input.on('pointerdown', () => this.startQuest(questId));
   }
 
   private startQuest(questId: MainQuestId): void {

@@ -3,7 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../../config';
 import { audio, type BgmKey } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import { questManager } from '../../core/QuestManager';
-import { addMuteButton, showToast } from '../../ui/Button';
+import { showToast } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { HpBar } from '../../ui/HpBar';
 import { LivesBar } from '../../ui/LivesBar';
@@ -55,7 +55,14 @@ export abstract class BaseMainScene extends Phaser.Scene {
     // 목숨 하트 (HP 바 아래) — 부분 채움 + 반투명 빈 하트
     this.livesBar = new LivesBar(this, 26, 70, 38);
     this.livesBar.setLives(gameState.livesUnits);
-    addMuteButton(this);
+    // 우측 상단 🔊 = 소리 설정 (일시정지 메뉴를 열고 그 위에 볼륨 패널 — 게임은 안전하게 정지)
+    const volBtn = this.add
+      .text(GAME_WIDTH - 24, 24, '🔊', { fontFamily: FONT, fontSize: '44px' })
+      .setOrigin(1, 0)
+      .setPadding(10)
+      .setDepth(1000)
+      .setInteractive({ useHandCursor: true });
+    volBtn.on('pointerdown', () => this.openPauseMenu(true));
     this.createPauseButton();
     this.createDangerVignette();
     if (gameState.practiceMode) {
@@ -108,7 +115,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.openPauseMenu();
   }
 
-  private openPauseMenu(): void {
+  private openPauseMenu(openVolume = false): void {
     // resumeContext가 남아 있으면 이미 일시정지/미니 진입이 진행 중 (연타 가드)
     if (this.finished || this.miniActive || this.resumeContext !== null || this.scene.isPaused()) {
       return;
@@ -122,7 +129,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
     // (tick이 재개되면 자동으로 되살아난다)
     audio.setSongPlaying(false);
     audio.stopMicrowaveHum();
-    this.scene.launch('Pause', { returnTo: this.scene.key, mode: 'menu' });
+    // 일시정지 = 모든 소리 정지 (재개 카운트다운/소리 설정 중에는 잠깐 풀린다)
+    audio.setPauseMuted(true);
+    this.scene.launch('Pause', { returnTo: this.scene.key, mode: 'menu', openVolume });
     this.scene.pause();
   }
 
@@ -239,8 +248,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
       return;
     }
     if (ctx === 'pause') {
-      // 일시정지 해제 — 생존시간 시계 재개
+      // 일시정지 해제 — 생존시간 시계 재개 + 무음 해제 (안전망)
       gameState.releaseClock();
+      audio.setPauseMuted(false);
       if (this.finished) return;
       // 일시정지로 정리했던 선배 사이클 재가동 (카운트다운이 이미 마음의 준비를 줬다)
       this.scheduleSeniorCycle(400);
