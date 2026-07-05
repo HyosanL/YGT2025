@@ -3,7 +3,8 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { submitScore } from '../core/Leaderboard';
-import { addMuteButton, Button, showToast } from '../ui/Button';
+import { addMuteButton, Button } from '../ui/Button';
+import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { askNickname } from '../utils/nicknameDialog';
 import type { ResultSceneData } from '../types';
 
@@ -90,8 +91,9 @@ export class ResultScene extends Phaser.Scene {
 
   private showGameOver(data: ResultSceneData): void {
     const days = gameState.day;
+    // gameOver()가 마지막 날 구간을 totalPlayMs에 합산하므로, 시간은 그 뒤에 읽는다
+    const isBest = gameState.gameOver();
     const playMs = Math.max(1, Math.round(gameState.totalPlayMs));
-    gameState.gameOver();
 
     const bg = this.add.graphics();
     bg.fillGradientStyle(0x4a1c2a, 0x4a1c2a, 0x0d0d16, 0x0d0d16, 1);
@@ -133,33 +135,63 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const submitBtn = new Button(this, GAME_WIDTH / 2, 850, {
-      label: '🏆 리더보드에 등록',
+    // 신기록이면 자동 등록 — 수동 등록 버튼은 없다 (최고 기록만 서버에 올라간다)
+    const statusText = this.add
+      .text(GAME_WIDTH / 2, 780, '', {
+        fontFamily: FONT,
+        fontSize: '26px',
+        color: COLORS.warnCss,
+        align: 'center',
+      })
+      .setOrigin(0.5);
+
+    if (isBest) {
+      const doSubmit = (nickname: string): void => {
+        statusText.setText('🏆 신기록! 리더보드에 자동 등록 중...');
+        void submitScore({ nickname, days, play_ms: playMs }).then((result) => {
+          if (!statusText.active) return;
+          if (result.ok) {
+            audio.chime();
+            statusText.setText(
+              result.rank ? `🏆 신기록 등록 완료 — 현재 ${result.rank}위!` : '🏆 신기록 등록 완료!'
+            );
+          } else if (result.queued) {
+            statusText.setText('🏆 신기록! 오프라인 — 다음 접속 시 자동 등록됩니다');
+          } else {
+            statusText.setText(`등록 실패: ${result.error ?? '알 수 없는 오류'}`);
+          }
+        });
+      };
+      const nick = gameState.settings.nickname;
+      if (nick) {
+        doSubmit(nick);
+      } else {
+        void askNickname('', '신기록! 리더보드에 올릴 닉네임 (1~12자)').then((name) => {
+          if (name) {
+            gameState.setNickname(name);
+            doSubmit(name);
+          } else {
+            statusText.setText('닉네임을 정하면 신기록이 리더보드에 올라가요');
+          }
+        });
+      }
+    }
+
+    let lbPanel: Phaser.GameObjects.Container | null = null;
+    new Button(this, GAME_WIDTH / 2, 870, {
+      label: '🏆 리더보드 보기 (내 등수)',
       width: 460,
       height: 100,
       color: COLORS.panelLight,
       onClick: () => {
-        void (async () => {
-          const name = await askNickname(gameState.settings.nickname);
-          if (!name) return;
-          gameState.setNickname(name);
-          submitBtn.setEnabled(false).setLabel('등록 중...');
-          const result = await submitScore({ nickname: name, days, play_ms: playMs });
-          if (result.ok) {
-            submitBtn.setLabel(result.rank ? `등록 완료! 현재 ${result.rank}위` : '등록 완료!');
-            audio.chime();
-          } else if (result.queued) {
-            submitBtn.setLabel('오프라인 — 다음 접속 시 자동 등록');
-            showToast(this, '네트워크 연결 후 자동으로 재시도됩니다');
-          } else {
-            submitBtn.setEnabled(true).setLabel('🏆 리더보드에 등록');
-            showToast(this, `등록 실패: ${result.error ?? '알 수 없는 오류'}`, COLORS.accentCss);
-          }
-        })();
+        if (lbPanel?.active) return;
+        lbPanel = showLeaderboardPanel(this, gameState.settings.nickname, () => {
+          lbPanel = null;
+        });
       },
     });
 
-    new Button(this, GAME_WIDTH / 2, 980, {
+    new Button(this, GAME_WIDTH / 2, 995, {
       label: '🔄 다시 도전',
       width: 460,
       height: 100,

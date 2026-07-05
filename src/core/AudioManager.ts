@@ -1,8 +1,48 @@
 import { gameState } from './GameState';
 
+export type BgmKey = 'title' | 'field';
+
+interface BgmTrack {
+  stepSec: number;
+  leadType: OscillatorType;
+  bassType: OscillatorType;
+  leadVol: number;
+  bassVol: number;
+  /** 0이면 하이햇 없음 */
+  hatVol: number;
+  /** 0 = 쉼표 */
+  lead: ReadonlyArray<number>;
+  bass: ReadonlyArray<number>;
+}
+
+/** 아주 짧은 무음 WAV — iOS 무음 스위치 대응용 (런타임 생성이라 자산 파일 불필요) */
+function buildSilentWavUrl(): string {
+  const sampleRate = 8000;
+  const samples = 800; // 0.1초
+  const buf = new ArrayBuffer(44 + samples * 2);
+  const v = new DataView(buf);
+  const writeStr = (off: number, s: string): void => {
+    for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  v.setUint32(4, 36 + samples * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  v.setUint32(40, samples * 2, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+
 /**
  * Web Audio 기반 사운드 매니저 (싱글턴).
- * 모든 SFX는 신디사이저로 즉석 생성 — 외부 오디오 파일 불필요.
+ * 모든 SFX/BGM은 신디사이저로 즉석 생성 — 외부 오디오 파일 불필요.
  * 「차는 두고 가」 음원은 사용자가 제공하기 전까지 자체 칩튠 루프로 대체:
  * 실제 음원이 준비되면 startSong()만 <audio> 기반 구현으로 교체하면 된다 (키 추상화).
  */
@@ -16,10 +56,34 @@ class AudioManagerImpl {
   private songStep = 0;
   private songPlaying = false;
 
+  // BGM 루프 상태
+  private bgmTimer: number | null = null;
+  private bgmKey: BgmKey | null = null;
+  private bgmStep = 0;
+  private bgmNextTime = 0;
+
   // 심장박동 상태
   private heartbeatTimer: number | null = null;
 
-  /** 첫 사용자 제스처에서 호출 (모바일 autoplay 정책 대응) */
+  // iOS 무음 스위치 대응 상태
+  private silentKicked = false;
+
+  /**
+   * 오디오 언락 리스너 설치 — 앱 시작 시 1회 호출.
+   * iOS는 백그라운드 복귀·전화 인터럽트 후 AudioContext가 다시 잠기므로
+   * once가 아니라 모든 제스처 + visibilitychange에서 재시도해야 한다.
+   */
+  installAutoUnlock(): void {
+    const tryUnlock = (): void => this.unlock();
+    window.addEventListener('pointerdown', tryUnlock, { passive: true });
+    window.addEventListener('touchend', tryUnlock, { passive: true });
+    window.addEventListener('keydown', tryUnlock);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.resumeIfSuspended();
+    });
+  }
+
+  /** 사용자 제스처에서 호출 (모바일 autoplay 정책 대응) */
   unlock(): void {
     if (!this.ctx) {
       const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -29,8 +93,41 @@ class AudioManagerImpl {
       this.master.connect(this.ctx.destination);
       this.master.gain.value = gameState.settings.mute ? 0 : 1;
     }
-    if (this.ctx.state === 'suspended') {
+    this.resumeIfSuspended();
+    this.kickSilentMedia();
+  }
+
+  private resumeIfSuspended(): void {
+    if (!this.ctx) return;
+    // iOS는 전화/시리 등 인터럽트 시 비표준 'interrupted' 상태가 된다
+    const state = this.ctx.state as AudioContextState | 'interrupted';
+    if (state === 'suspended' || state === 'interrupted') {
       void this.ctx.resume();
+    }
+  }
+
+  /**
+   * iOS에서 무음(진동) 스위치가 켜져 있으면 Web Audio가 통째로 음소거된다.
+   * 사용자 제스처 안에서 짧은 무음 <audio>를 한 번 재생하면 오디오 세션이
+   * '미디어 재생' 카테고리로 승격되어 이후 Web Audio 소리가 정상 출력된다.
+   */
+  private kickSilentMedia(): void {
+    if (this.silentKicked) return;
+    try {
+      const el = document.createElement('audio');
+      el.setAttribute('playsinline', '');
+      el.src = buildSilentWavUrl();
+      el.volume = 0.01;
+      const p = el.play();
+      if (p !== undefined) {
+        this.silentKicked = true;
+        p.catch(() => {
+          // 제스처 밖에서 불렸으면 실패 — 다음 제스처에서 재시도
+          this.silentKicked = false;
+        });
+      }
+    } catch {
+      // 지원하지 않는 환경은 조용히 무시
     }
   }
 
@@ -219,6 +316,8 @@ class AudioManagerImpl {
 
   private scheduleSong(): void {
     if (!this.ready || !this.songPlaying) return;
+    // 언락 전에 시작됐거나 탭 전환으로 밀린 경우 — 과거 스케줄은 현재로 재동기화 (몰아치기 방지)
+    if (this.songNextTime < this.now - 0.05) this.songNextTime = this.now + 0.05;
     while (this.songNextTime < this.now + 0.25) {
       const melody = AudioManagerImpl.MELODY;
       const freq = melody[this.songStep % melody.length];
@@ -234,10 +333,95 @@ class AudioManagerImpl {
     }
   }
 
+  // ── BGM (신스 루프 — 타이틀 행진곡 / 필드 잠입 루프) ─────────
+
+  private static readonly BGM_TRACKS: Record<BgmKey, BgmTrack> = {
+    // 늠름한 군가풍 행진곡 (C장조, 8분음표)
+    title: {
+      stepSec: 0.24,
+      leadType: 'square',
+      bassType: 'triangle',
+      leadVol: 0.11,
+      bassVol: 0.08,
+      hatVol: 0,
+      lead: [
+        523, 0, 659, 0, 784, 0, 659, 0,
+        698, 0, 659, 0, 587, 0, 659, 0,
+        523, 0, 659, 0, 784, 0, 880, 0,
+        784, 0, 659, 0, 523, 0, 0, 0,
+      ],
+      bass: [
+        131, 0, 196, 0, 131, 0, 196, 0,
+        147, 0, 220, 0, 131, 0, 196, 0,
+        131, 0, 196, 0, 175, 0, 220, 0,
+        196, 0, 165, 0, 131, 0, 98, 0,
+      ],
+    },
+    // 살금살금 긴장 루프 (A단조 스타카토) — SFX를 가리지 않게 작게
+    field: {
+      stepSec: 0.21,
+      leadType: 'square',
+      bassType: 'triangle',
+      leadVol: 0.07,
+      bassVol: 0.055,
+      hatVol: 0.014,
+      lead: [
+        330, 0, 0, 392, 330, 0, 311, 0,
+        330, 0, 0, 392, 440, 0, 392, 0,
+        330, 0, 0, 392, 330, 0, 311, 0,
+        294, 0, 311, 0, 330, 0, 0, 0,
+      ],
+      bass: [
+        110, 0, 165, 0, 110, 0, 165, 0,
+        110, 0, 165, 0, 147, 0, 165, 0,
+        110, 0, 165, 0, 110, 0, 165, 0,
+        98, 0, 147, 0, 110, 0, 110, 0,
+      ],
+    },
+  };
+
+  /** BGM 시작 — 같은 트랙이 이미 흐르고 있으면 그대로 유지 */
+  startBgm(key: BgmKey): void {
+    if (this.bgmKey === key && this.bgmTimer !== null) return;
+    this.stopBgm();
+    this.bgmKey = key;
+    this.bgmStep = 0;
+    this.bgmNextTime = this.now + 0.15;
+    this.bgmTimer = window.setInterval(() => this.scheduleBgm(), 80);
+  }
+
+  stopBgm(): void {
+    if (this.bgmTimer !== null) {
+      window.clearInterval(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+    this.bgmKey = null;
+  }
+
+  private scheduleBgm(): void {
+    if (!this.ready || !this.bgmKey) return;
+    const t = AudioManagerImpl.BGM_TRACKS[this.bgmKey];
+    // 언락 전에 시작된 경우 등 — 과거로 밀린 스케줄은 현재로 재동기화 (몰아치기 방지)
+    if (this.bgmNextTime < this.now - 0.05) this.bgmNextTime = this.now + 0.05;
+    while (this.bgmNextTime < this.now + 0.3) {
+      const i = this.bgmStep % t.lead.length;
+      const lf = t.lead[i];
+      const bf = t.bass[i % t.bass.length];
+      if (lf > 0) this.tone(t.leadType, lf, this.bgmNextTime, t.stepSec * 0.85, t.leadVol);
+      if (bf > 0) this.tone(t.bassType, bf, this.bgmNextTime, t.stepSec * 0.9, t.bassVol);
+      if (t.hatVol > 0 && i % 2 === 0) {
+        this.noiseBurst(this.bgmNextTime, 0.03, t.hatVol, 6000);
+      }
+      this.bgmStep += 1;
+      this.bgmNextTime += t.stepSec;
+    }
+  }
+
   /** 씬 전환 등에서 흘러나오는 소리 정리 */
   stopAll(): void {
     this.stopSong();
     this.stopHeartbeat();
+    this.stopBgm();
   }
 }
 

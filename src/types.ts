@@ -12,6 +12,8 @@ export interface SaveData {
   currentQuestId: MainQuestId | null;
   lastQuestId: MainQuestId | null;
   bestDay: number;
+  /** 최고 기록의 생존 시간 (같은 일차 동률 판정용) */
+  bestPlayMs?: number;
   totalPlayMs: number;
   settings: Settings;
 }

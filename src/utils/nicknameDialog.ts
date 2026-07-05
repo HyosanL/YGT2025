@@ -2,7 +2,7 @@
  * 닉네임 입력용 DOM 오버레이 다이얼로그 (Promise 기반).
  * 확인 → 입력값(트림), 취소 → null.
  */
-export function askNickname(defaultValue: string): Promise<string | null> {
+export function askNickname(defaultValue: string, titleText = '닉네임 (1~12자)'): Promise<string | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
@@ -28,7 +28,7 @@ export function askNickname(defaultValue: string): Promise<string | null> {
     } satisfies Partial<CSSStyleDeclaration>);
 
     const title = document.createElement('div');
-    title.textContent = '닉네임 (1~12자)';
+    title.textContent = titleText;
     Object.assign(title.style, { fontSize: '18px', marginBottom: '14px', fontWeight: 'bold' });
 
     const input = document.createElement('input');

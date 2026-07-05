@@ -15,6 +15,8 @@ class GameStateImpl {
   currentQuestId: MainQuestId | null = null;
   lastQuestId: MainQuestId | null = null;
   bestDay = 0;
+  /** 최고 기록의 생존 시간 — 같은 일차면 오래 버틴 쪽이 신기록 */
+  bestPlayMs = 0;
   totalPlayMs = 0;
   settings: Settings = { ...DEFAULT_SETTINGS };
 
@@ -31,6 +33,7 @@ class GameStateImpl {
       this.currentQuestId = data.currentQuestId ?? null;
       this.lastQuestId = data.lastQuestId ?? null;
       this.bestDay = typeof data.bestDay === 'number' ? data.bestDay : 0;
+      this.bestPlayMs = typeof data.bestPlayMs === 'number' ? data.bestPlayMs : 0;
       this.totalPlayMs = typeof data.totalPlayMs === 'number' ? data.totalPlayMs : 0;
       this.settings = { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) };
     } catch {
@@ -45,6 +48,7 @@ class GameStateImpl {
       currentQuestId: this.currentQuestId,
       lastQuestId: this.lastQuestId,
       bestDay: this.bestDay,
+      bestPlayMs: this.bestPlayMs,
       totalPlayMs: this.totalPlayMs,
       settings: this.settings,
     };
@@ -91,11 +95,21 @@ class GameStateImpl {
     this.save();
   }
 
-  /** 게임 오버 처리 (점수 = 발각 당한 날의 일차) */
-  gameOver(): void {
+  /**
+   * 게임 오버 처리 (점수 = 발각 당한 날의 일차).
+   * 신기록 여부를 반환 — 같은 일차면 오래 버틴(totalPlayMs 긴) 쪽이 신기록.
+   */
+  gameOver(): boolean {
     this.foldSegment();
-    this.bestDay = Math.max(this.bestDay, this.day);
+    const isBest =
+      this.day > this.bestDay ||
+      (this.day === this.bestDay && this.totalPlayMs > this.bestPlayMs);
+    if (isBest) {
+      this.bestDay = this.day;
+      this.bestPlayMs = this.totalPlayMs;
+    }
     this.save();
+    return isBest;
   }
 
   /**
@@ -105,6 +119,11 @@ class GameStateImpl {
   damage(amount: number): boolean {
     this.hp = Math.max(0, this.hp - amount);
     return this.hp <= 0;
+  }
+
+  /** HP 회복 (상한 HP_MAX) — 걷기 회복 등 초당 드레인의 역방향 */
+  heal(amount: number): void {
+    this.hp = Math.min(HP_MAX, this.hp + amount);
   }
 
   setNickname(nickname: string): void {

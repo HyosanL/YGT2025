@@ -29,11 +29,16 @@ export class MicrowaveScene extends BaseMainScene {
   private cookTotalMs = 1;
   private beeping = false;
   private beepElapsedMs = 0;
+  private lightsRemainMs = 1;
+  private lightsTotalMs = 1;
+  private lightsLastSec = -1;
 
   private player!: Cadet;
   private senior!: Cadet;
   private cookFill!: Phaser.GameObjects.Graphics;
   private cookLabel!: Phaser.GameObjects.Text;
+  private lightsFill!: Phaser.GameObjects.Graphics;
+  private lightsLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
 
   constructor() {
@@ -46,6 +51,7 @@ export class MicrowaveScene extends BaseMainScene {
     this.cookProgressMs = 0;
     this.beeping = false;
     this.beepElapsedMs = 0;
+    this.lightsLastSec = -1;
 
     // 애니풍 심야 세탁실 + 취사구역
     drawSkyGradient(this, 0, 0, GAME_WIDTH, 260, 0x2e3448, 0x272c40);
@@ -155,6 +161,21 @@ export class MicrowaveScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(10);
 
+    // 완전소등 카운트다운 — 이 시간 안에 "삐-"까지 끝내야 한다
+    const lightsBg = this.add.graphics();
+    lightsBg.fillStyle(0x000000, 0.55);
+    lightsBg.fillRoundedRect(GAME_WIDTH / 2 - 250, 132, 500, 36, 10);
+    this.lightsFill = this.add.graphics();
+    this.lightsLabel = this.add
+      .text(GAME_WIDTH / 2, 150, '', {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: COLORS.textCss,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(10);
+
     this.beepText = this.add
       .text(530, 480, '삐 ─ !!', {
         fontFamily: FONT,
@@ -188,6 +209,8 @@ export class MicrowaveScene extends BaseMainScene {
 
     this.setupCommon();
     this.cookTotalMs = Q3_MICROWAVE.cookMs(this.day);
+    this.lightsTotalMs = Q3_MICROWAVE.lightsOutMs(this.day);
+    this.lightsRemainMs = this.lightsTotalMs;
 
     this.startSeniorLoop({
       params: () => ({
@@ -241,6 +264,24 @@ export class MicrowaveScene extends BaseMainScene {
   }
 
   protected tick(delta: number): void {
+    // 완전소등 카운트다운 — 0이 되기 전에 "삐-"까지 끝내야 한다
+    this.lightsRemainMs -= delta;
+    if (this.lightsRemainMs <= 0) {
+      this.fail('완전소등 나팔이 울렸다... 라면을 두고 어둠 속에서 걸렸다.');
+      return;
+    }
+    const lightsRatio = Math.max(0, this.lightsRemainMs / this.lightsTotalMs);
+    this.lightsFill.clear();
+    this.lightsFill.fillStyle(lightsRatio < 0.25 ? COLORS.accent : 0x8a7fd9, 1);
+    this.lightsFill.fillRoundedRect(GAME_WIDTH / 2 - 244, 137, 488 * lightsRatio, 26, 7);
+    const lightsSec = Math.ceil(this.lightsRemainMs / 1000);
+    this.lightsLabel.setText(`🌙 완전소등까지 ${lightsSec}초`);
+    if (this.lightsRemainMs < 5000 && lightsSec !== this.lightsLastSec) {
+      this.lightsLastSec = lightsSec;
+      audio.tick();
+      this.cameras.main.shake(60, 0.002);
+    }
+
     // 반응에 성공해 세탁실로 피한 뒤, 다시 전자레인지 앞으로 돌아오면 발각
     if (this.seniorState === 'in' && this.reacted && this.zone === 'micro') {
       this.failCaught(this.senior, '전자레인지 앞에 서 있는 걸 선배에게 발각됐다!');

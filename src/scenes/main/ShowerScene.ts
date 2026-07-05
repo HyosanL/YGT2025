@@ -43,6 +43,11 @@ export class ShowerScene extends BaseMainScene {
     super({ key: 'shower' });
   }
 
+  /** 몰래 트는 노래 자체가 게임플레이 — BGM은 끈다 */
+  protected bgmTrack(): null {
+    return null;
+  }
+
   create(): void {
     this.holding = false;
     this.seniorState = 'away';

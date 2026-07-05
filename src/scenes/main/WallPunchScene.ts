@@ -35,6 +35,11 @@ export class WallPunchScene extends BaseMainScene {
     super({ key: 'wallpunch' });
   }
 
+  /** 벽 치고 난 뒤의 '정적'이 연출의 핵심 — BGM은 끈다 */
+  protected bgmTrack(): null {
+    return null;
+  }
+
   create(): void {
     this.count = 0;
     this.rolling = false;
@@ -202,7 +207,7 @@ export class WallPunchScene extends BaseMainScene {
       this.count += 1;
       this.updateCount();
       audio.chime();
-      speechBubble(this, WALL_X + 120, 500, '충... 충성!!');
+      speechBubble(this, WALL_X + 120, 500, '피... 필승!!');
       this.player.setFace('😈');
 
       if (this.count >= this.target) {

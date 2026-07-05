@@ -25,6 +25,8 @@ export class DayIntroScene extends Phaser.Scene {
     const questId: MainQuestId = questManager.pickQuestForDay(day);
     gameState.startDay(questId);
     const meta = QUEST_META[questId];
+    // 출격 준비 — 필드 BGM을 여기서부터 흘려 퀘스트로 이어지게
+    audio.startBgm('field');
 
     // 아침 연병장 배경
     const bg = this.add.graphics();

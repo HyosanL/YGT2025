@@ -23,7 +23,8 @@ const SENIOR_LEFT_X = 115;
 /**
  * Q2. 복도에서 경례 대신 인사로 받기.
  * 후배 경례를 "인사"로 N회 받으면 성공 — 단, 그 순간 선배가 보고 있으면 게임 오버.
- * 선배는 예고 없이 복도 좌/우 양쪽 문 중 무작위로 갑자기 나타난다.
+ * 선배 등장은 후배 사이클에 맞춰 계획된다: 접근 중에 미리 나타나 얼쩡거리거나(기다렸다
+ * 인사 각), 경례 창 한복판에 기습 등장한다. 판정과 무관한 허공 등장은 없다.
  */
 export class HallwayScene extends BaseMainScene {
   private juniorState: JuniorState = 'idle';
@@ -143,33 +144,61 @@ export class HallwayScene extends BaseMainScene {
     this.saluteWindowMs = Q2_HALLWAY.saluteWindowMs(this.day);
     this.updateCountText();
 
-    // 후배 사이클 시작
+    // 후배 사이클 시작 (선배 등장 계획은 사이클마다 startApproach에서 세운다)
     this.time.delayedCall(500, () => this.startApproach());
+  }
 
-    // 선배 등장/퇴장 루프 (독립, 예고 없이 좌/우 무작위 등장)
-    this.startSeniorLoop({
-      params: () => ({
-        gapMs: randRange(Q2_HALLWAY.seniorGapMsRange(this.day)),
-        stayMs: randRange(Q2_HALLWAY.seniorStayMsRange(this.day)),
-      }),
-      onEnter: () => {
-        this.seniorVisible = true;
-        this.seniorEnterMs = this.time.now;
-        this.seniorSide = chance(0.5) ? 'left' : 'right';
-        // 변칙 등장 — 문 앞이지만 매번 거리감(크기)과 위치가 다르다
-        const scale = randFloat(0.7, 0.95);
-        const baseX = this.seniorSide === 'right' ? SENIOR_RIGHT_X : SENIOR_LEFT_X;
-        this.senior
-          .setPosition(baseX + randFloat(-18, 18), 500 + Math.round((scale - 0.8) * 160))
-          .setScale(scale);
-        this.senior.setVisible(true);
-        this.senior.setFace('👀');
-      },
-      onLeave: () => {
-        this.seniorVisible = false;
-        this.senior.setVisible(false);
-      },
-    });
+  // ── 선배 등장 계획 (후배 사이클과 연동) ──────────
+
+  /**
+   * 이번 후배 사이클의 선배 등장 시나리오를 계획한다.
+   * - 없음: 마음 놓고 인사 각
+   * - 조기 등장: 접근 중에 나타나 경례 창 초반까지 얼쩡거리다 나간다 → 나갈 때까지 버티기
+   * - 기습 등장: 경례 창 한복판에 갑자기 나타난다 → 순간 판단 (경례로 전환 or 나가길 기다림)
+   */
+  private planSeniorForCycle(): void {
+    const approachMs = Q2_HALLWAY.approachMs(this.day);
+    const windowMs = this.saluteWindowMs;
+    const noSenior = Q2_HALLWAY.noSeniorChance(this.day);
+    const roll = Math.random();
+    if (roll < noSenior) return;
+
+    const stayMs = randRange(Q2_HALLWAY.seniorStayMsRange(this.day));
+    let delayMs: number;
+    if (roll < noSenior + (1 - noSenior) * 0.45) {
+      // 조기 등장 — 접근 중에 이미 복도에 서 있다
+      delayMs = randFloat(150, Math.max(300, approachMs * 0.75));
+    } else {
+      // 기습 등장 — 경례 창이 열리고 나서 한복판에 나타난다
+      delayMs = approachMs + randFloat(windowMs * 0.1, windowMs * 0.55);
+    }
+    this.time.delayedCall(delayMs, () => this.seniorEnter(stayMs));
+  }
+
+  private seniorEnter(stayMs: number): void {
+    if (this.finished || this.seniorVisible) return;
+    audio.door();
+    this.setDanger('in');
+    this.cameras.main.shake(140, 0.006);
+    this.seniorVisible = true;
+    this.seniorEnterMs = this.time.now;
+    this.seniorSide = chance(0.5) ? 'left' : 'right';
+    // 변칙 등장 — 문 앞이지만 매번 거리감(크기)과 위치가 다르다
+    const scale = randFloat(0.7, 0.95);
+    const baseX = this.seniorSide === 'right' ? SENIOR_RIGHT_X : SENIOR_LEFT_X;
+    this.senior
+      .setPosition(baseX + randFloat(-18, 18), 500 + Math.round((scale - 0.8) * 160))
+      .setScale(scale);
+    this.senior.setVisible(true);
+    this.senior.setFace('👀');
+    this.time.delayedCall(stayMs, () => this.seniorLeave());
+  }
+
+  private seniorLeave(): void {
+    if (this.finished) return;
+    this.seniorVisible = false;
+    this.senior.setVisible(false);
+    this.setDanger('off');
   }
 
   private updateCountText(): void {
@@ -179,6 +208,7 @@ export class HallwayScene extends BaseMainScene {
   private startApproach(): void {
     if (this.finished) return;
     this.juniorState = 'approaching';
+    this.planSeniorForCycle();
     this.junior.setVisible(true).setPosition(GAME_WIDTH / 2, 480).setScale(0.4).setAlpha(0.9);
     this.junior.setFace('😳');
     this.junior.setMotion('walk');
@@ -200,7 +230,7 @@ export class HallwayScene extends BaseMainScene {
     this.juniorState = 'saluting';
     this.junior.setFace('🫡');
     this.junior.setMotion('salute');
-    speechBubble(this, GAME_WIDTH / 2, 520, '충성!');
+    speechBubble(this, GAME_WIDTH / 2, 520, '필승!');
     audio.chime();
     this.saluteRemainingMs = this.saluteWindowMs;
     this.saluteTimeout = this.time.delayedCall(this.saluteWindowMs, () => {
@@ -248,7 +278,6 @@ export class HallwayScene extends BaseMainScene {
     audio.chime();
     speechBubble(this, GAME_WIDTH / 2, GAME_HEIGHT - 360, '받았으~', 900);
     this.junior.setFace('😳');
-    speechBubble(this, GAME_WIDTH / 2, 520, '충... 충성?');
     if (this.count >= this.target) {
       this.resolveCycle();
       this.succeed('오늘의 어깨힘주기 할당량을 채웠다!');
@@ -260,7 +289,17 @@ export class HallwayScene extends BaseMainScene {
   private onSalute(): void {
     if (this.finished) return;
     if (this.juniorState === 'saluting') {
-      this.junior.setFace('🙂');
+      if (this.seniorVisible) {
+        // 선배 앞 정석 대응 — 무사 통과 (단, 카운트는 없다)
+        this.junior.setFace('🙂');
+        speechBubble(this, this.senior.x, this.senior.y - 180, '군기 좋고~', 800);
+        this.resolveCycle();
+        return;
+      }
+      // 선배도 없는데 후배 경례를 경례로 받아버림 — 어깨힘 대실패
+      this.junior.setFace('😳');
+      speechBubble(this, GAME_WIDTH / 2, 520, '(어라...?)', 900);
+      this.applyDamage(Q2_HALLWAY.hpWrongSalute, '선배도 없는데 경례로 받아버렸다... 체면 구겼다!');
       this.resolveCycle();
       return;
     }

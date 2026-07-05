@@ -112,6 +112,10 @@ export const Q2_HALLWAY = {
   hpPreemptiveSalute: 10,
   /** 경례 무시(타임아웃) 페널티 */
   hpIgnoreSalute: 5,
+  /** 선배도 없는데 후배 경례를 경례로 받아버린 굴욕 페널티 */
+  hpWrongSalute: 18,
+  /** 선배가 아예 안 나타나는 후배 사이클 비율 (일차가 갈수록 감소) */
+  noSeniorChance: (day: number): number => Math.max(0.18, 0.4 - day * 0.015),
 } as const;
 
 // ─────────────────────────────────────────────
@@ -135,29 +139,39 @@ export const Q3_MICROWAVE = {
     Math.round(lerp(1600, 1300, difficulty(day))),
     Math.round(lerp(2500, 1900, difficulty(day))),
   ],
+  /** 완전소등까지 제한시간 — 소등 전에 "삐-"까지 끝내야 한다.
+   *  숨는 시간(선배 조우 기대값)을 감안해 조리 시간 대비 넉넉하되,
+   *  세탁실 캠핑은 반드시 실패하는 수준으로 설정 */
+  lightsOutMs: (day: number): number => Math.round(lerp(13500, 20000, difficulty(day))),
 } as const;
 
 // ─────────────────────────────────────────────
-// Q4. 태권도장까지 걸어가기
+// Q4. 태권도장까지 가기 (탑다운 잠입 — 선배 시선은 CCTV처럼 회전한다)
 // ─────────────────────────────────────────────
 export const Q4_WALK = {
-  /** 도착까지 필요한 총 이동 시간 (걷기/뛰기 동일 속도) — 판당 11~13초, 선배 조우 4~5회 */
-  distanceMs: (day: number): number => Math.round(lerp(10000, 13000, difficulty(day))),
-  /** 뛰는 동안 HP 감소 (초당) */
-  runHpPerSec: 3,
-  /** 선배는 예고 없이 등장한다. 등장 순간부터 뛰기로 전환할 수 있는 반응 유예 (ms)
-   *  — 모바일 터치 반응 한계(~300ms+) 고려해 바닥을 360ms로 */
-  graceMs: (day: number): number => Math.round(lerp(500, 360, difficulty(day))),
-  /** 짧게 치고 빠진다 */
-  stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(800, 1100, difficulty(day))),
-    Math.round(lerp(1300, 1600, difficulty(day))),
-  ],
-  /** 빨리빨리 돌아온다 */
-  gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1500, 1000, difficulty(day))),
-    Math.round(lerp(2600, 1700, difficulty(day))),
-  ],
+  /** 도착까지 총 거리 (월드 px) */
+  distancePx: (day: number): number => Math.round(lerp(4200, 5800, difficulty(day))),
+  /** 걷기 속도 (px/s) — 안전하지만 느리다 */
+  walkSpeed: 250,
+  /** 구보 속도 (px/s) */
+  runSpeed: 500,
+  /** 구보 HP 소모 (초당) — 전 구간을 구보로 내달리면 반드시 탈진하는 수치 */
+  runHpPerSec: 13,
+  /** 걷는 동안 HP 회복 (초당) — 사각지대 걷기의 보상 */
+  walkRegenPerSec: 1.5,
+  /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다 */
+  graceMs: (day: number): number => Math.round(lerp(650, 430, difficulty(day))),
+  /** 도로변 선배 배치 간격 (월드 px) */
+  seniorSpacingPx: (day: number): number => Math.round(lerp(1500, 1050, difficulty(day))),
+  /** CCTV 시야 설정 */
+  vision: {
+    rangePx: 620,
+    halfAngleDeg: 26,
+    /** 시선이 왕복하는 주기 */
+    sweepPeriodMs: (day: number): number => Math.round(lerp(2800, 2000, difficulty(day))),
+    /** 정면 기준 좌우 회전 폭 (도) */
+    sweepAmpDeg: 80,
+  },
 } as const;
 
 // ─────────────────────────────────────────────
@@ -338,12 +352,12 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',
     emoji: '🍜',
-    tip: '전자레인지 앞에서만 조리 진행 — 선배 등장 즉시 세탁실로 튀어!',
+    tip: '선배 등장 즉시 세탁실로! 단, 완전소등 전에 "삐-"까지 끝내야 한다',
   },
   walk: {
     title: '태권도장까지 걸어가기',
     emoji: '🥋',
-    tip: '평소엔 걷기, 선배가 보이면 화면 꾹 눌러 구보! (뛰면 HP 소모)',
+    tip: '선배 시야(부채꼴)에 걸린 채 걸으면 발각! 꾹 눌러 구보로 돌파 (HP 소모), 사각지대에선 걸어서 회복',
   },
   wallpunch: {
     title: '옆방(1학년 방) 벽 치기',

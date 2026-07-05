@@ -145,10 +145,21 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(600);
     void text;
-    this.time.delayedCall(550, () => {
-      this.scene.resume(this.returnTo);
-      this.scene.stop();
+    this.time.delayedCall(700, () => this.returnWithCountdown());
+  }
+
+  /**
+   * 곧바로 본 게임으로 던지지 않고 짧은 카운트다운(2→1→GO)으로
+   * 손가락과 시선을 재정비할 시간을 준 뒤 resume한다.
+   */
+  private returnWithCountdown(): void {
+    this.scene.launch('Pause', {
+      returnTo: this.returnTo,
+      mode: 'countdown',
+      count: 2,
+      label: '본 임무로 복귀!',
     });
+    this.scene.stop();
   }
 
   protected finishFail(reason: string): void {
@@ -168,10 +179,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     } else {
       gameState.damage(MINI.failHpPenalty);
       audio.buzz();
-      this.time.delayedCall(700, () => {
-        this.scene.resume(this.returnTo);
-        this.scene.stop();
-      });
+      this.time.delayedCall(700, () => this.returnWithCountdown());
     }
   }
 }

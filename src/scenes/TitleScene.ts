@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
-import { fetchTop } from '../core/Leaderboard';
 import { addMuteButton, Button } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
+import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { drawBarracks, drawFlagpole, drawMountains } from '../ui/Scenery';
 import { askNickname } from '../utils/nicknameDialog';
 
@@ -16,6 +17,17 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.lbPanel = null;
+    audio.startBgm('title');
+
+    // 첫 실행이면 닉네임부터 정하고 시작한다
+    if (!gameState.settings.nickname) {
+      this.time.delayedCall(450, () => {
+        if (gameState.settings.nickname) return;
+        void askNickname('', '어서 와, 생도! 닉네임부터 정하자 (1~12자)').then((name) => {
+          if (name) gameState.setNickname(name);
+        });
+      });
+    }
 
     const bg = this.add.graphics();
     bg.fillGradientStyle(0x0f3460, 0x0f3460, COLORS.bg, COLORS.bg, 1);
@@ -149,106 +161,8 @@ export class TitleScene extends Phaser.Scene {
       this.lbPanel = null;
       return;
     }
-
-    const panel = this.add.container(0, 0).setDepth(3000);
-    this.lbPanel = panel;
-
-    const dim = this.add
-      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7)
-      .setOrigin(0)
-      .setInteractive();
-    panel.add(dim);
-
-    const bg = this.add.graphics();
-    bg.fillStyle(COLORS.panel, 0.97);
-    bg.fillRoundedRect(50, 160, GAME_WIDTH - 100, 900, 24);
-    panel.add(bg);
-
-    panel.add(
-      this.add
-        .text(GAME_WIDTH / 2, 220, '🏆 리더보드 TOP 10', {
-          fontFamily: FONT,
-          fontSize: '40px',
-          color: COLORS.textCss,
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5)
-    );
-
-    const status = this.add
-      .text(GAME_WIDTH / 2, 560, '불러오는 중...', {
-        fontFamily: FONT,
-        fontSize: '30px',
-        color: COLORS.subCss,
-      })
-      .setOrigin(0.5);
-    panel.add(status);
-
-    const closeBtn = new Button(this, GAME_WIDTH / 2, 980, {
-      label: '닫기',
-      width: 280,
-      height: 90,
-      onClick: () => {
-        panel.destroy();
-        this.lbPanel = null;
-      },
-    });
-    panel.add(closeBtn);
-
-    void fetchTop().then((entries) => {
-      if (!panel.active || panel !== this.lbPanel) return;
-      if (!entries) {
-        status.setText(
-          `오프라인이거나 서버에 연결할 수 없어요.\n\n내 최고 기록: ${gameState.bestDay}일차`
-        );
-        return;
-      }
-      status.destroy();
-      if (entries.length === 0) {
-        panel.add(
-          this.add
-            .text(GAME_WIDTH / 2, 560, '아직 기록이 없어요.\n첫 번째 생존자가 되어보세요!', {
-              fontFamily: FONT,
-              fontSize: '30px',
-              color: COLORS.subCss,
-              align: 'center',
-            })
-            .setOrigin(0.5)
-        );
-        return;
-      }
-      entries.slice(0, 10).forEach((e, i) => {
-        const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : COLORS.textCss;
-        const seconds = Math.round(e.play_ms / 1000);
-        panel.add(
-          this.add
-            .text(110, 290 + i * 62, `${i + 1}.`, {
-              fontFamily: FONT,
-              fontSize: '30px',
-              color: rankColor,
-              fontStyle: 'bold',
-            })
-            .setOrigin(0, 0.5)
-        );
-        panel.add(
-          this.add
-            .text(180, 290 + i * 62, e.nickname, {
-              fontFamily: FONT,
-              fontSize: '30px',
-              color: rankColor,
-            })
-            .setOrigin(0, 0.5)
-        );
-        panel.add(
-          this.add
-            .text(GAME_WIDTH - 110, 290 + i * 62, `${e.days}일차 · ${seconds}초`, {
-              fontFamily: FONT,
-              fontSize: '28px',
-              color: COLORS.subCss,
-            })
-            .setOrigin(1, 0.5)
-        );
-      });
+    this.lbPanel = showLeaderboardPanel(this, gameState.settings.nickname, () => {
+      this.lbPanel = null;
     });
   }
 }

@@ -2,117 +2,165 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q4_WALK } from '../../config';
 import { gameState } from '../../core/GameState';
 import { Cadet } from '../../ui/Characters';
-import {
-  drawBarracks,
-  drawCloud,
-  drawFlagpole,
-  drawMountains,
-  drawSkyGradient,
-  drawStreetlight,
-  drawTree,
-} from '../../ui/Scenery';
-import { pick, randFloat, randRange } from '../../utils/rng';
+import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
-const ROAD_TOP = 500;
+const ROAD_L = 150;
+const ROAD_R = 570;
+const PLAYER_X = (ROAD_L + ROAD_R) / 2;
+const PLAYER_Y = 960;
+const GUARD_LEFT_X = ROAD_L + 62;
+const GUARD_RIGHT_X = ROAD_R - 62;
+
+interface Guard {
+  cadet: Cadet;
+  worldY: number;
+  x: number;
+  /** 시선 기준 각 (도로 중앙을 향함) */
+  baseAngle: number;
+  /** 스윕 위상/주기 — 선배마다 달라 패턴 암기가 안 통한다 */
+  phaseMs: number;
+  periodMs: number;
+}
 
 /**
- * Q4. 태권도장까지 걸어가기 — 화면 홀드 = 뛰기(HP 소모), 떼면 걷기.
- * 선배는 예고 없이 좌/우/정면 중 무작위 방향에서 갑자기 나타난다.
- * 등장 순간 반응 유예(graceMs) 안에 뛰기로 전환하지 못하면 게임 오버.
+ * Q4. 태권도장까지 가기 — 탑다운 잠입.
+ * 길가에 늘어선 선배들의 시선이 CCTV처럼 좌우로 회전한다.
+ * 시야(부채꼴)에 걸린 채 '걷고' 있으면 유예(graceMs) 후 발각 — 구보 중이면 안전.
+ * 구보는 HP를 태우고, 사각지대 걷기는 HP를 회복한다. 관리 실패 = 탈진.
  */
 export class WalkScene extends BaseMainScene {
-  private progressMs = 0;
-  private targetMs = 1;
+  private progressPx = 0;
+  private distancePx = 1;
+  private elapsedMs = 0;
   private holding = false;
-  private seniorState: 'away' | 'in' = 'away';
-  private notRunningMs = 0;
-  private graceMs = 300;
-  private seniorSide: 'left' | 'right' | 'center' = 'right';
+  private spottedMs = 0;
+  private graceMs = 500;
+  /** 미니퀘스트/일시정지 복귀 직후 잠깐의 판정 면제 */
+  private spotSafeUntilMs = 0;
+  private dangerOn = false;
 
+  private guards: Guard[] = [];
   private player!: Cadet;
-  private senior!: Cadet;
+  private coneG!: Phaser.GameObjects.Graphics;
   private progressFill!: Phaser.GameObjects.Graphics;
   private stateText!: Phaser.GameObjects.Text;
-  private stripes: Phaser.GameObjects.Rectangle[] = [];
+  private alertText!: Phaser.GameObjects.Text;
+  private dashes: Phaser.GameObjects.Rectangle[] = [];
+  private sideDecor: Phaser.GameObjects.Container[] = [];
+  private dojang!: Phaser.GameObjects.Container;
 
   constructor() {
     super({ key: 'walk' });
   }
 
   create(): void {
-    this.progressMs = 0;
+    this.progressPx = 0;
+    this.elapsedMs = 0;
     this.holding = false;
-    this.seniorState = 'away';
-    this.notRunningMs = 0;
-    this.targetMs = Q4_WALK.distanceMs(gameState.day);
+    this.spottedMs = 0;
+    this.spotSafeUntilMs = 0;
+    this.dangerOn = false;
+    this.distancePx = Q4_WALK.distancePx(gameState.day);
+    this.graceMs = Q4_WALK.graceMs(gameState.day);
 
-    // 애니풍 노을 하늘 + 원경 산 + 생활관 건물
-    drawSkyGradient(this, 0, 0, GAME_WIDTH, ROAD_TOP, 0x5d82b8, 0xf2c18e);
-    const sun = this.add.graphics();
-    sun.fillStyle(0xffe9b8, 0.25);
-    sun.fillCircle(560, 400, 70);
-    sun.fillStyle(0xfff3d0, 1);
-    sun.fillCircle(560, 400, 34);
-    drawCloud(this, 150, 130, 1.1, 0.85);
-    drawCloud(this, 520, 215, 0.8, 0.7);
-    drawMountains(this, ROAD_TOP - 28, 150, 0x54679a, 0.9);
-    drawMountains(this, ROAD_TOP - 28, 90, 0x40527e, 1);
-    drawBarracks(this, 30, ROAD_TOP - 26, 220, 120, 0x37415e);
-    drawBarracks(this, 480, ROAD_TOP - 26, 210, 100, 0x3d4868);
-    drawFlagpole(this, 320, ROAD_TOP - 26, 150);
-    // 저 멀리 태권도장
-    const dojang = this.add.graphics();
-    dojang.fillStyle(0x8a4a3c, 1);
-    dojang.fillRect(330, 442, 60, 32);
-    dojang.fillStyle(0x5c2f28, 1);
-    dojang.fillTriangle(320, 442, 400, 442, 360, 416);
-
-    // 잔디 둔덕 + 도로 (원근)
+    // ── 탑다운 배경: 잔디 → 인도 → 도로 ──
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x3f7d4e, 0x3f7d4e, 0x2e5e3e, 0x2e5e3e, 1);
-    bg.fillRect(0, ROAD_TOP - 30, GAME_WIDTH, 30);
-    bg.fillStyle(0x44475a, 1);
-    bg.fillTriangle(280, ROAD_TOP, 440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT);
-    bg.fillTriangle(280, ROAD_TOP, -200, GAME_HEIGHT, GAME_WIDTH + 200, GAME_HEIGHT);
-    // 도로 양옆 잔디
-    bg.fillStyle(0x2e5e3e, 1);
-    bg.fillTriangle(280, ROAD_TOP, -200, GAME_HEIGHT, -560, GAME_HEIGHT);
-    bg.fillTriangle(440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT, GAME_WIDTH + 560, GAME_HEIGHT);
-    // 도로 가장자리 차선
-    bg.lineStyle(6, 0xe8e4d8, 0.7);
-    bg.lineBetween(280, ROAD_TOP, -200, GAME_HEIGHT);
-    bg.lineBetween(440, ROAD_TOP, GAME_WIDTH + 200, GAME_HEIGHT);
-    // 노을빛이 도로에 스며드는 하이라이트
-    bg.fillGradientStyle(0xf2c18e, 0xf2c18e, 0xf2c18e, 0xf2c18e, 0.12, 0.12, 0, 0);
-    bg.fillRect(0, ROAD_TOP, GAME_WIDTH, 220);
-    // 가로수 + 가로등
-    drawTree(this, 70, 690, 1.15, 0x3f7d4e);
-    drawTree(this, 645, 660, 0.95, 0x4e8d55);
-    drawStreetlight(this, 140, 620, 130, 1);
-    drawStreetlight(this, 580, 610, 120, -1);
+    // 양옆 잔디
+    bg.fillGradientStyle(0x3f7d4e, 0x3f7d4e, 0x35693f, 0x35693f, 1);
+    bg.fillRect(0, 0, ROAD_L - 34, GAME_HEIGHT);
+    bg.fillRect(ROAD_R + 34, 0, GAME_WIDTH - ROAD_R - 34, GAME_HEIGHT);
+    // 인도 (연석)
+    bg.fillStyle(0xb9b2a0, 1);
+    bg.fillRect(ROAD_L - 34, 0, 34, GAME_HEIGHT);
+    bg.fillRect(ROAD_R, 0, 34, GAME_HEIGHT);
+    // 아스팔트
+    bg.fillGradientStyle(0x4a4d60, 0x4a4d60, 0x424556, 0x424556, 1);
+    bg.fillRect(ROAD_L, 0, ROAD_R - ROAD_L, GAME_HEIGHT);
+    // 도로 가장자리 실선
+    bg.fillStyle(0xe8e4d8, 0.75);
+    bg.fillRect(ROAD_L + 8, 0, 6, GAME_HEIGHT);
+    bg.fillRect(ROAD_R - 14, 0, 6, GAME_HEIGHT);
 
-    this.add
-      .text(GAME_WIDTH / 2, ROAD_TOP - 90, '🥋 태권도장은 저 멀리...', {
-        fontFamily: FONT,
-        fontSize: '28px',
-        color: '#f5ecd8',
-      })
-      .setOrigin(0.5);
-
-    // 중앙선 (이동 연출)
-    this.stripes = [];
-    for (let i = 0; i < 6; i++) {
-      const y = ROAD_TOP + 40 + i * 130;
-      const s = this.add.rectangle(GAME_WIDTH / 2, y, 14, 60, 0xf5f5f5, 0.8);
-      this.stripes.push(s);
+    // 중앙 점선 (스크롤 연출)
+    this.dashes = [];
+    for (let i = 0; i < 11; i++) {
+      const d = this.add.rectangle(PLAYER_X, 0, 12, 66, 0xf5f5f5, 0.45).setDepth(1);
+      this.dashes.push(d);
     }
 
-    // 도착 게이지
+    // 길가 장식 (수풀/가로등 느낌) — 월드 스크롤에 맞춰 재활용
+    this.sideDecor = [];
+    for (let i = 0; i < 8; i++) {
+      const c = this.add.container(0, 0).setDepth(1);
+      const g = this.add.graphics();
+      const leftSide = i % 2 === 0;
+      const bx = leftSide ? 62 : GAME_WIDTH - 62;
+      g.fillStyle(0x2e5e3e, 1);
+      g.fillCircle(0, 0, 34);
+      g.fillCircle(-24, 14, 24);
+      g.fillCircle(26, 12, 26);
+      g.fillStyle(0x4e8d55, 1);
+      g.fillCircle(6, -8, 20);
+      c.add(g);
+      c.setX(bx + randFloat(-14, 14));
+      this.sideDecor.push(c);
+    }
+
+    // 시야 부채꼴 레이어 (캐릭터 아래)
+    this.coneG = this.add.graphics().setDepth(3);
+
+    // 골인 지점 — 태권도장 (마지막에 스크롤되어 내려온다)
+    this.dojang = this.add.container(PLAYER_X, -9999).setDepth(5);
+    const dg = this.add.graphics();
+    dg.fillStyle(0x8a4a3c, 1);
+    dg.fillRoundedRect(-190, -90, 380, 150, 14);
+    dg.fillStyle(0x5c2f28, 1);
+    dg.fillRect(-210, -110, 420, 34);
+    dg.fillStyle(0xf5ecd8, 1);
+    dg.fillRoundedRect(-120, -46, 240, 72, 10);
+    this.dojang.add(dg);
+    this.dojang.add(
+      this.add
+        .text(0, -10, '🥋 태권도장', {
+          fontFamily: FONT,
+          fontSize: '36px',
+          color: '#5c2f28',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+    );
+
+    // ── 도로변 선배 배치 ──
+    this.guards = [];
+    const spacing = Q4_WALK.seniorSpacingPx(gameState.day);
+    const basePeriod = Q4_WALK.vision.sweepPeriodMs(gameState.day);
+    let wy = 1150;
+    let side: 1 | -1 = chance(0.5) ? 1 : -1;
+    while (wy < this.distancePx - 300) {
+      // 대체로 좌우 번갈아 서 있다 (가끔 같은 쪽 연속)
+      side = chance(0.72) ? ((side === 1 ? -1 : 1) as 1 | -1) : side;
+      const gx = side === 1 ? GUARD_RIGHT_X : GUARD_LEFT_X;
+      const cadet = new Cadet(this, gx, -400, 'senior');
+      cadet.setScale(0.85).setDepth(6);
+      cadet.setFace('👀');
+      this.guards.push({
+        cadet,
+        worldY: wy,
+        x: gx,
+        baseAngle: side === 1 ? Math.PI : 0, // 도로 중앙을 향해
+        phaseMs: randFloat(0, 20000),
+        periodMs: basePeriod * randFloat(0.85, 1.25),
+      });
+      wy += spacing + randFloat(-260, 260);
+    }
+
+    // ── HUD ──
     const barBg = this.add.graphics();
     barBg.fillStyle(0x000000, 0.55);
     barBg.fillRoundedRect(GAME_WIDTH / 2 - 220, 80, 440, 40, 10);
-    this.progressFill = this.add.graphics();
+    barBg.setDepth(10);
+    this.progressFill = this.add.graphics().setDepth(10);
     this.add
       .text(GAME_WIDTH / 2, 100, '도착까지', {
         fontFamily: FONT,
@@ -120,13 +168,43 @@ export class WalkScene extends BaseMainScene {
         color: COLORS.textCss,
       })
       .setOrigin(0.5)
-      .setDepth(10);
+      .setDepth(11);
 
-    this.player = new Cadet(this, GAME_WIDTH / 2, 1010, 'player');
+    this.player = new Cadet(this, PLAYER_X, PLAYER_Y, 'player');
+    this.player.setDepth(7);
     this.player.setMotion('walk');
 
-    this.senior = new Cadet(this, GAME_WIDTH + 150, 820, 'senior');
-    this.senior.setVisible(false);
+    this.alertText = this.add
+      .text(PLAYER_X, PLAYER_Y - 190, '❗ 시야에 걸렸다 — 뛰어!!', {
+        fontFamily: FONT,
+        fontSize: '34px',
+        color: COLORS.accentCss,
+        fontStyle: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        padding: { x: 16, y: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(20)
+      .setVisible(false);
+
+    this.stateText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 120, '', {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: COLORS.textCss,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: { x: 20, y: 12 },
+      })
+      .setOrigin(0.5)
+      .setDepth(20);
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 56, '시야에 걸리면 구보 필수 · 사각지대에선 걸어서 HP 회복', {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: COLORS.subCss,
+      })
+      .setOrigin(0.5)
+      .setDepth(20);
 
     // 구보 중 발밑 흙먼지
     this.time.addEvent({
@@ -141,6 +219,7 @@ export class WalkScene extends BaseMainScene {
           0xd9cfc0,
           0.35
         );
+        puff.setDepth(6);
         this.tweens.add({
           targets: puff,
           y: puff.y + 20,
@@ -152,135 +231,130 @@ export class WalkScene extends BaseMainScene {
       },
     });
 
-    this.stateText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 120, '🚶 걷는 중... (화면을 꾹 누르면 뛰기)', {
-        fontFamily: FONT,
-        fontSize: '30px',
-        color: COLORS.textCss,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: { x: 20, y: 12 },
-      })
-      .setOrigin(0.5);
-
-    this.input.on('pointerdown', () => {
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.y < 110) return; // 상단 UI(일시정지/음소거) 영역
       this.holding = true;
     });
     this.input.on('pointerup', () => {
       this.holding = false;
     });
-    // 미니퀘스트 pause 중 pointerup이 유실되면 홀드가 고착된다 — pause 시 강제 해제
+    // 미니퀘스트/일시정지 pause 중 pointerup이 유실되면 홀드가 고착된다 — pause 시 강제 해제
     this.events.on(Phaser.Scenes.Events.PAUSE, () => {
       this.holding = false;
     });
+    // 복귀 직후 짧은 판정 면제 — 눈 뜨자마자 시야 정중앙이어도 대응할 시간을 준다
+    this.events.on(Phaser.Scenes.Events.RESUME, () => {
+      this.spottedMs = 0;
+      this.spotSafeUntilMs = this.elapsedMs + 600;
+    });
 
     this.setupCommon();
-
-    this.startSeniorLoop({
-      params: () => ({
-        gapMs: randRange(Q4_WALK.gapMsRange(this.day)),
-        stayMs: randRange(Q4_WALK.stayMsRange(this.day)),
-      }),
-      onEnter: () => {
-        this.seniorState = 'in';
-        this.notRunningMs = 0;
-        this.graceMs = Q4_WALK.graceMs(this.day);
-        this.seniorSide = pick(['left', 'right', 'center'] as const);
-        // 변칙 등장 — 매번 크기(거리감)와 위치가 달라진다
-        const scale = randFloat(0.8, 1.2);
-        if (this.seniorSide === 'center') {
-          // 정면에 갑자기 나타남 — 텔레그래프 없이 즉시 등장
-          this.senior
-            .setPosition(GAME_WIDTH / 2 + randFloat(-90, 90), randFloat(720, 820))
-            .setScale(scale * 0.7)
-            .setAlpha(0);
-          this.senior.setVisible(true);
-          this.senior.setMotion('idle');
-          this.tweens.add({ targets: this.senior, alpha: 1, scale, duration: 120 });
-        } else {
-          const targetX = this.seniorSide === 'right' ? GAME_WIDTH - 130 : 130;
-          this.senior
-            .setPosition(this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150, randFloat(770, 860))
-            .setScale(scale)
-            .setAlpha(1);
-          this.senior.setVisible(true);
-          this.senior.setMotion('run');
-          this.tweens.add({
-            targets: this.senior,
-            x: targetX + randFloat(-30, 30),
-            duration: 160,
-            ease: 'Cubic.easeOut',
-            onComplete: () => this.senior.setMotion('idle'),
-          });
-        }
-      },
-      onLeave: () => {
-        this.seniorState = 'away';
-        if (this.seniorSide === 'center') {
-          this.senior.setVisible(false);
-          return;
-        }
-        this.senior.setMotion('run');
-        this.tweens.add({
-          targets: this.senior,
-          x: this.seniorSide === 'right' ? GAME_WIDTH + 150 : -150,
-          duration: 300,
-          onComplete: () => {
-            this.senior.setVisible(false);
-            this.senior.setMotion('idle');
-          },
-        });
-      },
-    });
   }
 
   protected tick(delta: number): void {
-    // 도착 게이지 (걷든 뛰든 동일 속도 — 뛰기의 대가는 HP)
-    this.progressMs += delta;
-    const ratio = Math.min(1, this.progressMs / this.targetMs);
-    this.progressFill.clear();
-    this.progressFill.fillStyle(COLORS.safe, 1);
-    this.progressFill.fillRoundedRect(GAME_WIDTH / 2 - 214, 86, 428 * ratio, 28, 7);
-    if (ratio >= 1) {
-      this.succeed('무사히 태권도장에 도착했다!');
+    this.elapsedMs += delta;
+
+    // ── 이동 & HP ──
+    const speed = this.holding ? Q4_WALK.runSpeed : Q4_WALK.walkSpeed;
+    this.progressPx += (speed * delta) / 1000;
+    if (this.holding) {
+      if (gameState.damage((Q4_WALK.runHpPerSec * delta) / 1000)) {
+        this.fail('무리한 구보로 탈진해서 쓰러졌다...');
+        return;
+      }
+    } else {
+      gameState.heal((Q4_WALK.walkRegenPerSec * delta) / 1000);
+    }
+
+    if (this.progressPx >= this.distancePx) {
+      this.succeed('선배들의 시선을 뚫고 태권도장에 도착했다!');
       return;
     }
 
-    // 뛰기 HP 드레인
-    if (this.holding) {
-      if (gameState.damage((Q4_WALK.runHpPerSec * delta) / 1000)) {
-        this.fail('무리하게 뛰다가 탈진해서 쓰러졌다...');
-        return;
+    // ── 스크롤 비주얼 ──
+    const dashSpan = 150;
+    const dashOff = this.progressPx % dashSpan;
+    this.dashes.forEach((d, i) => {
+      d.y = (i - 1) * dashSpan + dashOff;
+    });
+    const decorSpan = 460;
+    const decorTotal = decorSpan * this.sideDecor.length;
+    this.sideDecor.forEach((c, i) => {
+      const raw = (i * decorSpan + this.progressPx) % decorTotal;
+      c.setY(raw - decorSpan / 2);
+    });
+    this.dojang.setY(PLAYER_Y - (this.distancePx + 430 - this.progressPx));
+
+    // ── 선배 시야 판정 ──
+    const half = Phaser.Math.DegToRad(Q4_WALK.vision.halfAngleDeg);
+    const amp = Phaser.Math.DegToRad(Q4_WALK.vision.sweepAmpDeg);
+    const range = Q4_WALK.vision.rangePx;
+    let anySpot = false;
+    let spotter: Cadet | null = null;
+    this.coneG.clear();
+    for (const g of this.guards) {
+      const sy = PLAYER_Y - (g.worldY - this.progressPx);
+      g.cadet.setY(sy);
+      const onScreen = sy > -250 && sy < GAME_HEIGHT + 250;
+      g.cadet.setVisible(onScreen);
+      if (!onScreen) continue;
+
+      const gaze =
+        g.baseAngle + Math.sin(((this.elapsedMs + g.phaseMs) / g.periodMs) * Math.PI * 2) * amp;
+      const dx = PLAYER_X - g.x;
+      const dy = PLAYER_Y - sy;
+      const dist = Math.hypot(dx, dy);
+      const inCone = dist < range && Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - gaze)) < half;
+      if (inCone) {
+        anySpot = true;
+        spotter = g.cadet;
       }
+      g.cadet.setFace(inCone ? (this.holding ? '🫡' : '😡') : '👀');
+
+      // 시야 부채꼴 — 평소엔 노랑, 나를 비추는 중엔 빨강
+      this.coneG.fillStyle(inCone ? 0xe94560 : 0xffd166, inCone ? 0.2 : 0.11);
+      this.coneG.slice(g.x, sy, range, gaze - half, gaze + half, false);
+      this.coneG.fillPath();
     }
 
-    // 선배 판정
-    if (this.seniorState === 'in') {
-      if (this.holding) {
-        this.notRunningMs = 0;
+    // ── 발각 유예 판정 ──
+    if (anySpot) {
+      if (!this.dangerOn) {
+        this.dangerOn = true;
+        this.setDanger('in');
+      }
+      const graced = this.elapsedMs < this.spotSafeUntilMs;
+      if (this.holding || graced) {
+        this.spottedMs = 0;
       } else {
-        this.notRunningMs += delta;
-        if (this.notRunningMs > this.graceMs) {
+        this.spottedMs += delta;
+        if (this.spottedMs > this.graceMs && spotter) {
           this.player.setFace('😨');
-          this.failCaught(this.senior, '선배가 갑자기 나타났는데 반응이 늦었다! 걷는 걸 들켰다.');
+          this.failCaught(spotter, '시야에 걸린 채 걷다가 딱 걸렸다!', '야, 일로 와봐.');
           return;
         }
       }
+      this.alertText.setVisible(!this.holding);
+    } else {
+      if (this.dangerOn) {
+        this.dangerOn = false;
+        this.setDanger('off');
+      }
+      this.spottedMs = 0;
+      this.alertText.setVisible(false);
     }
 
-    // 연출 갱신
+    // ── HUD/연출 갱신 ──
+    const ratio = Math.min(1, this.progressPx / this.distancePx);
+    this.progressFill.clear();
+    this.progressFill.fillStyle(COLORS.safe, 1);
+    this.progressFill.fillRoundedRect(GAME_WIDTH / 2 - 214, 86, 428 * ratio, 28, 7);
+
     this.stateText.setText(
-      this.holding ? '🏃 구보 중!! (HP 소모 중)' : '🚶 걷는 중... (화면을 꾹 누르면 뛰기)'
+      this.holding ? '🏃 구보 중!! (HP 소모)' : '🚶 걷는 중 (화면을 꾹 누르면 구보 · HP 회복)'
     );
     this.stateText.setColor(this.holding ? COLORS.warnCss : COLORS.textCss);
     this.player.setFace(this.holding ? '😤' : '😏');
     this.player.setMotion(this.holding ? 'run' : 'walk');
-
-    const speed = (this.holding ? 0.55 : 0.25) * delta;
-    for (const s of this.stripes) {
-      s.y += speed * (0.5 + (s.y - ROAD_TOP) / 400);
-      if (s.y > GAME_HEIGHT + 40) s.y = ROAD_TOP + 30;
-      const t = (s.y - ROAD_TOP) / (GAME_HEIGHT - ROAD_TOP);
-      s.setScale(0.4 + t, 0.4 + t);
-    }
   }
 }

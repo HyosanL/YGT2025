@@ -9,13 +9,13 @@ import { BaseMiniScene, PANEL } from './BaseMiniScene';
 import { Button } from '../../ui/Button';
 
 /**
- * M1. 카톡 답장하기 — 7초 안에 제시된 문장을 정확히 타이핑.
- * 숨겨진 <input>으로 모바일 가상 키보드를 띄우고, 키보드 포커스 확인 후 타이머 시작.
+ * M1. 카톡 답장하기 — 제한 시간 안에 제시된 문장을 정확히 타이핑.
+ * 게임 좌표에 맞춰 겹쳐 놓은 '보이는' <input>이 키보드를 띄운다 (직접 탭 가능해 확실).
+ * 키보드 포커스(또는 첫 입력) 확인 후 타이머 시작.
  * 실제 카톡 캡처 이미지는 사용자 제공 예정(src/assets/img/kakao/) — 그 전까지 메신저풍 목업.
  */
 export class KakaoScene extends BaseMiniScene {
   private prompt!: KakaoPrompt;
-  private typedText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private hiddenInput: HiddenInput | null = null;
   private timerStarted = false;
@@ -81,22 +81,8 @@ export class KakaoScene extends BaseMiniScene {
       })
       .setOrigin(0.5);
 
-    // 입력 표시 영역
-    const typedBg = this.add.graphics();
-    typedBg.fillStyle(0x0d1424, 1);
-    typedBg.fillRoundedRect(PANEL.x + 40, msgY + 260, PANEL.w - 80, 90, 14);
-    typedBg.lineStyle(2, COLORS.warn, 0.7);
-    typedBg.strokeRoundedRect(PANEL.x + 40, msgY + 260, PANEL.w - 80, 90, 14);
-    this.typedText = this.add
-      .text(GAME_WIDTH / 2, msgY + 305, '', {
-        fontFamily: FONT,
-        fontSize: '32px',
-        color: COLORS.textCss,
-      })
-      .setOrigin(0.5);
-
     this.hintText = this.add
-      .text(GAME_WIDTH / 2, msgY + 400, '키보드를 기다리는 중... (안 뜨면 화면을 탭!)', {
+      .text(GAME_WIDTH / 2, msgY + 400, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
         fontFamily: FONT,
         fontSize: '24px',
         color: COLORS.warnCss,
@@ -112,15 +98,17 @@ export class KakaoScene extends BaseMiniScene {
       onClick: () => this.send(),
     });
 
-    // 숨겨진 input — 씬 진입 즉시 키보드 요청, 포커스 확인 후 타이머 시작
+    // 보이는 input을 게임 좌표에 겹쳐 배치 — 씬 진입 즉시 키보드 요청,
+    // 포커스(또는 첫 입력) 확인 후 타이머 시작
     this.hiddenInput = createHiddenInput({
       onInput: (value) => this.onTyped(value),
       onEnter: () => this.send(),
       onFocus: () => this.beginCountdown(),
+      rect: { x: PANEL.x + 40, y: msgY + 260, w: PANEL.w - 80, h: 90 },
     });
     this.hiddenInput.focus();
 
-    // 모바일에서 제스처 없이는 포커스가 안 될 수 있음 → 화면 탭으로 재시도
+    // input 밖(패널 어디든)을 탭해도 포커스 재시도 — 제스처 안에서 focus가 불려 확실해진다
     this.add
       .zone(0, 0, GAME_WIDTH, PANEL.y + PANEL.h - 160)
       .setOrigin(0)
@@ -144,19 +132,22 @@ export class KakaoScene extends BaseMiniScene {
 
   private onTyped(value: string): void {
     if (this.done) return;
-    this.typedText.setText(value.length > 0 ? value : '');
+    // 포커스 이벤트가 유실됐더라도 타이핑이 시작됐다면 타이머는 돌아야 공정하다
+    this.beginCountdown();
     const target = this.prompt.reply;
     if (value === target) {
       audio.ding();
+      this.hiddenInput?.el.blur(); // 키보드 내리고 결과 연출
       this.finishSuccess('세이프! 답장 완료.');
       return;
     }
     // 올바른 진행이면 흰색, 오타면 빨간색
-    this.typedText.setColor(target.startsWith(value) ? COLORS.textCss : COLORS.accentCss);
+    this.hiddenInput?.setColor(target.startsWith(value) ? COLORS.textCss : COLORS.accentCss);
   }
 
   private send(): void {
     if (this.done || !this.hiddenInput) return;
+    this.hiddenInput.el.blur(); // 키보드 내리고 결과 연출
     if (this.hiddenInput.value === this.prompt.reply) {
       this.finishSuccess('세이프! 답장 완료.');
     } else {

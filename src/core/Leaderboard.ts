@@ -12,6 +12,18 @@ export interface SubmitResult {
   error?: string;
 }
 
+export interface MyRank {
+  rank: number;
+  days: number;
+  play_ms: number;
+}
+
+export interface TopResult {
+  entries: LeaderboardEntry[];
+  /** 요청 시 닉네임을 넘겼고 서버에 기록이 있으면 내 최고 기록/순위 */
+  me: MyRank | null;
+}
+
 async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -39,13 +51,19 @@ function writeQueue(queue: LeaderboardEntry[]): void {
   }
 }
 
-/** 상위 50개 조회. 실패 시 null (호출측에서 로컬 최고기록만 표시) */
-export async function fetchTop(): Promise<LeaderboardEntry[] | null> {
+/** 상위 50개(+내 순위) 조회. 실패 시 null (호출측에서 로컬 최고기록만 표시) */
+export async function fetchTop(me?: string): Promise<TopResult | null> {
   try {
-    const res = await fetchWithTimeout(API_URL);
+    const url = me ? `${API_URL}?me=${encodeURIComponent(me)}` : API_URL;
+    const res = await fetchWithTimeout(url);
     if (!res.ok) return null;
-    const data = (await res.json()) as { ok: boolean; entries?: LeaderboardEntry[] };
-    return data.ok && Array.isArray(data.entries) ? data.entries : null;
+    const data = (await res.json()) as {
+      ok: boolean;
+      entries?: LeaderboardEntry[];
+      me?: MyRank | null;
+    };
+    if (!data.ok || !Array.isArray(data.entries)) return null;
+    return { entries: data.entries, me: data.me ?? null };
   } catch {
     return null;
   }
