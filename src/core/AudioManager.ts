@@ -40,21 +40,35 @@ function buildSilentWavUrl(): string {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
 
+/** 샤워장 노래 실음원 (1.25배속 + 욕실 리버브 가공본) */
+const SONG_URL = '/audio/shower-song.mp3';
+
 /**
  * Web Audio 기반 사운드 매니저 (싱글턴).
- * 모든 SFX/BGM은 신디사이저로 즉석 생성 — 외부 오디오 파일 불필요.
- * 「차는 두고 가」 음원은 사용자가 제공하기 전까지 자체 칩튠 루프로 대체:
- * 실제 음원이 준비되면 startSong()만 <audio> 기반 구현으로 교체하면 된다 (키 추상화).
+ * SFX/BGM은 신디사이저로 즉석 생성, 샤워장 노래는 실음원(mp3)을
+ * AudioBuffer로 디코드해 재생한다 (마스터 게인/음소거/일시정지 통합).
+ * 음원 로드가 안 된 환경(오프라인 첫 방문 등)에서는 칩튠 루프로 폴백.
  */
 class AudioManagerImpl {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
 
-  // 칩튠 루프 상태
-  private songTimer: number | null = null;
+  // 노래 상태 — 실음원 버퍼 재생 + 칩튠 폴백
+  private songTimer: number | null = null; // 칩튠 폴백 스케줄러
   private songNextTime = 0;
   private songStep = 0;
   private songPlaying = false;
+  private songMode: 'buffer' | 'chip' = 'chip';
+  private songData: ArrayBuffer | null = null;
+  private songBuffer: AudioBuffer | null = null;
+  private songDecodePending = false;
+  private songSource: AudioBufferSourceNode | null = null;
+  private songOffsetSec = 0;
+  private songStartedAtSec = 0;
+
+  // 샤워기 물소리 (필터 노이즈 루프)
+  private showerSrc: AudioBufferSourceNode | null = null;
+  private showerBuf: AudioBuffer | null = null;
 
   // BGM 루프 상태
   private bgmTimer: number | null = null;
@@ -116,6 +130,41 @@ class AudioManagerImpl {
     // 새 컨텍스트의 시계는 0부터 — 스케줄러 기준 시각을 리셋해야 루프가 되살아난다
     this.songNextTime = 0;
     this.bgmNextTime = 0;
+    // 이전 컨텍스트에 묶여 있던 소스들은 함께 죽었다 — 다음 tick에서 재생성된다
+    this.songSource = null;
+    this.showerSrc = null;
+    this.tryDecodeSong();
+  }
+
+  // ── 실음원 로드/디코드 ────────────────────────
+
+  /** 앱 시작 시 1회 호출 — 노래 파일을 미리 받아 두고 컨텍스트가 생기면 디코드 */
+  preloadSong(): void {
+    if (this.songData || this.songBuffer) return;
+    void fetch(SONG_URL)
+      .then((res) => (res.ok ? res.arrayBuffer() : null))
+      .then((buf) => {
+        if (!buf) return;
+        this.songData = buf;
+        this.tryDecodeSong();
+      })
+      .catch(() => undefined); // 오프라인 등 — 칩튠 폴백으로 진행
+  }
+
+  private tryDecodeSong(): void {
+    if (!this.ctx || !this.songData || this.songBuffer || this.songDecodePending) return;
+    this.songDecodePending = true;
+    // decodeAudioData가 버퍼를 detach하는 브라우저가 있어 사본을 넘긴다
+    this.ctx.decodeAudioData(
+      this.songData.slice(0),
+      (decoded) => {
+        this.songBuffer = decoded;
+        this.songDecodePending = false;
+      },
+      () => {
+        this.songDecodePending = false;
+      }
+    );
   }
 
   /**
@@ -245,12 +294,26 @@ class AudioManagerImpl {
     this.noiseBurst(this.now, 0.15, 0.4, 500);
   }
 
-  /** 전자레인지 "삐-" */
+  /** 전자레인지 "삐-" — 실제처럼 1초간 이어지는 고음 비프 (피에조 부저 느낌) */
   microwaveBeep(): void {
-    if (!this.ready) return;
-    for (let i = 0; i < 3; i++) {
-      this.tone('square', 2093, this.now + i * 0.45, 0.3, 0.25);
-    }
+    if (!this.ready || !this.ctx || !this.master) return;
+    const t = this.now;
+    const beep = (freq: number, vol: number): void => {
+      if (!this.ctx || !this.master) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+      gain.gain.setValueAtTime(vol, t + 0.85);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+      osc.connect(gain).connect(this.master);
+      osc.start(t);
+      osc.stop(t + 1.05);
+    };
+    beep(2093, 0.3); // 기본음
+    beep(4186, 0.05); // 배음 — 피에조 특유의 쨍한 질감
   }
 
   /** 카톡/알림 "띠링" */
@@ -329,8 +392,8 @@ class AudioManagerImpl {
     }
   }
 
-  // ── 노래 (플레이스홀더 칩튠 루프) ─────────────
-  // Q1에서 사용: startSong() 후 setSongPlaying(false/true)으로 일시정지/재개.
+  // ── 노래 (Q1 샤워장) — 실음원 버퍼 재생, 미로드 시 칩튠 폴백 ─────────
+  // startSong() 후 setSongPlaying(false/true)으로 일시정지/재개.
 
   private static readonly MELODY: ReadonlyArray<number> = [
     659, 587, 523, 587, 659, 659, 659, 0,
@@ -341,18 +404,59 @@ class AudioManagerImpl {
   private static readonly STEP_SEC = 0.19;
 
   startSong(): void {
-    if (!this.ready || this.songTimer !== null) return;
-    this.songStep = 0;
+    this.stopSong();
     this.songPlaying = true;
-    this.songNextTime = this.now + 0.1;
-    this.songTimer = window.setInterval(() => this.scheduleSong(), 60);
+    this.songOffsetSec = 0;
+    // 시작 시점에 모드 고정 — 판 중간에 음원이 뒤바뀌는 어색함 방지
+    this.songMode = this.songBuffer ? 'buffer' : 'chip';
+    if (this.songMode === 'chip') {
+      this.songStep = 0;
+      this.songNextTime = this.now + 0.1;
+      this.songTimer = window.setInterval(() => this.scheduleSong(), 60);
+    } else {
+      this.ensureSongState();
+    }
   }
 
   setSongPlaying(playing: boolean): void {
-    if (this.songPlaying === playing) return;
+    if (this.songPlaying === playing) {
+      // 상태는 같아도 소스가 죽어 있을 수 있다 (언락 지연/컨텍스트 재생성) — self-heal
+      this.ensureSongState();
+      return;
+    }
     this.songPlaying = playing;
-    if (playing) {
-      this.songNextTime = Math.max(this.songNextTime, this.now + 0.06);
+    if (this.songMode === 'chip') {
+      if (playing) {
+        this.songNextTime = Math.max(this.songNextTime, this.now + 0.06);
+      }
+    } else {
+      this.ensureSongState();
+    }
+  }
+
+  /** 버퍼 모드의 재생 상태를 실제 소스 존재 여부와 일치시킨다 (일시정지 = 오프셋 기억) */
+  private ensureSongState(): void {
+    if (this.songMode !== 'buffer' || !this.songBuffer) return;
+    const shouldPlay = this.songPlaying && this.ready;
+    if (shouldPlay && !this.songSource && this.ctx && this.master) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.songBuffer;
+      src.loop = true;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0.9;
+      src.connect(gain).connect(this.master);
+      src.start(0, this.songOffsetSec % this.songBuffer.duration);
+      this.songStartedAtSec = this.ctx.currentTime;
+      this.songSource = src;
+    } else if (!shouldPlay && this.songSource) {
+      this.songOffsetSec += this.now - this.songStartedAtSec;
+      try {
+        this.songSource.stop();
+      } catch {
+        // 이미 정지된 소스는 무시
+      }
+      this.songSource.disconnect();
+      this.songSource = null;
     }
   }
 
@@ -362,6 +466,54 @@ class AudioManagerImpl {
       this.songTimer = null;
     }
     this.songPlaying = false;
+    this.songOffsetSec = 0;
+    if (this.songSource) {
+      try {
+        this.songSource.stop();
+      } catch {
+        // 이미 정지된 소스는 무시
+      }
+      this.songSource.disconnect();
+      this.songSource = null;
+    }
+  }
+
+  // ── 샤워기 물소리 (필터 노이즈 루프) ──────────
+
+  /** 호출 시점에 컨텍스트가 없으면 무시 — 매 프레임 불러도 안전 (self-heal) */
+  startShowerNoise(): void {
+    if (!this.ready || this.showerSrc || !this.ctx || !this.master) return;
+    if (!this.showerBuf || this.showerBuf.sampleRate !== this.ctx.sampleRate) {
+      const len = Math.floor(this.ctx.sampleRate * 2);
+      this.showerBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const data = this.showerBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.showerBuf;
+    src.loop = true;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 350;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2400;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.07;
+    src.connect(hp).connect(lp).connect(gain).connect(this.master);
+    src.start();
+    this.showerSrc = src;
+  }
+
+  stopShowerNoise(): void {
+    if (!this.showerSrc) return;
+    try {
+      this.showerSrc.stop();
+    } catch {
+      // 이미 정지된 소스는 무시
+    }
+    this.showerSrc.disconnect();
+    this.showerSrc = null;
   }
 
   private scheduleSong(): void {
@@ -470,6 +622,7 @@ class AudioManagerImpl {
   /** 씬 전환 등에서 흘러나오는 소리 정리 */
   stopAll(): void {
     this.stopSong();
+    this.stopShowerNoise();
     this.stopHeartbeat();
     this.stopBgm();
   }

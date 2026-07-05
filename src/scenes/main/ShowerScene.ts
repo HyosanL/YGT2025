@@ -241,7 +241,10 @@ export class ShowerScene extends BaseMainScene {
     });
     void this.noteTimer;
 
+    // 실음원(1.25배속 + 욕실 리버브) 재생 — 미로드 시 칩튠 폴백
     audio.startSong();
+    // 샤워기 물소리는 노래 일시정지 중에도 계속 흐른다
+    audio.startShowerNoise();
 
     this.startSeniorLoop({
       params: () => ({
@@ -288,6 +291,8 @@ export class ShowerScene extends BaseMainScene {
 
     const playing = !this.holding;
     audio.setSongPlaying(playing && !this.finished);
+    // 오디오 언락이 늦었어도 물소리가 뒤늦게라도 흐르도록 (내부 가드로 매 프레임 안전)
+    audio.startShowerNoise();
     if (playing) {
       this.songProgressMs += delta;
       if (this.songProgressMs >= this.songMs) {
