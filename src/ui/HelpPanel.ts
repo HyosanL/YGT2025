@@ -1,11 +1,14 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { gameState } from '../core/GameState';
 import { Button } from './Button';
 
 interface HelpTopic {
   icon: string;
   title: string;
   body: string;
+  /** 연습 가능한 퀘스트 — 씬 키와 실행 방식 */
+  practice?: { key: string; kind: 'main' | 'mini' };
 }
 
 interface HelpSection {
@@ -39,7 +42,7 @@ const SECTIONS: HelpSection[] = [
           '· 단, 쓰고 나서도 온전한 하트 1개가 남아 있어야 부활\n' +
           '· 모자라면 그대로 게임 오버\n\n' +
           '채우는 법: 미니 퀘스트 성공 = ⅓칸 · 벽치기 성공 = 1칸\n' +
-          '깎이는 법: 미니 퀘스트 실패 = 반 칸 (0이 되면 즉시 끝!)',
+          '깎이는 법: 미니 퀘스트 실패 = 1칸! (0이 되면 즉시 끝)',
       },
     ],
   },
@@ -49,6 +52,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '🚿',
         title: '샤워장 노래',
+        practice: { key: 'shower', kind: 'main' },
         body:
           '몰래 노래를 틀고 끝까지 듣는 게 목표.\n\n' +
           '· 노래는 자동 재생 — 빨간 게이지가 다 차면 성공\n' +
@@ -59,6 +63,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '🫡',
         title: '복도 인사',
+        practice: { key: 'hallway', kind: 'main' },
         body:
           '다가오는 사람의 견장 줄 수를 보고 응대해라.\n\n' +
           '· 1줄 후배 → 🙇 인사 (이것만 카운트!)\n' +
@@ -70,6 +75,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '🍜',
         title: '전자레인지',
+        practice: { key: 'microwave', kind: 'main' },
         body:
           '소등 전에 몰래 라면을 완성해라.\n\n' +
           '· 전자레인지 앞에 서 있으면 조리 진행 (불빛 + 소리)\n' +
@@ -80,6 +86,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '🥋',
         title: '무도장 가기',
+        practice: { key: 'walk', kind: 'main' },
         body:
           '위에서 내려다보는 길 — 선배들의 시선을 피해 도착해라.\n\n' +
           '· 평소엔 걷는다 (HP 회복)\n' +
@@ -91,6 +98,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '💥',
         title: '벽치기 (도박)',
+        practice: { key: 'wallpunch', kind: 'main' },
         body:
           '옆방 1학년들이 시끄럽다. 선택해라.\n\n' +
           '· [👊 벽 치기] = 도박\n' +
@@ -107,6 +115,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '💬',
         title: '카톡 답장',
+        practice: { key: 'kakao', kind: 'mini' },
         body:
           '선배의 카톡이 왔다. 늦으면 끝장.\n\n' +
           '· 노란 문장을 토씨 하나 안 틀리고 입력해라\n' +
@@ -117,6 +126,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '📊',
         title: '투표',
+        practice: { key: 'vote', kind: 'mini' },
         body:
           '옹성오의 지시를 읽고 설문에 답해라.\n\n' +
           '· 꼬인 문장(이중·삼중 부정) 중 의미가 맞는 선지 선택\n' +
@@ -127,6 +137,7 @@ const SECTIONS: HelpSection[] = [
       {
         icon: '📸',
         title: '사진 고르기',
+        practice: { key: 'photo', kind: 'mini' },
         body:
           '단체방에 옷장 검사 사진이 올라왔다.\n\n' +
           '· 고르기 모드: 제대로 정리된 옷장 1장을 터치\n' +
@@ -248,6 +259,32 @@ export function showHelpPanel(scene: Phaser.Scene, onClose: () => void): Phaser.
         wordWrap: { width: GAME_WIDTH - 180 },
       })
     );
+
+    // 연습 가능한 퀘스트 — 목숨/기록에 영향 없이 바로 체험
+    const practice = topic.practice;
+    if (practice) {
+      const practiceBtn = new Button(scene, GAME_WIDTH / 2, 928, {
+        label: '🎓 연습해보기 (목숨·기록 무관)',
+        width: 480,
+        height: 96,
+        color: COLORS.safe,
+        fontSize: 30,
+        onClick: () => {
+          root.destroy();
+          onClose();
+          gameState.startPractice();
+          if (practice.kind === 'main') {
+            scene.scene.start(practice.key);
+          } else {
+            // 미니 퀘스트는 오버레이 방식 — 타이틀을 pause하고 그 위에 띄운다
+            scene.scene.launch(practice.key, { returnTo: scene.scene.key });
+            scene.scene.pause();
+          }
+        },
+      });
+      c.add(practiceBtn);
+    }
+
     const backBtn = new Button(scene, GAME_WIDTH / 2 - 130, 1050, {
       label: '← 목록',
       width: 240,

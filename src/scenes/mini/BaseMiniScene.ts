@@ -111,6 +111,20 @@ export abstract class BaseMiniScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
+    if (gameState.practiceMode) {
+      this.add
+        .text(GAME_WIDTH / 2, PANEL.y - 44, '🎓 연습 모드', {
+          fontFamily: FONT,
+          fontSize: '24px',
+          color: COLORS.warnCss,
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          padding: { x: 16, y: 6 },
+        })
+        .setOrigin(0.5)
+        .setDepth(600);
+    }
+
     this.panicOverlay = this.add
       .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0xe94560, 0)
       .setOrigin(0)
@@ -206,8 +220,8 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setDepth(600);
     void text;
 
-    // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립
-    if (gameState.addLifeSixths(2)) {
+    // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립 (연습 모드는 제외)
+    if (!gameState.practiceMode && gameState.addLifeSixths(2)) {
       const lifeText = this.add
         .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅓ 적립!', {
           fontFamily: FONT,
@@ -228,8 +242,15 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   /**
    * 곧바로 본 게임으로 던지지 않고 회색 화면 위 빠른 카운트다운(3→2→1→시작!,
    * 총 ~1.7초)으로 손가락과 시선을 재정비할 시간을 준 뒤 resume한다.
+   * 연습 모드였다면 설명(도움말)으로 복귀.
    */
   private returnWithCountdown(): void {
+    if (gameState.practiceMode) {
+      gameState.endPractice();
+      this.scene.stop(this.returnTo);
+      this.scene.start('Title', { openHelp: true });
+      return;
+    }
     this.scene.launch('Pause', {
       returnTo: this.returnTo,
       mode: 'countdown',
@@ -253,7 +274,8 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     vibrate(HAPTIC.fail);
     this.cameras.main.shake(350, 0.009);
 
-    const alive = gameState.deductLifeSixths(MINI.failLifeSixths);
+    // 연습 모드는 목숨을 깎지 않는다
+    const alive = gameState.practiceMode ? true : gameState.deductLifeSixths(MINI.failLifeSixths);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `❌ ${reason}`, {
@@ -269,14 +291,19 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(600);
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 110, '💔 목숨 반 칸이 날아갔다!', {
-        fontFamily: FONT,
-        fontSize: '30px',
-        color: COLORS.warnCss,
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        padding: { x: 20, y: 10 },
-      })
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2 + 110,
+        gameState.practiceMode ? '🎓 연습이라 목숨은 무사하다' : '💔 목숨 1칸이 날아갔다!',
+        {
+          fontFamily: FONT,
+          fontSize: '30px',
+          color: COLORS.warnCss,
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          padding: { x: 20, y: 10 },
+        }
+      )
       .setOrigin(0.5)
       .setDepth(600);
 

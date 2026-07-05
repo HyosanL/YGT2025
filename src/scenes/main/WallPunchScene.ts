@@ -253,19 +253,30 @@ export class WallPunchScene extends BaseMainScene {
     this.sleepBtn.setEnabled(false);
     this.stopNoisy(); // 순간 정적
 
-    audio.thud();
+    // 쾅! 쾅! 쾅! — 3연타
+    audio.wallBang();
     this.player.punchOnce('left');
-    this.cameras.main.shake(150, 0.008);
-    this.tweens.add({ targets: this.wall, x: WALL_X - 14, duration: 60, yoyo: true });
-    // 벽에 금 가는 연출
-    const crack = this.add
-      .text(WALL_X + randFloat(-70, 70), randFloat(380, 760), '💢', {
-        fontFamily: FONT,
-        fontSize: '40px',
-      })
-      .setOrigin(0.5)
-      .setDepth(20);
-    this.time.delayedCall(2500, () => crack.destroy());
+    this.cameras.main.shake(520, 0.007);
+    this.tweens.add({
+      targets: this.wall,
+      x: WALL_X - 14,
+      duration: 85,
+      yoyo: true,
+      repeat: 2,
+    });
+    // 벽에 금 가는 연출 — 타격마다 하나씩
+    for (let i = 0; i < 3; i++) {
+      this.time.delayedCall(i * 170, () => {
+        const crack = this.add
+          .text(WALL_X + randFloat(-70, 70), randFloat(380, 760), '💢', {
+            fontFamily: FONT,
+            fontSize: '40px',
+          })
+          .setOrigin(0.5)
+          .setDepth(20);
+        this.time.delayedCall(2500, () => crack.destroy());
+      });
+    }
 
     // 정적... 심장박동
     this.dim.setFillStyle(0x000000, 0.45);
@@ -304,7 +315,8 @@ export class WallPunchScene extends BaseMainScene {
       this.player.setFace('😌');
       speechBubble(this, 400, 640, '조용해졌다... 취침해야겠다...', 1500, 40);
 
-      const gained = gameState.addLifeSixths(6);
+      // 연습 모드에서는 목숨 보상이 없다
+      const gained = gameState.practiceMode ? false : gameState.addLifeSixths(6);
       if (gained) {
         audio.chime();
         vibrate(HAPTIC.lifeGain);
@@ -330,7 +342,11 @@ export class WallPunchScene extends BaseMainScene {
       }
       this.time.delayedCall(1700, () =>
         this.succeed(
-          gained ? '도박 성공! ❤️ 목숨을 하나 얻고 꿀잠에 들었다.' : '조용해졌다. (목숨은 이미 가득)'
+          gained
+            ? '도박 성공! ❤️ 목숨을 하나 얻고 꿀잠에 들었다.'
+            : gameState.practiceMode
+              ? '도박 성공! (연습이라 보상은 없다)'
+              : '조용해졌다. (목숨은 이미 가득)'
         )
       );
     });

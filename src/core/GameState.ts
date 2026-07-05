@@ -23,6 +23,8 @@ class GameStateImpl {
   bestPlayMs = 0;
   totalPlayMs = 0;
   settings: Settings = { ...DEFAULT_SETTINGS };
+  /** 연습 모드 — 게임설명에서 퀘스트 체험. 목숨/기록/저장에 영향 없음 (비저장) */
+  practiceMode = false;
 
   /** 현재 플레이 구간 시작 시각 (0이면 구간 아님) */
   private segmentStart = 0;
@@ -84,6 +86,18 @@ class GameStateImpl {
     this.segmentStart = 0;
     this.clockHolds = 0; // 혹시 남아 있던 홀드 정리 (안전장치)
     this.save();
+  }
+
+  /** 연습 시작 — 1일차 난이도/HP로 세팅 (저장하지 않음, 기록·목숨 무관) */
+  startPractice(): void {
+    this.practiceMode = true;
+    this.day = 1;
+    this.hp = HP_MAX;
+  }
+
+  /** 연습 종료 — 타이틀 진입 시에도 항상 호출해 잔여 플래그를 정리한다 */
+  endPractice(): void {
+    this.practiceMode = false;
   }
 
   /** 하루 시작: HP 리셋 + 오늘의 퀘스트 기록 + 플레이 시간 측정 시작 */

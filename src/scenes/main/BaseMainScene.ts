@@ -58,7 +58,22 @@ export abstract class BaseMainScene extends Phaser.Scene {
     addMuteButton(this);
     this.createPauseButton();
     this.createDangerVignette();
-    this.scheduleMiniQuests();
+    if (gameState.practiceMode) {
+      // 연습 모드 — 미니 퀘스트 난입 없음 + 상단 배지
+      this.add
+        .text(GAME_WIDTH / 2, 26, '🎓 연습 모드', {
+          fontFamily: FONT,
+          fontSize: '24px',
+          color: COLORS.warnCss,
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          padding: { x: 16, y: 6 },
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(1000);
+    } else {
+      this.scheduleMiniQuests();
+    }
 
     const track = this.bgmTrack();
     if (track) audio.startBgm(track);
@@ -284,6 +299,15 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
   // ── 결과 처리 ────────────────────────────────
 
+  /** 연습 모드 종료 — 결과 화면 대신 설명(도움말)으로 복귀 */
+  private finishPractice(success: boolean, reason: string): void {
+    gameState.endPractice();
+    this.scene.start('Title', {
+      openHelp: true,
+      practiceMsg: success ? `✅ 연습 성공! ${reason}` : `❌ 연습 실패... ${reason}`,
+    });
+  }
+
   protected succeed(message: string): void {
     if (this.finished) return;
     this.finished = true;
@@ -293,7 +317,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
     vibrate(HAPTIC.success);
     this.cameras.main.flash(300, 78, 204, 163);
     this.time.delayedCall(550, () => {
-      this.scene.start('Result', { success: true, reason: message });
+      if (gameState.practiceMode) this.finishPractice(true, message);
+      else this.scene.start('Result', { success: true, reason: message });
     });
   }
 
@@ -307,7 +332,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.cameras.main.shake(400, 0.012);
     this.cameras.main.flash(400, 233, 69, 96);
     this.time.delayedCall(900, () => {
-      this.scene.start('Result', { success: false, reason });
+      if (gameState.practiceMode) this.finishPractice(false, reason);
+      else this.scene.start('Result', { success: false, reason });
     });
   }
 
@@ -348,7 +374,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
       },
     });
     this.time.delayedCall(1750, () => {
-      this.scene.start('Result', { success: false, reason });
+      if (gameState.practiceMode) this.finishPractice(false, reason);
+      else this.scene.start('Result', { success: false, reason });
     });
   }
 

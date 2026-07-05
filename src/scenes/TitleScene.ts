@@ -2,12 +2,19 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
-import { addMuteButton, Button } from '../ui/Button';
+import { addMuteButton, Button, showToast } from '../ui/Button';
 import { Cadet } from '../ui/Characters';
 import { showHelpPanel } from '../ui/HelpPanel';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { drawBarracks, drawFlagpole, drawMountains } from '../ui/Scenery';
 import { askNickname } from '../utils/nicknameDialog';
+
+interface TitleSceneData {
+  /** 연습 종료 후 복귀 — 게임설명 패널을 바로 연다 */
+  openHelp?: boolean;
+  /** 연습 결과 토스트 문구 */
+  practiceMsg?: string;
+}
 
 export class TitleScene extends Phaser.Scene {
   private lbPanel: Phaser.GameObjects.Container | null = null;
@@ -17,11 +24,21 @@ export class TitleScene extends Phaser.Scene {
     super({ key: 'Title' });
   }
 
-  create(): void {
+  create(data?: TitleSceneData): void {
     this.lbPanel = null;
     this.helpPanel = null;
+    gameState.endPractice(); // 어떤 경로로 돌아왔든 연습 플래그 정리
     audio.setBgmTempo(1); // 타이틀은 항상 원래 템포
     audio.startBgm('title');
+
+    // 연습 종료 복귀 — 설명 패널을 다시 열고 결과를 알려준다
+    if (data?.openHelp) {
+      this.time.delayedCall(50, () => this.toggleHelp());
+    }
+    if (data?.practiceMsg) {
+      const msg = data.practiceMsg;
+      this.time.delayedCall(250, () => showToast(this, msg));
+    }
 
     // 첫 실행이면 닉네임부터 정하고 시작한다
     if (!gameState.settings.nickname) {

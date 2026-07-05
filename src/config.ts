@@ -75,8 +75,8 @@ export const MINI = {
   chance: (day: number): number => Math.min(0.85, 0.3 + day * 0.05),
   /** 하루 최대 발생 횟수 */
   maxPerDay: 2,
-  /** 실패 시 목숨 차감 (⅙ 단위 — 3 = 반 칸). 하루는 이어서 진행, 0이 되면 게임 오버 */
-  failLifeSixths: 3,
+  /** 실패 시 목숨 차감 (⅙ 단위 — 6 = 1칸). 하루는 이어서 진행, 0이 되면 게임 오버 */
+  failLifeSixths: 6,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
   firstDelayMs: [1500, 3000] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */

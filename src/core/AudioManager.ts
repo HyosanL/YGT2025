@@ -389,6 +389,16 @@ class AudioManagerImpl {
     this.noiseBurst(this.now, 0.1, 0.5, 200);
   }
 
+  /** 벽치기 "쾅! 쾅! 쾅!" — 묵직한 3연타 */
+  wallBang(): void {
+    if (!this.ready) return;
+    for (let i = 0; i < 3; i++) {
+      const t = this.now + i * 0.17;
+      this.tone('sine', 85, t, 0.24, 1.0, 36);
+      this.noiseBurst(t, 0.1, 0.65, 260);
+    }
+  }
+
   /** 타이머 째깍 */
   tick(): void {
     if (!this.ready) return;
