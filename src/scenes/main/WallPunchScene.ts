@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q5_WALLPUNCH } from '../../config';
 import { audio } from '../../core/AudioManager';
+import { gameState } from '../../core/GameState';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import {
@@ -26,22 +27,21 @@ const CHATTER_LINES = [
   'ㄹㅇㅋㅋ',
 ];
 
-type PunchState = 'noisy' | 'suspense' | 'quietGap' | 'done';
+type PunchState = 'noisy' | 'suspense' | 'done';
 
 /**
- * Q5. 옆방(1학년 방) 벽 치기 — 순도 100% 도박.
- * 침대에 누워 있는데 옆방이 시끄럽다. 벽을 치면 조용해진다 —
- * 단, 벽 너머에 사실 선배가 놀러와 있었으면 문이 벌컥 열리며 즉사.
- * 조용해졌다가도 다시 떠들기 시작하니 목표 횟수만큼 반복해야 한다. 그만두기 불가.
+ * Q5. 옆방(1학년 방) 벽 치기 — 선택할 수 있는 도박.
+ * 침대에 누워 있는데 옆방이 시끄럽다.
+ * - 벽을 친다: 무사하면 조용해지고 ❤️ 목숨 +1. 벽 너머에 사실 선배가
+ *   놀러와 있었으면 문이 벌컥 열리며 "뭐하냐?" — 즉사.
+ * - 참고 잔다: 시끄러운 채로 하루가 지나간다 (안전, 보상 없음).
  */
 export class WallPunchScene extends BaseMainScene {
-  private count = 0;
-  private target = 5;
   private punchState: PunchState = 'noisy';
   private chatterEvent: Phaser.Time.TimerEvent | null = null;
 
   private punchBtn!: Button;
-  private countText!: Phaser.GameObjects.Text;
+  private sleepBtn!: Button;
   private wall!: Phaser.GameObjects.Container;
   private dim!: Phaser.GameObjects.Rectangle;
   private suspenseText!: Phaser.GameObjects.Text;
@@ -57,7 +57,6 @@ export class WallPunchScene extends BaseMainScene {
   }
 
   create(): void {
-    this.count = 0;
     this.punchState = 'noisy';
     this.chatterEvent = null;
 
@@ -138,10 +137,10 @@ export class WallPunchScene extends BaseMainScene {
     blanket.fillStyle(0x4e714e, 1);
     blanket.fillRect(432, 768, 132, 10);
 
-    this.countText = this.add
-      .text(GAME_WIDTH / 2 + 60, 120, '', {
+    this.add
+      .text(GAME_WIDTH / 2 + 60, 120, '옆방이 너무 시끄럽다...', {
         fontFamily: FONT,
-        fontSize: '44px',
+        fontSize: '40px',
         color: COLORS.textCss,
         fontStyle: 'bold',
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -151,9 +150,9 @@ export class WallPunchScene extends BaseMainScene {
       .setDepth(10);
 
     this.add
-      .text(GAME_WIDTH / 2 + 60, 190, '조용해질 때까지 — 되돌릴 수 없다', {
+      .text(GAME_WIDTH / 2 + 60, 190, '치면 도박(❤️+1 or 끝장) · 참으면 그냥 하루가 간다', {
         fontFamily: FONT,
-        fontSize: '26px',
+        fontSize: '24px',
         color: COLORS.accentCss,
       })
       .setOrigin(0.5);
@@ -172,23 +171,25 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(60);
 
-    this.punchBtn = new Button(this, GAME_WIDTH / 2 + 60, GAME_HEIGHT - 200, {
-      label: '👊 벽 치기',
+    this.punchBtn = new Button(this, GAME_WIDTH / 2 + 60, GAME_HEIGHT - 280, {
+      label: '👊 벽 치기 (도박)',
       width: 420,
-      height: 140,
+      height: 124,
       color: COLORS.accent,
-      fontSize: 42,
+      fontSize: 36,
       onClick: () => this.punch(),
+    });
+    this.sleepBtn = new Button(this, GAME_WIDTH / 2 + 60, GAME_HEIGHT - 140, {
+      label: '😪 참고 잔다 (안전)',
+      width: 420,
+      height: 104,
+      color: COLORS.panelLight,
+      fontSize: 32,
+      onClick: () => this.sleep(),
     });
 
     this.setupCommon();
-    this.target = Q5_WALLPUNCH.hits(this.day);
-    this.updateCount();
     this.startNoisy();
-  }
-
-  private updateCount(): void {
-    this.countText.setText(`벽치기 ${this.count} / ${this.target}`);
   }
 
   // ── 옆방 수다 (칠 때마다 조용해졌다가 다시 시작) ──
@@ -197,6 +198,7 @@ export class WallPunchScene extends BaseMainScene {
     if (this.finished) return;
     this.punchState = 'noisy';
     this.punchBtn.setEnabled(true);
+    this.sleepBtn.setEnabled(true);
     this.player.setFace('😠');
     audio.startChatter();
     this.spawnChatterBubble();
@@ -229,12 +231,25 @@ export class WallPunchScene extends BaseMainScene {
     );
   }
 
-  // ── 벽 치기 판정 ──────────────────────────────
+  // ── 선택: 참고 잔다 (안전) ────────────────────
+
+  private sleep(): void {
+    if (this.finished || this.punchState !== 'noisy') return;
+    this.punchState = 'done';
+    this.punchBtn.setEnabled(false);
+    this.sleepBtn.setEnabled(false);
+    this.player.setFace('😑');
+    speechBubble(this, 400, 640, '(시끄럽지만... 참자...)', 1100, 40);
+    this.time.delayedCall(1200, () => this.succeed('시끄러운 밤을 견뎌냈다. 내일은 조용하길...'));
+  }
+
+  // ── 선택: 벽 치기 (도박) ──────────────────────
 
   private punch(): void {
     if (this.finished || this.punchState !== 'noisy') return;
     this.punchState = 'suspense';
     this.punchBtn.setEnabled(false);
+    this.sleepBtn.setEnabled(false);
     this.stopNoisy(); // 순간 정적
 
     audio.thud();
@@ -283,27 +298,39 @@ export class WallPunchScene extends BaseMainScene {
         return;
       }
 
-      // 무사 — 옆방이 조용해졌다
-      this.count += 1;
-      this.updateCount();
+      // 무사 — 옆방이 조용해졌다. 도박 성공, 목숨 +1
+      this.punchState = 'done';
       this.player.setFace('😌');
+      speechBubble(this, 400, 640, '조용해졌다... 취침해야겠다...', 1500, 40);
 
-      if (this.count >= this.target) {
-        this.punchState = 'done';
-        speechBubble(this, 400, 640, '조용해졌으니 취침해야겠다...', 1400, 40);
-        this.time.delayedCall(1500, () =>
-          this.succeed('옆방을 조용히 시키고 꿀잠에 들었다.')
-        );
-        return;
+      const gained = gameState.addLifeThirds(3);
+      if (gained) {
+        audio.chime();
+        const lifeText = this.add
+          .text(GAME_WIDTH / 2 + 60, 560, '❤️ 목숨 +1', {
+            fontFamily: FONT,
+            fontSize: '52px',
+            color: COLORS.safeCss,
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6,
+          })
+          .setOrigin(0.5)
+          .setDepth(60)
+          .setScale(0.4);
+        this.tweens.add({
+          targets: lifeText,
+          scale: 1,
+          y: 500,
+          duration: 500,
+          ease: 'Back.easeOut',
+        });
       }
-
-      // 잠깐의 평화... 다시 떠들기 시작한다
-      this.punchState = 'quietGap';
-      this.time.delayedCall(randFloat(1000, 1800), () => {
-        if (this.finished || this.punchState !== 'quietGap') return;
-        speechBubble(this, WALL_X + 30, 420, '(다시 떠들기 시작한다...)', 1000, 40);
-        this.startNoisy();
-      });
+      this.time.delayedCall(1700, () =>
+        this.succeed(
+          gained ? '도박 성공! ❤️ 목숨을 하나 얻고 꿀잠에 들었다.' : '조용해졌다. (목숨은 이미 가득)'
+        )
+      );
     });
   }
 

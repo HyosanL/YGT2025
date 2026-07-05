@@ -20,10 +20,70 @@ export class ResultScene extends Phaser.Scene {
     audio.stopAll();
     if (data.success) {
       this.showSuccess(data);
+    } else if (gameState.tryRevive()) {
+      // 목숨이 남아 있다 — 1칸 소모하고 같은 날 아침으로 부활
+      this.showRevive(data);
     } else {
       this.showGameOver(data);
     }
     addMuteButton(this);
+  }
+
+  /** 부활 연출 — 목숨 1칸을 쓰고 같은 일차를 다시 시작한다 */
+  private showRevive(data: ResultSceneData): void {
+    let advanced = false;
+    const advance = (): void => {
+      if (advanced) return;
+      advanced = true;
+      this.scene.start('DayIntro');
+    };
+
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0x2a1c4a, 0x2a1c4a, 0x0d0d16, 0x0d0d16, 1);
+    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    this.add
+      .text(GAME_WIDTH / 2, 470, data.reason, {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: COLORS.subCss,
+        wordWrap: { width: GAME_WIDTH - 100 },
+        align: 'center',
+      })
+      .setOrigin(0.5);
+
+    const heart = this.add
+      .text(GAME_WIDTH / 2, 360, '💫', { fontFamily: FONT, fontSize: '110px' })
+      .setOrigin(0.5)
+      .setScale(0.3);
+    this.tweens.add({ targets: heart, scale: 1, duration: 300, ease: 'Back.easeOut' });
+
+    this.add
+      .text(GAME_WIDTH / 2, 590, '목숨 하나를 사용했다!', {
+        fontFamily: FONT,
+        fontSize: '54px',
+        color: COLORS.warnCss,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(GAME_WIDTH / 2, 670, `남은 목숨  ${gameState.livesDisplay}`, {
+        fontFamily: FONT,
+        fontSize: '36px',
+        color: COLORS.textCss,
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(GAME_WIDTH / 2, 770, `${gameState.day}일차, 다시 아침이 밝는다...`, {
+        fontFamily: FONT,
+        fontSize: '30px',
+        color: COLORS.safeCss,
+      })
+      .setOrigin(0.5);
+
+    audio.chime();
+    this.time.delayedCall(1800, advance);
+    this.input.once('pointerdown', advance);
   }
 
   private showSuccess(data: ResultSceneData): void {
@@ -117,6 +177,13 @@ export class ResultScene extends Phaser.Scene {
         color: COLORS.textCss,
         wordWrap: { width: GAME_WIDTH - 100 },
         align: 'center',
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(GAME_WIDTH / 2, 592, '🖤🖤🖤 목숨을 모두 소진했다', {
+        fontFamily: FONT,
+        fontSize: '24px',
+        color: COLORS.subCss,
       })
       .setOrigin(0.5);
     this.add

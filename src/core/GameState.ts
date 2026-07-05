@@ -1,4 +1,4 @@
-import { HP_MAX } from '../config';
+import { HP_MAX, LIVES_MAX } from '../config';
 import type { MainQuestId, SaveData, Settings } from '../types';
 
 const STORAGE_KEY = 'ygt2025_save_v1';
@@ -12,6 +12,10 @@ const DEFAULT_SETTINGS: Settings = { mute: false, nickname: '' };
 class GameStateImpl {
   day = 1;
   hp = HP_MAX;
+  /** 목숨 (⅓ 단위 정수 — 3 = 하트 1개, 최대 LIVES_MAX*3).
+   *  새 판은 1칸(3)으로 시작. 벽치기 도박 성공 +3, 미니 퀘스트 성공 +1.
+   *  사망 시 3 소모 후 남아 있으면 부활. */
+  livesThirds = 3;
   currentQuestId: MainQuestId | null = null;
   lastQuestId: MainQuestId | null = null;
   bestDay = 0;
@@ -30,6 +34,10 @@ class GameStateImpl {
       const data = JSON.parse(raw) as Partial<SaveData>;
       this.day = typeof data.day === 'number' && data.day >= 1 ? Math.floor(data.day) : 1;
       this.hp = typeof data.hp === 'number' ? data.hp : HP_MAX;
+      this.livesThirds =
+        typeof data.livesThirds === 'number'
+          ? Math.max(0, Math.min(LIVES_MAX * 3, Math.floor(data.livesThirds)))
+          : 3;
       this.currentQuestId = data.currentQuestId ?? null;
       this.lastQuestId = data.lastQuestId ?? null;
       this.bestDay = typeof data.bestDay === 'number' ? data.bestDay : 0;
@@ -45,6 +53,7 @@ class GameStateImpl {
     const data: SaveData = {
       day: this.day,
       hp: this.hp,
+      livesThirds: this.livesThirds,
       currentQuestId: this.currentQuestId,
       lastQuestId: this.lastQuestId,
       bestDay: this.bestDay,
@@ -59,10 +68,11 @@ class GameStateImpl {
     }
   }
 
-  /** 새 도전 시작: 1일차부터 */
+  /** 새 도전 시작: 1일차부터, 목숨 1칸 */
   newRun(): void {
     this.day = 1;
     this.hp = HP_MAX;
+    this.livesThirds = 3;
     this.currentQuestId = null;
     this.lastQuestId = null;
     this.totalPlayMs = 0;
@@ -124,6 +134,39 @@ class GameStateImpl {
   /** HP 회복 (상한 HP_MAX) — 걷기 회복 등 초당 드레인의 역방향 */
   heal(amount: number): void {
     this.hp = Math.min(HP_MAX, this.hp + amount);
+  }
+
+  // ── 목숨 ─────────────────────────────────────
+
+  /** 목숨 추가 (⅓ 단위). 이미 가득이면 false */
+  addLifeThirds(thirds: number): boolean {
+    const max = LIVES_MAX * 3;
+    if (this.livesThirds >= max) return false;
+    this.livesThirds = Math.min(max, this.livesThirds + thirds);
+    this.save();
+    return true;
+  }
+
+  /**
+   * 사망 처리 — 목숨 1칸(3)을 소모하고, 남아 있으면 부활 가능(true).
+   * 시작 목숨 1칸으로 죽으면 0이 되어 부활 불가.
+   * 죽기 전까지 버틴 시간은 리더보드 생존시간에 합산해 둔다.
+   */
+  tryRevive(): boolean {
+    this.foldSegment();
+    this.livesThirds = Math.max(0, this.livesThirds - 3);
+    this.save();
+    return this.livesThirds > 0;
+  }
+
+  /** 목숨 표시 문자열 — ❤️(가득) + ⅓/⅔(부분) + 🖤(빈 칸) */
+  get livesDisplay(): string {
+    const full = Math.floor(this.livesThirds / 3);
+    const rem = this.livesThirds % 3;
+    const empty = LIVES_MAX - full - (rem > 0 ? 1 : 0);
+    return (
+      '❤️'.repeat(full) + (rem === 1 ? '⅓' : rem === 2 ? '⅔' : '') + '🖤'.repeat(Math.max(0, empty))
+    );
   }
 
   setNickname(nickname: string): void {

@@ -74,6 +74,13 @@ export class DayIntroScene extends Phaser.Scene {
         color: COLORS.safeCss,
       })
       .setOrigin(0.5);
+    this.add
+      .text(GAME_WIDTH / 2, 398, `목숨  ${gameState.livesDisplay}`, {
+        fontFamily: FONT,
+        fontSize: '28px',
+        color: COLORS.textCss,
+      })
+      .setOrigin(0.5);
 
     this.add
       .text(GAME_WIDTH / 2, 470, '오늘의 퀘스트', {

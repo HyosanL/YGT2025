@@ -9,6 +9,8 @@ export interface Settings {
 export interface SaveData {
   day: number;
   hp: number;
+  /** 목숨 (⅓ 단위 정수, 3 = 하트 1개) */
+  livesThirds?: number;
   currentQuestId: MainQuestId | null;
   lastQuestId: MainQuestId | null;
   bestDay: number;

@@ -200,6 +200,23 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(600);
     void text;
+
+    // 미니 퀘스트 성공 보상 — 목숨 ⅓ 적립
+    if (gameState.addLifeThirds(1)) {
+      const lifeText = this.add
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, `❤️ 목숨 +⅓  (${gameState.livesDisplay})`, {
+          fontFamily: FONT,
+          fontSize: '30px',
+          color: COLORS.safeCss,
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          padding: { x: 20, y: 10 },
+        })
+        .setOrigin(0.5)
+        .setDepth(600)
+        .setAlpha(0);
+      this.tweens.add({ targets: lifeText, alpha: 1, y: GAME_HEIGHT / 2 + 80, duration: 250 });
+    }
     this.time.delayedCall(700, () => this.returnWithCountdown());
   }
 

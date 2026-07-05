@@ -6,6 +6,8 @@ import type { KakaoPrompt, MainQuestId, VoteQuestion } from './types';
 export const GAME_WIDTH = 720;
 export const GAME_HEIGHT = 1280;
 export const HP_MAX = 100;
+/** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 도박 성공으로 채운다 */
+export const LIVES_MAX = 3;
 
 export const FONT = "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif";
 
@@ -190,17 +192,13 @@ export const Q4_WALK = {
 } as const;
 
 // ─────────────────────────────────────────────
-// Q5. 옆방 벽 치기 (10일차부터, 순수 운빨)
+// Q5. 옆방 벽 치기 — 선택 도박: 치면 목숨 +1 or 즉사, 안 치면 그냥 하루가 간다
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 요구 타수 */
-  hits: (day: number): number =>
-    Math.min(6, 4 + Math.floor(Math.max(0, day - WALLPUNCH_UNLOCK_DAY) / 4)),
-  /** 1회당 선배 확률 */
-  seniorChance: (day: number): number =>
-    Math.min(0.25, 0.05 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.01),
+  /** 벽을 쳤을 때 벽 너머에 선배가 있을 확률 — 목숨 +1 도박의 리스크 */
+  seniorChance: (day: number): number => Math.min(0.45, 0.28 + day * 0.012),
   /** 결과 공개 전 정적 시간 범위 (ms) */
-  suspenseMsRange: [300, 800] as const,
+  suspenseMsRange: [400, 1000] as const,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -428,7 +426,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   wallpunch: {
     title: '옆방(1학년 방) 벽 치기',
     emoji: '💥',
-    tip: '벽을 쳐라. 벽 너머에 선배가 없기를 빌어라. 되돌릴 수 없다.',
+    tip: '치면 도박 — 무사하면 ❤️ 목숨 +1, 선배가 있었으면 끝장. 참고 자도 된다.',
   },
 };
 

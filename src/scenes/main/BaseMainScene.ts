@@ -31,6 +31,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
   protected hpBar!: HpBar;
   protected finished = false;
   protected day = 1;
+  private livesText!: Phaser.GameObjects.Text;
   private miniActive = false;
   private resumeContext: 'mini' | 'pause' | null = null;
   private dangerG!: Phaser.GameObjects.Graphics;
@@ -49,6 +50,10 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.seniorTimer = null;
     this.day = gameState.day;
     this.hpBar = new HpBar(this);
+    // 목숨 표시 (HP 바 아래)
+    this.livesText = this.add
+      .text(28, 72, gameState.livesDisplay, { fontFamily: FONT, fontSize: '26px' })
+      .setDepth(1000);
     addMuteButton(this);
     this.createPauseButton();
     this.createDangerVignette();
@@ -132,6 +137,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (!this.finished) {
       this.hpBar.setHp(gameState.hp);
+      const lives = gameState.livesDisplay;
+      if (this.livesText.text !== lives) this.livesText.setText(lives);
       this.tick(delta);
     }
   }
