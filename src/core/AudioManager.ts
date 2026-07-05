@@ -68,7 +68,12 @@ class AudioManagerImpl {
 
   // 샤워기 물소리 (필터 노이즈 루프)
   private showerSrc: AudioBufferSourceNode | null = null;
-  private showerBuf: AudioBuffer | null = null;
+
+  // 전자레인지 가동음 ("위이이잉" — 험 + 팬 노이즈)
+  private humStop: (() => void) | null = null;
+
+  // 공용 노이즈 루프 버퍼 (물소리/팬 소음)
+  private noiseBuf: AudioBuffer | null = null;
 
   // BGM 루프 상태
   private bgmTimer: number | null = null;
@@ -134,6 +139,8 @@ class AudioManagerImpl {
     // 이전 컨텍스트에 묶여 있던 소스들은 함께 죽었다 — 다음 tick에서 재생성된다
     this.songSource = null;
     this.showerSrc = null;
+    this.humStop = null;
+    this.noiseBuf = null;
     this.tryDecodeSong();
   }
 
@@ -484,19 +491,27 @@ class AudioManagerImpl {
     }
   }
 
-  // ── 샤워기 물소리 (필터 노이즈 루프) ──────────
+  // ── 환경음 (샤워기 물소리 / 전자레인지 가동음) ──────────
+
+  /** 2초짜리 화이트 노이즈 루프 버퍼 (샘플레이트가 바뀌면 재생성) */
+  private getNoiseBuffer(): AudioBuffer | null {
+    if (!this.ctx) return null;
+    if (!this.noiseBuf || this.noiseBuf.sampleRate !== this.ctx.sampleRate) {
+      const len = Math.floor(this.ctx.sampleRate * 2);
+      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const data = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    }
+    return this.noiseBuf;
+  }
 
   /** 호출 시점에 컨텍스트가 없으면 무시 — 매 프레임 불러도 안전 (self-heal) */
   startShowerNoise(): void {
     if (!this.ready || this.showerSrc || !this.ctx || !this.master) return;
-    if (!this.showerBuf || this.showerBuf.sampleRate !== this.ctx.sampleRate) {
-      const len = Math.floor(this.ctx.sampleRate * 2);
-      this.showerBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const data = this.showerBuf.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-    }
+    const buf = this.getNoiseBuffer();
+    if (!buf) return;
     const src = this.ctx.createBufferSource();
-    src.buffer = this.showerBuf;
+    src.buffer = buf;
     src.loop = true;
     const hp = this.ctx.createBiquadFilter();
     hp.type = 'highpass';
@@ -520,6 +535,64 @@ class AudioManagerImpl {
     }
     this.showerSrc.disconnect();
     this.showerSrc = null;
+  }
+
+  /**
+   * 전자레인지 가동음 "위이이잉" — 트랜스포머 험(60/120Hz) + 팬 노이즈.
+   * 조리 중일 때만 켜고, 피하면 끈다. 매 프레임 불러도 안전 (self-heal).
+   */
+  startMicrowaveHum(): void {
+    if (!this.ready || this.humStop || !this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    const out = ctx.createGain();
+    out.gain.value = 1;
+    out.connect(this.master);
+
+    const mkOsc = (type: OscillatorType, freq: number, vol: number): OscillatorNode => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      osc.connect(g).connect(out);
+      osc.start();
+      return osc;
+    };
+    const hum1 = mkOsc('sine', 60, 0.1);
+    const hum2 = mkOsc('sawtooth', 120, 0.025);
+
+    // 팬 소음 (저역 노이즈)
+    let fan: AudioBufferSourceNode | null = null;
+    const buf = this.getNoiseBuffer();
+    if (buf) {
+      fan = ctx.createBufferSource();
+      fan.buffer = buf;
+      fan.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 480;
+      const g = ctx.createGain();
+      g.gain.value = 0.06;
+      fan.connect(lp).connect(g).connect(out);
+      fan.start();
+    }
+
+    this.humStop = () => {
+      for (const node of [hum1, hum2, fan]) {
+        if (!node) continue;
+        try {
+          node.stop();
+        } catch {
+          // 이미 정지된 소스는 무시
+        }
+      }
+      out.disconnect();
+    };
+  }
+
+  stopMicrowaveHum(): void {
+    this.humStop?.();
+    this.humStop = null;
   }
 
   private scheduleSong(): void {
@@ -629,6 +702,7 @@ class AudioManagerImpl {
   stopAll(): void {
     this.stopSong();
     this.stopShowerNoise();
+    this.stopMicrowaveHum();
     this.stopHeartbeat();
     this.stopBgm();
   }

@@ -186,7 +186,15 @@ export class WalkScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(11);
 
-    this.player = new Cadet(this, PLAYER_X, PLAYER_Y, 'player');
+    // 무도 수업 가는 길 — 태권도복 + 빨간띠 차림
+    this.player = new Cadet(this, PLAYER_X, PLAYER_Y, 'player', false, {
+      uniform: 0xf7f6f0,
+      uniformDark: 0xd9d7cc,
+      trousers: 0xf2f1e8,
+      shoe: 0xe8e6da,
+      dobok: true,
+      belt: 0xc62828,
+    });
     this.player.setDepth(7);
     this.player.setMotion('walk');
 

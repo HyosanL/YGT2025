@@ -22,6 +22,10 @@ export interface CadetStyle {
   armband: boolean;
   /** 큰 정모 (기본: 선배만) */
   bigCap: boolean;
+  /** 도복 모드 — 단추/견장/정모를 없애고 띠 매듭을 그린다 (오버라이드 전용) */
+  dobok?: boolean;
+  /** 허리띠 색 (기본: 제복 벨트색, 도복이면 띠 색) */
+  belt?: number;
 }
 
 const STYLE: Record<CadetKind, CadetStyle> = {
@@ -152,35 +156,52 @@ export class Cadet extends Phaser.GameObjects.Container {
     // 상의
     torso.fillStyle(st.uniform, 1);
     torso.fillRoundedRect(u(-52), u(-62), u(104), u(96), u(16));
+    const dobok = st.dobok ?? false;
     // 앞섶 라인
     torso.lineStyle(u(2.5), st.uniformDark, 1);
     torso.lineBetween(0, u(-58), 0, u(28));
-    // 단추
-    torso.fillStyle(0xffd700, 1);
-    for (const by of [-38, -14, 10]) torso.fillCircle(0, u(by), u(4.5));
-    // 칼라
+    if (!dobok) {
+      // 단추
+      torso.fillStyle(0xffd700, 1);
+      for (const by of [-38, -14, 10]) torso.fillCircle(0, u(by), u(4.5));
+    }
+    // 칼라 (도복은 V넥 깃으로 읽힌다)
     torso.fillStyle(st.uniformDark, 1);
     torso.fillTriangle(u(-20), u(-62), u(-2), u(-62), u(-14), u(-46));
     torso.fillTriangle(u(20), u(-62), u(2), u(-62), u(14), u(-46));
-    // 왼가슴 주머니
-    torso.lineStyle(u(2), st.uniformDark, 0.9);
-    torso.strokeRoundedRect(u(-42), u(-32), u(24), u(18), u(4));
-    // 오른가슴 명찰
-    torso.fillStyle(0xf5f5f5, 1);
-    torso.fillRect(u(18), u(-30), u(24), u(9));
-    // 허리띠 + 버클
-    torso.fillStyle(0x20202c, 1);
+    if (!dobok) {
+      // 왼가슴 주머니
+      torso.lineStyle(u(2), st.uniformDark, 0.9);
+      torso.strokeRoundedRect(u(-42), u(-32), u(24), u(18), u(4));
+      // 오른가슴 명찰
+      torso.fillStyle(0xf5f5f5, 1);
+      torso.fillRect(u(18), u(-30), u(24), u(9));
+    }
+    // 허리띠
+    torso.fillStyle(st.belt ?? 0x20202c, 1);
     torso.fillRect(u(-52), u(18), u(104), u(13));
-    torso.fillStyle(0xffd700, 1);
-    torso.fillRect(u(-8), u(18), u(16), u(13));
-    // 견장 + 학년 계급장 (막대 수 = 학년)
-    torso.fillStyle(st.uniformDark, 1);
-    torso.fillRoundedRect(u(-52), u(-64), u(30), u(11), u(4));
-    torso.fillRoundedRect(u(22), u(-64), u(30), u(11), u(4));
-    torso.fillStyle(0xffd700, 1);
-    for (let i = 0; i < st.rank; i++) {
-      torso.fillRect(u(-48 + i * 8), u(-62), u(5), u(7));
-      torso.fillRect(u(26 + i * 8), u(-62), u(5), u(7));
+    if (dobok) {
+      // 띠 매듭 + 아래로 늘어진 두 가닥
+      const beltColor = st.belt ?? 0x20202c;
+      torso.fillStyle(beltColor, 1);
+      torso.fillRoundedRect(u(-11), u(15), u(22), u(19), u(4));
+      torso.fillRect(u(-15), u(31), u(10), u(24));
+      torso.fillRect(u(5), u(31), u(10), u(24));
+      torso.lineStyle(u(2), 0x000000, 0.25);
+      torso.strokeRoundedRect(u(-11), u(15), u(22), u(19), u(4));
+    } else {
+      // 버클
+      torso.fillStyle(0xffd700, 1);
+      torso.fillRect(u(-8), u(18), u(16), u(13));
+      // 견장 + 학년 계급장 (막대 수 = 학년)
+      torso.fillStyle(st.uniformDark, 1);
+      torso.fillRoundedRect(u(-52), u(-64), u(30), u(11), u(4));
+      torso.fillRoundedRect(u(22), u(-64), u(30), u(11), u(4));
+      torso.fillStyle(0xffd700, 1);
+      for (let i = 0; i < st.rank; i++) {
+        torso.fillRect(u(-48 + i * 8), u(-62), u(5), u(7));
+        torso.fillRect(u(26 + i * 8), u(-62), u(5), u(7));
+      }
     }
     // 애니풍 셀셰이딩 (오른쪽 음영) + 라인아트 외곽선
     torso.fillStyle(0x000000, 0.08);
@@ -207,24 +228,32 @@ export class Cadet extends Phaser.GameObjects.Container {
     // 앞머리
     hg.fillStyle(st.hair, 1);
     hg.fillRect(u(-38), u(-32), u(76), u(10));
-    // 정모 (큰 정모는 스타일 소관 — 기본: 선배)
-    const big = st.bigCap;
-    hg.fillStyle(st.cap, 1);
-    if (big) hg.fillRoundedRect(u(-48), u(-64), u(96), u(34), u(12));
-    else hg.fillRoundedRect(u(-44), u(-60), u(88), u(30), u(10));
-    hg.fillStyle(st.capBand, 1);
-    hg.fillRect(u(big ? -48 : -44), u(-36), u(big ? 96 : 88), u(6));
-    hg.fillStyle(0x101016, 1);
-    if (big) hg.fillRoundedRect(u(-52), u(-30), u(104), u(9), u(4));
-    else hg.fillRoundedRect(u(-36), u(-30), u(72), u(7), u(3));
-    // 정모 크라운 하이라이트
-    hg.fillStyle(0xffffff, 0.15);
-    hg.fillEllipse(u(-14), u(big ? -54 : -50), u(34), u(9));
-    // 모표 (금색 날개)
-    hg.fillStyle(0xffd700, 1);
-    hg.fillCircle(0, u(-46), u(5));
-    hg.fillTriangle(u(-11), u(-44), u(-3), u(-49), u(-3), u(-41));
-    hg.fillTriangle(u(11), u(-44), u(3), u(-49), u(3), u(-41));
+    if (st.dobok) {
+      // 도복 = 맨머리 — 정모 대신 머리카락 돔
+      hg.fillStyle(st.hair, 1);
+      hg.fillEllipse(0, u(-22), u(80), u(42));
+      hg.fillStyle(0xffffff, 0.08);
+      hg.fillEllipse(u(-14), u(-34), u(30), u(9));
+    } else {
+      // 정모 (큰 정모는 스타일 소관 — 기본: 선배)
+      const big = st.bigCap;
+      hg.fillStyle(st.cap, 1);
+      if (big) hg.fillRoundedRect(u(-48), u(-64), u(96), u(34), u(12));
+      else hg.fillRoundedRect(u(-44), u(-60), u(88), u(30), u(10));
+      hg.fillStyle(st.capBand, 1);
+      hg.fillRect(u(big ? -48 : -44), u(-36), u(big ? 96 : 88), u(6));
+      hg.fillStyle(0x101016, 1);
+      if (big) hg.fillRoundedRect(u(-52), u(-30), u(104), u(9), u(4));
+      else hg.fillRoundedRect(u(-36), u(-30), u(72), u(7), u(3));
+      // 정모 크라운 하이라이트
+      hg.fillStyle(0xffffff, 0.15);
+      hg.fillEllipse(u(-14), u(big ? -54 : -50), u(34), u(9));
+      // 모표 (금색 날개)
+      hg.fillStyle(0xffd700, 1);
+      hg.fillCircle(0, u(-46), u(5));
+      hg.fillTriangle(u(-11), u(-44), u(-3), u(-49), u(-3), u(-41));
+      hg.fillTriangle(u(11), u(-44), u(3), u(-49), u(3), u(-41));
+    }
     head.add(hg);
 
     this.faceText = scene.add

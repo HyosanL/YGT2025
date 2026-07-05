@@ -90,8 +90,10 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.resumeContext = 'pause';
     // 진행 중인 선배 조우를 정리해 두면 재개 카운트다운 후 동결된 판정이 터지지 않는다
     this.clearSeniorEncounter();
-    // 샤워 노래 등 window 타이머 기반 사운드는 씬 pause와 무관하게 흐르므로 명시적으로 정지
+    // 샤워 노래·전자레인지 가동음은 씬 pause와 무관하게 흐르므로 명시적으로 정지
+    // (tick이 재개되면 자동으로 되살아난다)
     audio.setSongPlaying(false);
+    audio.stopMicrowaveHum();
     this.scene.launch('Pause', { returnTo: this.scene.key, mode: 'menu' });
     this.scene.pause();
   }

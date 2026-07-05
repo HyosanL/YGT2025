@@ -290,6 +290,10 @@ export class MicrowaveScene extends BaseMainScene {
       return;
     }
 
+    // 전자레인지 가동음 "위이이잉" — 앞에 서서 조리 중일 때만
+    if (this.zone === 'micro') audio.startMicrowaveHum();
+    else audio.stopMicrowaveHum();
+
     // 전자레인지 앞에 있을 때만 조리 진행 — 100% = "삐-"와 함께 즉시 성공
     if (this.zone === 'micro') {
       this.cookProgressMs += delta;
