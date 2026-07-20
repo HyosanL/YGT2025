@@ -66,6 +66,25 @@ export class ShowerScene extends BaseMainScene {
     this.player.setFace('🎵');
     this.player.setMotion('dance');
 
+    // 샤워 중이라 몸은 김에 가려진다 (옷 입고 씻는 것처럼 보이지 않게)
+    const veil = this.add.graphics().setDepth(7);
+    veil.fillStyle(0xeaf7fa, 0.38);
+    veil.fillEllipse(210, 800, 280, 230);
+    veil.fillStyle(0xeaf7fa, 0.26);
+    veil.fillEllipse(210, 690, 240, 190);
+    this.add
+      .particles(210, 760, '__WHITE', {
+        x: { min: -80, max: 80 },
+        y: { min: -70, max: 70 },
+        speedY: { min: -26, max: -8 },
+        scale: { start: 2.6, end: 4.6 },
+        alpha: { start: 0.3, end: 0 },
+        lifespan: 2200,
+        frequency: 80,
+        tint: 0xeaf7fa,
+      })
+      .setDepth(7);
+
     // 수증기
     this.add.particles(0, 0, '__WHITE', {
       x: { min: 80, max: 640 },

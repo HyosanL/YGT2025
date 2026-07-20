@@ -65,7 +65,7 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(GAME_WIDTH / 2, 505, '공사 2학년 생도 기태의 생존기', {
+      .text(GAME_WIDTH / 2, 505, '공사 2학년 생도의 생존기', {
         fontFamily: FONT,
         fontSize: '32px',
         color: COLORS.subCss,

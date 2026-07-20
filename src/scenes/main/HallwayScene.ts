@@ -4,15 +4,11 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble, type CadetStyle } from '../../ui/Characters';
 import { addSceneBg } from '../../ui/Scenery';
-import { chance, randFloat, randRange } from '../../utils/rng';
+import { randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type VisitorKind = 'junior' | 'peer' | 'senior';
 type CycleState = 'idle' | 'approaching' | 'waiting' | 'resolved';
-
-/** 문가 감시 선배가 나타나는 좌/우 지점 */
-const WATCHER_RIGHT_X = GAME_WIDTH - 115;
-const WATCHER_LEFT_X = 115;
 
 /** 학년 티(파이핑 색·완장·모자 크기·체격·표정)를 지운 공통 근무복 룩 — 판별 단서는 견장 줄 수뿐 */
 const NEUTRAL_STYLE: Partial<CadetStyle> = {
@@ -53,10 +49,7 @@ export class HallwayScene extends BaseMainScene {
   private responseRemainMs = 0;
   private responseTotalMs = 1;
   private responseTimeout: Phaser.Time.TimerEvent | null = null;
-  private watcherVisible = false;
-  private watcherEnterMs = 0;
 
-  private watcher!: Cadet;
   private countText!: Phaser.GameObjects.Text;
   private windowFill!: Phaser.GameObjects.Graphics;
 
@@ -71,7 +64,6 @@ export class HallwayScene extends BaseMainScene {
     this.count = 0;
     this.responseRemainMs = 0;
     this.responseTimeout = null;
-    this.watcherVisible = false;
 
     // 생활관 복도 배경 (실제 사진 기반)
     addSceneBg(this, 'bg_hallway');
@@ -126,40 +118,12 @@ export class HallwayScene extends BaseMainScene {
       )
       .setOrigin(0.5);
 
-    // 문가 감시 선배 (진짜 3학년 룩 — 접근자들과 확실히 구분된다)
-    this.watcher = new Cadet(this, WATCHER_RIGHT_X, 500, 'senior');
-    this.watcher.setScale(0.8).setVisible(false).setDepth(6);
-
     this.setupCommon();
     this.target = Q2_HALLWAY.targetCount(this.day);
     this.responseTotalMs = Q2_HALLWAY.responseMs(this.day);
     this.updateCountText();
 
     this.time.delayedCall(400, () => this.spawnNext());
-
-    // 감시 선배 등장/퇴장 루프 — 보고 있는 동안 후배 인사(까딱)는 발각
-    this.startSeniorLoop({
-      params: () => ({
-        gapMs: randRange(Q2_HALLWAY.watcherGapMsRange(this.day)),
-        stayMs: randRange(Q2_HALLWAY.watcherStayMsRange(this.day)),
-      }),
-      onEnter: () => {
-        this.watcherVisible = true;
-        this.watcherEnterMs = this.time.now;
-        // 좌/우 문 무작위 + 매번 거리감(크기)이 다르다
-        const scale = randFloat(0.7, 0.95);
-        const baseX = chance(0.5) ? WATCHER_RIGHT_X : WATCHER_LEFT_X;
-        this.watcher
-          .setPosition(baseX + randFloat(-18, 18), 500 + Math.round((scale - 0.8) * 160))
-          .setScale(scale);
-        this.watcher.setVisible(true);
-        this.watcher.setFace('👀');
-      },
-      onLeave: () => {
-        this.watcherVisible = false;
-        this.watcher.setVisible(false);
-      },
-    });
   }
 
   private updateCountText(): void {
@@ -181,21 +145,20 @@ export class HallwayScene extends BaseMainScene {
     this.visitorKind = this.pickKind();
     this.cycleState = 'approaching';
 
-    // 좌/우 문에서 번갈아 나와 중앙으로 접근 (얼굴·근무복 동일, 견장 줄 수만 단서)
-    const side = this.count % 2 === 0 ? -1 : 1;
-    const v = new Cadet(this, GAME_WIDTH / 2 + side * 160, 470, this.visitorKind, false, {
+    // 복도 저 끝(소실점)의 문 쪽에서 나와 복도를 따라 나에게로 곧장 걸어온다.
+    // 얼굴·근무복은 전부 동일 — 오직 견장 줄 수만 단서다.
+    const v = new Cadet(this, GAME_WIDTH / 2, 425, this.visitorKind, false, {
       ...NEUTRAL_STYLE,
       visitorRank: RANK_OF[this.visitorKind] as 1 | 2 | 3,
     });
-    v.setScale(0.4).setAlpha(0.9).setDepth(5);
+    v.setScale(0.2).setAlpha(0.85).setDepth(5);
     v.setMotion('walk');
     this.visitor = v;
     this.badge = this.buildRankBadge(RANK_OF[this.visitorKind]);
 
     this.tweens.add({
       targets: v,
-      x: GAME_WIDTH / 2,
-      y: 700,
+      y: 800,
       scale: 1,
       alpha: 1,
       duration: Q2_HALLWAY.approachMs(this.day),
@@ -211,16 +174,8 @@ export class HallwayScene extends BaseMainScene {
     this.cycleState = 'waiting';
     const v = this.visitor;
     if (!v) return;
-    if (this.visitorKind === 'junior') {
-      // 후배는 먼저 경례한다 — 유일하게 행동으로 티가 나는 상대
-      v.setFace('🫡');
-      v.setMotion('salute');
-      speechBubble(this, GAME_WIDTH / 2, 500, '필승!');
-      audio.chime();
-    } else {
-      // 동기/선배는 무표정으로 응대를 기다린다 — 견장을 읽어라
-      v.setMotion('idle');
-    }
+    // 아무도 먼저 인사·경례하지 않는다 — 견장 줄 수만 읽고 제한시간 안에 눌러야 한다
+    v.setMotion('idle');
     this.responseRemainMs = this.responseTotalMs;
     this.responseTimeout = this.time.delayedCall(this.responseTotalMs, () => {
       if (this.finished || this.cycleState !== 'waiting') return;
@@ -278,18 +233,6 @@ export class HallwayScene extends BaseMainScene {
 
     // junior
     if (action === 'greet') {
-      // 문가 선배가 보고 있으면 발각 — 등장 직후 280ms는 세이프
-      // (탭을 이미 결심한 순간 나타난 '대응 불가능한 즉사' 방지)
-      if (this.watcherVisible && this.time.now - this.watcherEnterMs > 280) {
-        this.badge?.destroy();
-        this.badge = null;
-        this.failCaught(
-          this.watcher,
-          '후배 경례를 까딱으로 받는 순간, 문가의 선배와 눈이 마주쳤다.',
-          '너 지금 뭐 했냐?'
-        );
-        return;
-      }
       this.count += 1;
       this.updateCountText();
       audio.chime();
@@ -301,15 +244,9 @@ export class HallwayScene extends BaseMainScene {
         return;
       }
     } else if (action === 'salute') {
-      if (this.watcherVisible) {
-        // 선배가 보는 앞이라 각 잡고 경례 — 정석 대응, 카운트만 없다
-        v.setFace('🫡');
-        speechBubble(this, GAME_WIDTH / 2, 500, '(선배 앞이라 각 잡았다)', 800);
-      } else {
-        v.setFace('😳');
-        speechBubble(this, GAME_WIDTH / 2, 500, '(어라...?)', 900);
-        this.applyDamage(Q2_HALLWAY.hpSaluteJunior, '후배한테 경례로 받아버렸다... 체면 대실추!');
-      }
+      v.setFace('😳');
+      speechBubble(this, GAME_WIDTH / 2, 500, '(어라...?)', 900);
+      this.applyDamage(Q2_HALLWAY.hpSaluteJunior, '후배한테 경례로 받아버렸다... 체면 대실추!');
     } else {
       v.setFace('😒');
       this.applyDamage(Q2_HALLWAY.hpTimeout, '후배 경례를 무시했다... 건방지다고 소문났다');

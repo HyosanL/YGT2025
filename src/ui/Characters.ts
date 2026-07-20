@@ -33,7 +33,7 @@ export interface CadetStyle {
 const BASE_H = 300;
 
 const LABELS: Record<CadetKind, string> = {
-  player: '기태 (2학년)',
+  player: '생도 (2학년)',
   junior: '후배 (1학년)',
   peer: '동기 (2학년)',
   senior: '선배 (3학년)',
@@ -58,6 +58,7 @@ const CYCLE: Record<string, [string, string]> = {
   'player.walk': ['player_walk_a', 'player_walk_b'],
   'player.run': ['player_run', 'player_run_b'],
   'senior.run': ['senior_run', 'senior_run'],
+  'dobok.walk': ['player_dobok_walk', 'player_dobok_walk_b'],
   'dobok.run': ['player_dobok_run', 'player_dobok_run_b'],
 };
 
@@ -87,7 +88,8 @@ export class Cadet extends Phaser.GameObjects.Container {
     this.dobok = styleOverride?.dobok ?? false;
     this.visitorRank = styleOverride?.visitorRank;
 
-    this.shadow = scene.add.ellipse(0, BASE_H * 0.42, BASE_H * 0.34, BASE_H * 0.07, 0x2b5f9e, 0.18);
+    // 스프라이트는 여백을 트림해 두어 밑변 = 발끝 → 그림자를 정확히 발밑에 둔다 (둥둥 뜨는 것 방지)
+    this.shadow = scene.add.ellipse(0, BASE_H * 0.4, BASE_H * 0.3, BASE_H * 0.06, 0x2b5f9e, 0.22);
     this.add(this.shadow);
 
     this.sprite = scene.add.image(0, 0, this.texFor('idle')).setOrigin(0.5, 0.6);
@@ -134,7 +136,10 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     this.shadow.setVisible(!LYING.has(motion));
 
-    const cycleKey = this.dobok && motion === 'run' ? 'dobok.run' : `${this.kind}.${motion}`;
+    const cycleKey =
+      this.dobok && (motion === 'run' || motion === 'walk')
+        ? `dobok.${motion}`
+        : `${this.kind}.${motion}`;
     const cycle = CYCLE[cycleKey];
     if (cycle) {
       let i = 0;

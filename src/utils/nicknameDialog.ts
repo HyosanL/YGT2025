@@ -35,7 +35,7 @@ export function askNickname(defaultValue: string, titleText = '닉네임 (1~12�
     input.type = 'text';
     input.maxLength = 12;
     input.value = defaultValue;
-    input.placeholder = '생도 기태';
+    input.placeholder = '김공군';
     Object.assign(input.style, {
       width: '100%',
       boxSizing: 'border-box',

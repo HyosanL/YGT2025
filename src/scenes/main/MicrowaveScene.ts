@@ -9,11 +9,14 @@ import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
 
-const LAUNDRY_X = 170;
-const MICRO_X = 550;
-const PLAYER_Y = 820;
-/** 복도를 따라 선배가 갑자기 나타날 수 있는 여러 지점 */
-const SENIOR_SPOTS = [150, 360, 570] as const;
+const LAUNDRY_X = 140;
+const MICRO_X = 630;
+const PLAYER_Y = 1080;
+/** 전자레인지 위치 (배경 이미지 기준) */
+const OVEN_X = 506;
+const OVEN_Y = 1084;
+/** 복도 저편에서 선배가 갑자기 나타날 수 있는 여러 지점 */
+const SENIOR_SPOTS = [430, 560, 680] as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -52,15 +55,16 @@ export class MicrowaveScene extends BaseMainScene {
     this.cookProgressMs = 0;
     this.lightsLastSec = -1;
 
-    // 심야 세탁실+취사구역 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 문 안
-    addSceneBg(this, 'bg_micro');
+    // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
+    // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문이 보이게 한다.
+    addSceneBg(this, 'bg_micro').x += 150;
     // 조리 중에만 켜지는 내부 조명 (창 안쪽 따뜻한 빛 + 주변 은은한 글로우)
     this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffe9b0, 0.18);
-    this.ovenLight.fillCircle(528, 640, 96);
-    this.ovenLight.fillStyle(0xffd98a, 0.6);
-    this.ovenLight.fillRoundedRect(464, 594, 128, 92, 6);
-    this.add.text(530, 640, '🍜', { fontFamily: FONT, fontSize: '48px' }).setOrigin(0.5);
+    this.ovenLight.fillStyle(0xffe9b0, 0.20);
+    this.ovenLight.fillCircle(OVEN_X, OVEN_Y, 120);
+    this.ovenLight.fillStyle(0xffd98a, 0.55);
+    this.ovenLight.fillRoundedRect(OVEN_X - 62, OVEN_Y - 40, 124, 80, 8);
+    this.add.text(OVEN_X, OVEN_Y, '🍜', { fontFamily: FONT, fontSize: '44px' }).setOrigin(0.5);
     addVignette(this, 0.3);
 
     // 조리 게이지
@@ -94,7 +98,7 @@ export class MicrowaveScene extends BaseMainScene {
       .setDepth(10);
 
     this.beepText = this.add
-      .text(530, 480, '삐 ─ 완성!!', {
+      .text(OVEN_X, 930, '삐 ─ 완성!!', {
         fontFamily: FONT,
         fontSize: '44px',
         color: COLORS.safeCss,
@@ -142,11 +146,13 @@ export class MicrowaveScene extends BaseMainScene {
         this.reacted = false;
         // 변칙 등장 — 대개 복도 멀리(작게), 가끔은 방 안까지 들어온다(크게)
         if (chance(0.3)) {
-          this.senior.setPosition(640, randFloat(760, 810)).setScale(randFloat(0.95, 1.1));
+          // 방 안까지 성큼 들어온다
+          this.senior.setPosition(660, randFloat(1010, 1070)).setScale(randFloat(0.9, 1.05));
         } else {
+          // 복도 저편에서 지나간다
           this.senior
-            .setPosition(pick(SENIOR_SPOTS) + randFloat(-20, 20), 340)
-            .setScale(randFloat(0.55, 0.75));
+            .setPosition(pick(SENIOR_SPOTS) + randFloat(-20, 20), 700)
+            .setScale(randFloat(0.42, 0.58));
         }
         this.senior.setVisible(true);
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
@@ -169,18 +175,22 @@ export class MicrowaveScene extends BaseMainScene {
   private moveTo(zone: Zone): void {
     if (this.finished || this.zone === zone) return;
     this.zone = zone;
-    const x = zone === 'laundry' ? LAUNDRY_X : MICRO_X;
+    const hiding = zone === 'laundry';
     this.player.setMotion('run');
+    this.tweens.killTweensOf(this.player);
+    // 숨을 땐 세탁실 문 안으로 슉 들어가 사라지고, 나올 땐 다시 전자레인지 앞으로
     this.tweens.add({
       targets: this.player,
-      x,
-      duration: 180,
+      x: hiding ? LAUNDRY_X : MICRO_X,
+      alpha: hiding ? 0.1 : 1,
+      scale: hiding ? 0.72 : 1,
+      duration: 200,
       ease: 'Cubic.easeOut',
       onComplete: () => {
         if (!this.finished) this.player.setMotion('idle');
       },
     });
-    this.player.setFace(zone === 'laundry' ? '🫣' : '🤤');
+    this.player.setFace(hiding ? '🫣' : '🤤');
   }
 
   protected tick(delta: number): void {

@@ -8,13 +8,14 @@ import type { MiniSceneData } from '../../types';
 export const PANEL = { x: 40, y: 150, w: GAME_WIDTH - 80, h: 980 } as const;
 
 /** 카톡풍 팔레트 — 미니 퀘스트(채팅류) 공용 */
+/** 실제 카카오톡 채팅방 색 (청회색 배경 + 흰 헤더 + 흰/노랑 말풍선) */
 export const KAKAO = {
-  bg: 0xbacee0,
+  bg: 0xb2c7d9,
   bubbleWhite: 0xffffff,
   yellow: 0xfee500,
-  textDark: '#1f2b3e',
+  textDark: '#1f1f1f',
   textBrown: '#3a2e1e',
-  sub: '#5a6b7e',
+  sub: '#6b7684',
 } as const;
 
 export type MiniTheme = 'dark' | 'kakao';
@@ -69,32 +70,37 @@ export abstract class BaseMiniScene extends Phaser.Scene {
 
     const panel = this.add.graphics();
     if (theme === 'kakao') {
-      // 카톡풍 — 하늘색 채팅방 배경 + 상단 방 제목 바
+      // 실제 카톡 채팅방 — 청회색 배경 + 흰 헤더(뒤로/제목/검색/메뉴)
       panel.fillStyle(KAKAO.bg, 1);
       panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 24);
-      panel.fillStyle(0xa9c0d5, 1);
-      panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, 132, { tl: 24, tr: 24, bl: 0, br: 0 });
+      panel.fillStyle(0xffffff, 1);
+      panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, 112, { tl: 24, tr: 24, bl: 0, br: 0 });
+      panel.lineStyle(2, 0xe3e7ec, 1);
+      panel.lineBetween(PANEL.x, PANEL.y + 112, PANEL.x + PANEL.w, PANEL.y + 112);
       this.add
-        .text(PANEL.x + 34, PANEL.y + 50, '‹', {
+        .text(PANEL.x + 26, PANEL.y + 56, '‹', {
           fontFamily: FONT,
-          fontSize: '44px',
-          color: KAKAO.textDark,
+          fontSize: '46px',
+          color: '#2b2b2b',
         })
         .setOrigin(0, 0.5);
       this.add
-        .text(GAME_WIDTH / 2, PANEL.y + 50, title, {
+        .text(GAME_WIDTH / 2, PANEL.y + 56, title, {
           fontFamily: FONT,
-          fontSize: '36px',
-          color: KAKAO.textDark,
+          fontSize: '32px',
+          color: '#111111',
           fontStyle: 'bold',
         })
         .setOrigin(0.5);
       this.add
-        .text(PANEL.x + PANEL.w - 34, PANEL.y + 50, '☰', {
+        .text(PANEL.x + PANEL.w - 28, PANEL.y + 56, '☰', {
           fontFamily: FONT,
-          fontSize: '34px',
-          color: KAKAO.textDark,
+          fontSize: '30px',
+          color: '#2b2b2b',
         })
+        .setOrigin(1, 0.5);
+      this.add
+        .text(PANEL.x + PANEL.w - 82, PANEL.y + 56, '🔍', { fontFamily: FONT, fontSize: '26px' })
         .setOrigin(1, 0.5);
     } else {
       panel.fillStyle(COLORS.panel, 0.98);

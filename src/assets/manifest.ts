@@ -54,6 +54,7 @@ export const IMAGE_KEYS = [
   "player_dobok_run",
   "player_dobok_run_b",
   "player_dobok_walk",
+  "player_dobok_walk_b",
   "player_exhausted",
   "player_idle",
   "player_lying",
