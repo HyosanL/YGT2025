@@ -429,7 +429,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   hallway: {
     title: '복도에서 어깨힘주고 인사받기',
     emoji: '🫡',
-    tip: '견장 1줄 후배·2줄 동기 → 🙇 인사, 3줄 선배 → 🫡 경례. 단, 문가 선배가 볼 때 후배 인사는 발각!',
+    tip: '복도로 걸어오는 상대의 견장을 읽어라 — 1줄 후배·2줄 동기 → 🙇 인사, 3줄 선배 → 🫡 경례. 제한시간 안에!',
   },
   microwave: {
     title: '몰래 결식하고 전자레인지 돌리기',

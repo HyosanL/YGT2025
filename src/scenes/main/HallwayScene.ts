@@ -107,7 +107,7 @@ export class HallwayScene extends BaseMainScene {
       .text(
         GAME_WIDTH / 2,
         GAME_HEIGHT - 90,
-        '견장 1줄 후배·2줄 동기 → 🙇 인사  /  3줄 선배 → 🫡 경례\n문가에 선배가 보이면 후배 인사 금지 — 경례로 버텨라!',
+        '견장 1줄 후배·2줄 동기 → 🙇 인사  /  3줄 선배 → 🫡 경례\n아무도 먼저 인사하지 않는다 — 견장만 보고 제때 눌러라!',
         {
           fontFamily: FONT,
           fontSize: '24px',
