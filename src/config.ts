@@ -39,8 +39,14 @@ export const FONT_BODY = "'Poor Story', 'Apple SD Gothic Neo', 'Malgun Gothic', 
  */
 export const COLORS = {
   bg: 0x1a1a2e,
-  /** 패널·말풍선 바탕 */
+  /** 패널·말풍선 바탕 (게임 화면 위 HUD 칩) */
   panel: 0xffffff,
+  /**
+   * 전체를 덮는 오버레이 판(도움말·리더보드·소리설정·일시정지)의 바탕.
+   * 이쪽은 글자가 많아 흰 바탕이면 흰 글씨가 통째로 사라진다 — 짙은 남색 판에
+   * 굵은 검정 외곽선을 둘러 '칠판' 느낌으로 간다.
+   */
+  panelDark: 0x1b2540,
   /** 메인 테마색 (타이틀 바·포인트 패널) */
   panelLight: 0x5ca0f2,
   accent: 0xef476f,
@@ -81,16 +87,57 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * clamp01(t);
 }
 
-/** 일차별 난이도 계수 0~1 (튜닝 대상) */
+/** 일차별 난이도 계수 0~1 — 출현 비율·거리처럼 '얼마나'에 해당하는 값에 쓴다 */
 export function difficulty(day: number): number {
   return Math.min(1, 0.3 + day * 0.07);
 }
 
+// ─────────────────────────────────────────────
+// 템포 — 일차가 오를수록 판이 지수적으로 빨라진다
+// ─────────────────────────────────────────────
+/** 하루당 속도 증가율 (복리) */
+const PACE_BASE = 1.09;
+/** 속도 상한 — 이 위로는 사람 손이 아니라 운이 판을 결정한다 */
+const PACE_CAP = 2.4;
+
 /**
- * 전체 난이도 배율 — 판 전체를 한 번에 조이는 손잡이. 1.0이 기존 밸런스.
- * 아래 tight()/harder()를 거치는 값만 영향을 받는다.
+ * 일차별 속도 배율 (1일차 = 1.0, 복리로 증가).
+ * 1→1.00, 5→1.41, 8→1.83, 10→2.17, 11→2.37, 12일차 이후 2.4에서 포화.
+ * 간격·제한시간을 이 값으로 **나눠서** 쓴다.
  */
-export const DIFF_SCALE = 1.3;
+export function pace(day: number): number {
+  return Math.min(PACE_CAP, Math.pow(PACE_BASE, Math.max(0, day - 1)));
+}
+
+/**
+ * 반응 유예의 절대 하한 (ms).
+ * 모바일 터치는 '보고 → 판단 → 손가락 접촉'에 최소 이만큼이 걸린다.
+ * 속도가 아무리 올라가도 이 아래로는 내리지 않는다 — 판이 빨라지는 것과
+ * 물리적으로 불가능해지는 것은 다르다.
+ */
+export const REACT_FLOOR_MS = 400;
+/** 리듬/판정창의 절대 하한 (ms) */
+export const HIT_FLOOR_MS = 320;
+
+/** 선배 등장 리듬 설계값 (BaseMainScene의 SeniorTempo와 동일한 모양) */
+export interface SeniorTempoSpec {
+  baseGapMs: number;
+  baseStayMs: number;
+  minRecoveryMs: number;
+  maxPresenceRatio: number;
+}
+
+/** 속도 배율을 적용해 짧아지되, 하한 밑으로는 내려가지 않는 시간 */
+export function paced(baseMs: number, day: number, floorMs = 0): number {
+  return Math.max(floorMs, Math.round(baseMs / (pace(day) * DIFF_SCALE)));
+}
+
+/**
+ * 전체 난이도 배율 — 판 전체를 한 번에 조이는 손잡이.
+ * 일차별 지수 가속(pace)이 램프를 담당하므로 여기서 추가로 조이지 않는다.
+ * 판이 전반적으로 버겁다/헐겁다는 피드백은 이 값 하나로 대응한다.
+ */
+export const DIFF_SCALE = 1.0;
 /** 반응 유예·제한시간처럼 **짧아질수록 어려워지는** 값 */
 export function tight(ms: number): number {
   return Math.round(ms / DIFF_SCALE);
@@ -102,9 +149,6 @@ export function harder(v: number): number {
 /** [최소, 최대] 범위를 통째로 조인다 */
 function tightRange(r: [number, number]): [number, number] {
   return [tight(r[0]), tight(r[1])];
-}
-function harderRange(r: [number, number]): [number, number] {
-  return [Math.round(harder(r[0])), Math.round(harder(r[1]))];
 }
 
 /** 일차별 BGM 템포 배율 — 갈수록 빨라진다 (게임오버 후 새 판은 다시 1.0부터) */
@@ -144,13 +188,16 @@ export const Q1_SHOWER = {
   showerTimeMs: (day: number): number => Math.round(lerp(14500, 16500, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간
    *  (모바일 터치 반응 한계 고려 — 커튼 등장 보정 후에도 360ms 밑으로 내려가지 않게) */
-  reactMs: (day: number): number => tight(lerp(650, 420, difficulty(day))),
-  /** 선배 체류 시간 범위 — 길수록 오래 숨죽여야 한다 */
-  stayMsRange: (day: number): [number, number] =>
-    harderRange([lerp(800, 1100, difficulty(day)), lerp(1200, 1500, difficulty(day))]),
-  /** 선배 등장 간격 범위 — 짧을수록 자주 들이닥친다 */
-  gapMsRange: (day: number): [number, number] =>
-    tightRange([lerp(1500, 1200, difficulty(day)), lerp(2500, 2000, difficulty(day))]),
+  reactMs: (day: number): number => paced(760, day, REACT_FLOOR_MS),
+  /** 등장 리듬 — 실제 간격은 패턴(연타/페인트/뜸들이기)으로 흩어진다 */
+  tempo: (day: number): SeniorTempoSpec => ({
+    baseGapMs: paced(2300, day, 900),
+    baseStayMs: Math.round(900 * Math.min(1.5, Math.pow(pace(day), 0.35))),
+    // 반응 유예만큼은 반드시 노래를 들을 틈이 있어야 한다
+    minRecoveryMs: Math.max(700, paced(1200, day, 700)),
+    // 선배가 화면을 절반 넘게 차지하면 노래를 끝낼 수 없다 — 45%로 묶는다
+    maxPresenceRatio: 0.45,
+  }),
 } as const;
 
 // ─────────────────────────────────────────────
@@ -158,29 +205,32 @@ export const Q1_SHOWER = {
 // 제한시간 안에 올바른 응대를 골라야 한다. 후배 인사만 카운트.
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 제한시간 안에 제대로 응대해야 하는 인원 수 */
-  targetCount: (day: number): number => Math.min(10, 6 + Math.floor((day - 1) / 3)),
+  /** 제대로 응대해야 하는 인원 수 */
+  targetCount: (day: number): number => Math.min(10, 5 + Math.floor((day - 1) / 3)),
   /**
-   * 한 박자 길이 — 사람이 이 간격으로 문에서 나와 이 간격으로 내 앞에 도착한다.
-   * 리듬게임의 템포 그 자체라 일차가 오를수록 빨라진다.
+   * 한 사람이 복도 저 끝에서 내 앞까지 걸어오는 시간.
+   * 이 시간이 곧 견장을 읽고 판단할 시간이라 일차가 오를수록 짧아진다(지수 가속).
    */
-  beatMs: (day: number): number => tight(lerp(1500, 950, difficulty(day))),
-  /** 문에서 나와 내 앞까지 걸어오는 데 걸리는 박자 수 (이만큼 미리 견장을 읽을 시간이 있다) */
-  approachBeats: 2,
+  approachMs: (day: number): number => paced(3400, day, 1500),
+  /** 앞사람을 처리하고 다음 사람이 문에서 나오기까지의 텀 — 한 명씩 순서대로 상대한다 */
+  gapMs: (day: number): number => paced(700, day, 320),
   /**
-   * 판정 창 — 도착 박자 기준 ±이 시간 안에 눌러야 한다.
-   * 선배에게 늦게 경례하는 것도 실수이므로 뒤쪽 창도 좁다.
+   * **선배 경례 데드라인** — 선배가 이 지점(복도 진행률)을 넘어서기 전에 내가 먼저
+   * 경례해야 한다. 늦으면 "先경례" 실패로 그 자리에서 잡힌다.
+   * 1일차 0.72(꽤 가까이 와도 됨) → 후반 0.42(멀리서 알아보고 미리 해야 함).
    */
-  hitWindowMs: (day: number): number => tight(lerp(420, 300, difficulty(day))),
+  saluteDeadline: (day: number): number => lerp(0.72, 0.42, difficulty(day)),
+  /** 후배·동기는 지나쳐 가기 전(=도착)까지만 응대하면 된다 */
+  greetDeadline: 0.97,
   /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
-  seniorShare: (day: number): number => Math.min(0.42, harder(0.15 + day * 0.012)),
+  seniorShare: (day: number): number => Math.min(0.42, 0.18 + day * 0.014),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
   /** 후배에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
   hpSaluteJunior: 55,
   /** 동기에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
   hpSalutePeer: 55,
-  /** 박자를 놓쳤을 때 페널티 (후배/동기 — 선배를 놓치면 즉시 게임 오버) */
+  /** 후배·동기를 그냥 지나쳐버렸을 때 페널티 */
   hpMiss: 28,
 } as const;
 
@@ -191,13 +241,15 @@ export const Q3_MICROWAVE = {
   /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 11~16초, 선배 조우 3~5회 */
   cookMs: (day: number): number => Math.round(lerp(5500, 7500, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
-  reactMs: (day: number): number => tight(lerp(700, 420, difficulty(day))),
-  /** 길수록 오래 숨어 있어야 하고 그만큼 조리가 밀린다 */
-  stayMsRange: (day: number): [number, number] =>
-    harderRange([lerp(900, 1200, difficulty(day)), lerp(1300, 1700, difficulty(day))]),
-  /** 빨리빨리 돌아온다 */
-  gapMsRange: (day: number): [number, number] =>
-    tightRange([lerp(1600, 1300, difficulty(day)), lerp(2500, 1900, difficulty(day))]),
+  reactMs: (day: number): number => paced(820, day, REACT_FLOOR_MS),
+  /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
+  tempo: (day: number): SeniorTempoSpec => ({
+    baseGapMs: paced(2400, day, 950),
+    baseStayMs: Math.round(1000 * Math.min(1.5, Math.pow(pace(day), 0.35))),
+    minRecoveryMs: Math.max(800, paced(1400, day, 800)),
+    // 조리는 전자레인지 앞에 있어야만 진행된다 — 점유율 상한이 곧 클리어 보장선
+    maxPresenceRatio: 0.42,
+  }),
   /** 완전소등까지 제한시간 — 소등 전에 "삐-"까지 끝내야 한다.
    *  숨는 시간(선배 조우 기대값)을 감안해 조리 시간 대비 넉넉하되,
    *  세탁실 캠핑은 반드시 실패하는 수준으로 설정 */
@@ -259,8 +311,8 @@ export const M1_KAKAO = {
   timeMs: tight(11000),
   /** 붉은 펄스 시작 임계 (남은 ms) */
   panicMs: 4000,
-  /** 일차별 문장 티어: 길수록 높은 티어 */
-  tier: (day: number): number => Math.min(2, Math.floor((day - 1) / 5)),
+  /** 일차별 문장 티어 — 일차가 오를수록 더 긴 답장을 요구한다 (3일마다 한 단계) */
+  tier: (day: number): number => Math.min(3, Math.floor((day - 1) / 3)),
   // 생도 답장의 기본 — "예!"로 받고 문장마다 느낌표 (누락 = 오타 취급)
   prompts: [
     // tier 0 — 짧음
@@ -281,6 +333,27 @@ export const M1_KAKAO = {
     { msg: '후배들 군기가 빠진 것 같지 않냐', reply: '제가 잘 챙기도록 하겠습니다!', tier: 2 },
     { msg: '샤워장에서 노랫소리 들렸다는데 아는 거 있냐', reply: '아닙니다! 저는 모르는 일입니다!', tier: 2 },
     { msg: '내일 태권도 시합 준비는 잘 되고 있냐', reply: '예! 열심히 준비하고 있습니다!', tier: 2 },
+    // tier 3 — 아주 김 (후반부)
+    {
+      msg: '내일 검열이다. 호실 정리랑 복장 상태 다 확인했냐',
+      reply: '예! 호실 정리 마쳤고 복장도 확인했습니다!',
+      tier: 3,
+    },
+    {
+      msg: '이번 주 당직 근무표 바뀐 거 인원들한테 다 전파했냐',
+      reply: '예! 전 인원에게 전파 완료했습니다!',
+      tier: 3,
+    },
+    {
+      msg: '체력검정 준비 어떻게 하고 있냐, 종목별로 말해봐라',
+      reply: '예! 오래달리기와 팔굽혀펴기 위주로 준비하고 있습니다!',
+      tier: 3,
+    },
+    {
+      msg: '아까 회의 내용 정리해서 오늘 안에 보내라',
+      reply: '예! 정리해서 오늘 안에 보내드리겠습니다!',
+      tier: 3,
+    },
   ] as KakaoPrompt[],
 } as const;
 
@@ -311,17 +384,18 @@ export const M2_VOTE = {
     },
     {
       level: 1,
-      msg: '어젯밤 소등 후에 폰 만진 인원 자수해라',
-      q: '당신은 폰을 만지지 않았다.\n올바른 답변을 골라라',
+      // 생도는 소등 후에도 폰을 쓸 수 있다 — '자수' 소재로는 현실과 안 맞아 점호 지각으로 교체
+      msg: '오늘 아침 점호에 늦게 나온 인원 있다던데',
+      q: '당신은 늦지 않았다.\n올바른 답변을 골라라',
       corrects: [
-        '만졌다고 하기는 어렵습니다',
-        '만진 적이 없다는 것은 사실입니다',
-        '만지지 않았다는 것은 거짓이 아닙니다',
+        '늦었다고 하기는 어렵습니다',
+        '늦은 적이 없다는 것은 사실입니다',
+        '제시간에 나왔다는 것은 거짓이 아닙니다',
       ],
       wrongs: [
-        '만지지 않았다고 하기는 어렵습니다',
-        '안 만졌다고 할 수는 없습니다',
-        '만지지 않은 것이 아닙니다',
+        '늦지 않았다고 하기는 어렵습니다',
+        '안 늦었다고 할 수는 없습니다',
+        '늦지 않은 것이 아닙니다',
       ],
     },
     {

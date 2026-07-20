@@ -36,7 +36,7 @@ export function showVolumePanel(scene: Phaser.Scene, onClose: () => void): Phase
 
   const panelY = 330;
   const bg = scene.add.graphics();
-  bg.fillStyle(COLORS.panel, 0.97);
+  bg.fillStyle(COLORS.panelDark, 0.98);
   bg.fillRoundedRect(60, panelY, GAME_WIDTH - 120, 620, 24);
   root.add(bg);
 

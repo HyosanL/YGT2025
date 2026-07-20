@@ -4,7 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
-import { chance, randFloat, randRange } from '../../utils/rng';
+import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
@@ -150,10 +150,7 @@ export class MicrowaveScene extends BaseMainScene {
     this.lightsRemainMs = this.lightsTotalMs;
 
     this.startSeniorLoop({
-      params: () => ({
-        gapMs: randRange(Q3_MICROWAVE.gapMsRange(this.day)),
-        stayMs: randRange(Q3_MICROWAVE.stayMsRange(this.day)),
-      }),
+      tempo: () => Q3_MICROWAVE.tempo(this.day),
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;

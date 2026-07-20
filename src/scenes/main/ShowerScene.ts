@@ -4,7 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
-import { randFloat, randRange } from '../../utils/rng';
+import { randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 /**
@@ -17,10 +17,13 @@ const heightAt = (feetY: number): number => Math.max(90, feetY - 500);
 const SENIOR_OFF_X = GAME_WIDTH + 190;
 /** 밀고 나와 멈추는 위치 (코앞) */
 const SENIOR_IN_X = 545;
-const SENIOR_FEET = 1055;
+const SENIOR_FEET = 985;
 /** 내가 샤워 중인 자리 (샤워기 바로 아래) */
 const ME_X = 248;
-const ME_FEET = 1062;
+/** 발끝 위치 — 조작 버튼(하단 265px)을 밟지 않도록 위로 올렸다 */
+const ME_FEET = 940;
+/** 실루엣 크기 보정 — 원근 계산값 그대로면 화면을 너무 차지한다 */
+const ME_SHRINK = 0.78;
 
 /**
  * Q1. 샤워장에서 몰래 노래 틀기.
@@ -73,7 +76,7 @@ export class ShowerScene extends BaseMainScene {
 
     // 나 — 옷을 벗고 씻는 중이라 실루엣만 보인다.
     // 몸을 가리는 수증기는 에셋 안에 뭉게구름으로 그려져 있다 (코드로 덧그리지 않는다).
-    const meH = heightAt(ME_FEET);
+    const meH = heightAt(ME_FEET) * ME_SHRINK;
     this.me = this.add.image(ME_X, ME_FEET, 'player_shower').setOrigin(0.5, 1).setDepth(6);
     // 두 실루엣의 원본 비율이 달라도 같은 배율을 써야 자세만 바뀌고 덩치는 그대로다
     this.me.setScale(meH / (this.me.height || meH));
@@ -191,27 +194,22 @@ export class ShowerScene extends BaseMainScene {
     audio.startShowerNoise();
 
     this.startSeniorLoop({
-      params: () => ({
-        gapMs: randRange(Q1_SHOWER.gapMsRange(this.day)),
-        stayMs: randRange(Q1_SHOWER.stayMsRange(this.day)),
-      }),
+      tempo: () => Q1_SHOWER.tempo(this.day),
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
         // 언제나 화면 오른쪽 문에서 — 밖에 서 있다가 성큼 밀고 들어온다.
         // 위치가 고정이라 '어디서 나올까'가 아니라 '얼마나 빨리 반응하나'의 게임이 된다.
         this.tweens.killTweensOf(this.senior);
-        this.senior.setX(SENIOR_OFF_X).setVisible(true).setMotion('walk');
+        // 표정을 풀고 걸어 들어왔다가 노려보는 게 아니라, **처음부터 째려보는 채로** 밀고 나온다
+        this.senior.setX(SENIOR_OFF_X).setVisible(true).setMotion('idle');
         this.tweens.add({
           targets: this.senior,
           x: SENIOR_IN_X + randFloat(-18, 18),
           duration: 260,
           ease: 'Cubic.easeOut',
-          onComplete: () => {
-            if (!this.finished && this.seniorState === 'in') this.senior.setMotion('idle');
-          },
         });
-        const reactMs = Math.max(360, Q1_SHOWER.reactMs(this.day));
+        const reactMs = Q1_SHOWER.reactMs(this.day);
         this.time.delayedCall(reactMs, () => {
           if (this.finished || this.seniorState !== 'in') return;
           if (this.holding) {
@@ -225,7 +223,6 @@ export class ShowerScene extends BaseMainScene {
         this.seniorState = 'away';
         // 다시 오른쪽 문으로 밀고 나간다
         this.tweens.killTweensOf(this.senior);
-        this.senior.setMotion('walk');
         this.tweens.add({
           targets: this.senior,
           x: SENIOR_OFF_X,

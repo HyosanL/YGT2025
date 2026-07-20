@@ -29,7 +29,7 @@ export function showLeaderboardPanel(
   panel.add(dim);
 
   const bg = scene.add.graphics();
-  bg.fillStyle(COLORS.panel, 0.97);
+  bg.fillStyle(COLORS.panelDark, 0.98);
   bg.fillRoundedRect(50, 160, GAME_WIDTH - 100, 900, 24);
   panel.add(bg);
 

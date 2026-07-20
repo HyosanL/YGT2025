@@ -14,13 +14,38 @@ export interface SeniorLoopParams {
   stayMs: number;
 }
 
+/**
+ * 선배 등장 리듬의 설계값.
+ *
+ * 등장 간격을 매번 같은 범위에서 뽑으면 몇 판 만에 몸이 외워버려 단조로워진다.
+ * 그래서 **패턴**(연타/페인트/장기체류/뜸들이기)을 섞어 예측을 무너뜨리되,
+ * 아래 두 가지 안전장치로 '운이 나빠서 지는 판'은 만들지 않는다:
+ *  - `minRecoveryMs`: 조우와 조우 사이에 반드시 확보되는 진행 시간
+ *  - `maxPresenceRatio`: 선배가 화면에 있을 수 있는 시간의 총량 상한
+ * 두 값이 있으면 "필요한 진행량 ÷ (1 − 점유율)" 만큼의 시간이 항상 남으므로
+ * 제한시간 안에 목표를 채우는 경로가 수학적으로 보장된다.
+ */
+export interface SeniorTempo {
+  /** 조우 사이 기본 간격 (ms) — 패턴에 따라 이 값이 흩어진다 */
+  baseGapMs: number;
+  /** 기본 체류 시간 (ms) */
+  baseStayMs: number;
+  /** 조우가 끝난 뒤 반드시 주어지는 최소 회복 시간 (ms) */
+  minRecoveryMs: number;
+  /** 선배가 화면에 있어도 되는 시간 비율 상한 (0~1) */
+  maxPresenceRatio: number;
+}
+
 export interface SeniorLoopHandlers {
-  /** 매 사이클마다 호출 — 일차별 난이도가 반영된 타이밍 반환 */
-  params: () => SeniorLoopParams;
+  /** 매 사이클마다 호출 — 일차별 템포 설계값 반환 */
+  tempo: () => SeniorTempo;
   /** 선배가 예고 없이 등장하는 순간 — 여기서부터 반응속도 승부가 시작된다 */
   onEnter: () => void;
   onLeave: () => void;
 }
+
+/** 조우 한 번의 성격 — 무엇을 흔들지 */
+type EncounterPattern = 'single' | 'burst' | 'feint' | 'linger' | 'lull';
 
 /**
  * 메인 퀘스트 공통 베이스:
@@ -41,6 +66,11 @@ export abstract class BaseMainScene extends Phaser.Scene {
   private seniorHandlers: SeniorLoopHandlers | null = null;
   private seniorActive = false;
   private seniorTimer: Phaser.Time.TimerEvent | null = null;
+  /** 씬 시작 후 흐른 시간 / 그중 선배가 화면에 있던 시간 — 점유율 상한 계산용 */
+  private loopElapsedMs = 0;
+  private loopPresentMs = 0;
+  /** 연타 패턴에서 남은 추가 등장 횟수 */
+  private burstLeft = 0;
 
   /** 서브클래스 create()에서 배경을 그린 뒤 호출 */
   protected setupCommon(): void {
@@ -275,22 +305,78 @@ export abstract class BaseMainScene extends Phaser.Scene {
    */
   protected startSeniorLoop(handlers: SeniorLoopHandlers): void {
     this.seniorHandlers = handlers;
+    this.loopElapsedMs = 0;
+    this.loopPresentMs = 0;
+    this.burstLeft = 0;
     this.scheduleSeniorCycle();
+  }
+
+  /**
+   * 다음 조우의 성격을 뽑는다. 뻔한 간격이 반복되지 않도록 확률을 흩어 놓되,
+   * 어느 패턴이 나오든 뒤이어 공정성 보정을 통과해야 실제로 스케줄된다.
+   */
+  private pickPattern(): EncounterPattern {
+    const roll = Math.random();
+    if (roll < 0.44) return 'single'; // 평범한 한 번
+    if (roll < 0.62) return 'burst'; // 짧게 두세 번 몰아친다
+    if (roll < 0.76) return 'feint'; // 고개만 들이밀고 사라진다
+    if (roll < 0.9) return 'linger'; // 오래 머문다
+    return 'lull'; // 한참 뜸을 들인다
   }
 
   private scheduleSeniorCycle(extraDelayMs = 0): void {
     const h = this.seniorHandlers;
     if (!h || this.finished) return;
     this.seniorTimer?.remove(); // 중복 사이클 방지
-    const p = h.params();
-    this.seniorTimer = this.time.delayedCall(p.gapMs + extraDelayMs, () => {
+    const t = h.tempo();
+
+    // 연타 중이면 패턴을 새로 뽑지 않고 곧바로 한 번 더 들이닥친다
+    const pattern: EncounterPattern = this.burstLeft > 0 ? 'burst' : this.pickPattern();
+    const jitter = (lo: number, hi: number): number => lo + Math.random() * (hi - lo);
+
+    let gapMs = t.baseGapMs * jitter(0.8, 1.3);
+    let stayMs = t.baseStayMs * jitter(0.85, 1.2);
+    switch (pattern) {
+      case 'burst':
+        // 짧게 여러 번 — 간격도 체류도 짧다
+        if (this.burstLeft <= 0) this.burstLeft = Math.random() < 0.4 ? 2 : 1;
+        else this.burstLeft -= 1;
+        gapMs = t.baseGapMs * jitter(0.3, 0.5);
+        stayMs = t.baseStayMs * jitter(0.5, 0.7);
+        break;
+      case 'feint':
+        stayMs = t.baseStayMs * jitter(0.35, 0.55);
+        break;
+      case 'linger':
+        stayMs = t.baseStayMs * jitter(1.5, 2.0);
+        break;
+      case 'lull':
+        gapMs = t.baseGapMs * jitter(1.8, 2.6);
+        break;
+      case 'single':
+        break;
+    }
+
+    // ── 공정성 보정 ──
+    // ① 조우 사이 최소 회복 시간은 무슨 일이 있어도 준다
+    gapMs = Math.max(gapMs, t.minRecoveryMs);
+    // ② 점유율 상한: 이번 체류까지 더했을 때 상한을 넘으면 그만큼 간격을 벌린다.
+    //    (P + s) / (E + g + s) ≤ r  →  g ≥ (P + s)/r − E − s
+    const needed =
+      (this.loopPresentMs + stayMs) / t.maxPresenceRatio - this.loopElapsedMs - stayMs;
+    if (needed > gapMs) gapMs = needed;
+
+    this.loopElapsedMs += gapMs + stayMs;
+    this.loopPresentMs += stayMs;
+
+    this.seniorTimer = this.time.delayedCall(gapMs + extraDelayMs, () => {
       if (this.finished) return;
       audio.door();
       this.setDanger('in');
       this.cameras.main.shake(140, 0.006);
       this.seniorActive = true;
       h.onEnter();
-      this.seniorTimer = this.time.delayedCall(p.stayMs, () => {
+      this.seniorTimer = this.time.delayedCall(stayMs, () => {
         if (this.finished) return;
         this.seniorActive = false;
         this.setDanger('off');

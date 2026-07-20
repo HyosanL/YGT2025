@@ -68,7 +68,7 @@ const BACK: Partial<Record<CadetMotion, string>> = {
 const CYCLE: Record<string, [string, string]> = {
   'player.walk': ['player_walk_a', 'player_walk_b'],
   'player.run': ['player_run', 'player_run_b'],
-  'senior.run': ['senior_run', 'senior_run'],
+  'senior.run': ['senior_run', 'senior_run_b'],
   'dobok.walk': ['player_dobok_walk', 'player_dobok_walk_b'],
   'dobok.run': ['player_dobok_run', 'player_dobok_run_b'],
   'dobok_back.walk': ['player_dobok_walk_back', 'player_dobok_walk_back_b'],
@@ -125,10 +125,59 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     scene.add.existing(this);
     this.setMotion('idle');
+    // 견장은 포즈가 바뀌어도 그대로 — 한 번만 얹는다 (방문자는 자세가 고정이다)
+    if (this.visitorRank) this.drawRankBoards(this.visitorRank);
+  }
+
+  /**
+   * 어깨 견장을 코드로 그린다.
+   *
+   * 견장 줄 수는 복도 판별 게임의 **유일한 단서**인데, 생성 모델은 "줄 3개"를 요구해도
+   * 2개나 4개를 그리기 일쑤였다. 그래서 방문자는 무늬 없는 한 장(`visitor_base`)만 쓰고
+   * 계급 줄은 여기서 정확히 rank개 찍는다 — 개수가 틀릴 수 없고, 크기도 마음대로 키운다.
+   *
+   * 좌표는 원본 스프라이트에서 실측한 어깨 위치의 '비율'이라 어떤 배율에서도 따라온다.
+   */
+  private drawRankBoards(rank: 1 | 2 | 3): void {
+    const src = this.sprite.texture.getSourceImage() as { width?: number; height?: number };
+    const texW = src.width || 1;
+    const texH = src.height || 1;
+    const dispH = BASE_H;
+    const dispW = (texW / texH) * dispH;
+    // 텍스처 비율 → 컨테이너 로컬 좌표 (스프라이트 origin 0.5, 0.6)
+    const lx = (fx: number): number => (fx - 0.5) * dispW;
+    const ly = (fy: number): number => (fy - 0.6) * dispH;
+
+    const g = this.scene.add.graphics();
+    const boardW = 0.135 * dispW;
+    const boardH = 0.055 * dispH;
+    for (const fx of [0.2, 0.8]) {
+      const cx = lx(fx);
+      const cy = ly(0.222);
+      // 남색 견장판 + 굵은 검정 외곽선 (배경에서 확실히 떨어져 보이게)
+      g.fillStyle(0x1b2540, 1);
+      g.fillRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
+      g.lineStyle(Math.max(2, boardH * 0.16), 0x14141a, 1);
+      g.strokeRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
+      // 금색 줄 rank개 — 판 안쪽에 균등 배치
+      const barH = boardH * 0.19;
+      const gap = boardH * 0.12;
+      const total = rank * barH + (rank - 1) * gap;
+      g.fillStyle(0xffc93c, 1);
+      for (let i = 0; i < rank; i++) {
+        g.fillRect(
+          cx - boardW * 0.34,
+          cy - total / 2 + i * (barH + gap),
+          boardW * 0.68,
+          barH
+        );
+      }
+    }
+    this.add(g);
   }
 
   private texFor(motion: CadetMotion): string {
-    if (this.visitorRank) return `visitor_${this.visitorRank}line`;
+    if (this.visitorRank) return 'visitor_base';
     const front = this.dobok ? DOBOK : POSE[this.kind];
     const table = this.back ? (this.dobok ? DOBOK_BACK : BACK) : front;
     // 뒷모습 에셋이 없는 모션은 정면 포즈로 자연스럽게 폴백한다

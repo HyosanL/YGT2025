@@ -85,7 +85,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       this.room.top = PANEL.y + 226;
     } else {
       const panel = this.add.graphics();
-      panel.fillStyle(COLORS.panel, 0.98);
+      panel.fillStyle(COLORS.panelDark, 0.98);
       panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 24);
       panel.lineStyle(3, COLORS.warn, 0.6);
       panel.strokeRoundedRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 24);

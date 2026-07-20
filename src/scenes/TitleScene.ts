@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, GAME_WIDTH } from '../config';
+import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { Button, showToast } from '../ui/Button';
@@ -54,9 +54,6 @@ export class TitleScene extends Phaser.Scene {
     addSceneBg(this, 'bg_title');
 
     this.add
-      .text(GAME_WIDTH / 2, 300, '✈️', { fontFamily: FONT, fontSize: '90px' })
-      .setOrigin(0.5);
-    this.add
       .text(GAME_WIDTH / 2, 420, 'YGT 2025', {
         fontFamily: FONT,
         fontSize: '96px',
@@ -85,18 +82,20 @@ export class TitleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // 하단 추격전 — 기태는 오늘도 도망 중 (버튼보다 먼저 생성해 뒤에 깔린다)
-    const runner = new Cadet(this, -140, 1155, 'player');
-    runner.setScale(0.6);
-    runner.setMotion('run');
-    runner.setFace('😆');
-    const chaser = new Cadet(this, -400, 1155, 'senior');
-    chaser.setScale(0.62);
-    chaser.setMotion('run');
-    chaser.setFace('😡');
-    // 선배 쪽이 살짝 빨라서 갈수록 간격이 좁혀진다
-    this.tweens.add({ targets: runner, x: GAME_WIDTH + 260, duration: 6000, repeat: -1 });
-    this.tweens.add({ targets: chaser, x: GAME_WIDTH + 40, duration: 6000, repeat: -1 });
+    // 하단 추격전 — 당직 선배가 뒤에서 쫓고 기태가 앞서 도망친다.
+    // 스프라이트가 왼쪽을 보고 있으므로 **오른쪽에서 왼쪽으로** 달려야 뒷걸음질처럼 보이지 않는다.
+    // 즉 진행 방향 기준 '뒤'는 오른쪽이라, 선배가 기태보다 오른쪽에서 출발한다.
+    // 버튼 영역(마지막 버튼 아래끝 ~1120) 아래로 내려 화면 맨 아래 띠에만 머물게 한다.
+    const laneY = GAME_HEIGHT - 92;
+    const runner = new Cadet(this, GAME_WIDTH + 170, laneY, 'player');
+    runner.setScale(0.52).setDepth(1);
+    runner.setMotion('run'); // player_run / player_run_b 2프레임 — 손발이 교차한다
+    const chaser = new Cadet(this, GAME_WIDTH + 430, laneY, 'senior');
+    chaser.setScale(0.54).setDepth(1);
+    chaser.setMotion('run'); // senior_run / senior_run_b 2프레임
+    // 선배 쪽이 조금 더 멀리 가므로 갈수록 간격이 좁혀진다
+    this.tweens.add({ targets: runner, x: -230, duration: 6200, repeat: -1 });
+    this.tweens.add({ targets: chaser, x: -90, duration: 6200, repeat: -1 });
 
     if (gameState.bestDay > 0) {
       this.add
@@ -108,7 +107,7 @@ export class TitleScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
-    new Button(this, GAME_WIDTH / 2, 740, {
+    new Button(this, GAME_WIDTH / 2, 706, {
       label: '▶ 게임 시작',
       width: 420,
       height: 104,
@@ -120,21 +119,21 @@ export class TitleScene extends Phaser.Scene {
       },
     });
 
-    new Button(this, GAME_WIDTH / 2, 858, {
+    new Button(this, GAME_WIDTH / 2, 818, {
       label: '🏆 리더보드',
       width: 420,
       height: 92,
       onClick: () => this.toggleLeaderboard(),
     });
 
-    new Button(this, GAME_WIDTH / 2, 966, {
+    new Button(this, GAME_WIDTH / 2, 918, {
       label: '📖 게임 설명',
       width: 420,
       height: 92,
       onClick: () => this.toggleHelp(),
     });
 
-    new Button(this, GAME_WIDTH / 2, 1074, {
+    new Button(this, GAME_WIDTH / 2, 1018, {
       label: '✏️ 닉네임 설정',
       width: 420,
       height: 92,

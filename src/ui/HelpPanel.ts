@@ -162,7 +162,7 @@ export function showHelpPanel(scene: Phaser.Scene, onClose: () => void): Phaser.
   root.add(dim);
 
   const bg = scene.add.graphics();
-  bg.fillStyle(COLORS.panel, 0.97);
+  bg.fillStyle(COLORS.panelDark, 0.98);
   bg.fillRoundedRect(40, 130, GAME_WIDTH - 80, 990, 24);
   root.add(bg);
 
