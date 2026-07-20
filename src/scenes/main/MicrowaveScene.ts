@@ -39,6 +39,8 @@ const HIDE = { x: DOOR_X, y: DOOR_FLOOR_Y - 120 * HIDE_SCALE, scale: HIDE_SCALE 
  */
 export class MicrowaveScene extends BaseMainScene {
   private zone: Zone = 'micro';
+  /** 다가오는 발소리 타이머 */
+  private stepTimer: Phaser.Time.TimerEvent | null = null;
   private seniorState: 'away' | 'in' = 'away';
   private reacted = false;
   private cookProgressMs = 0;
@@ -60,11 +62,17 @@ export class MicrowaveScene extends BaseMainScene {
     super({ key: 'microwave' });
   }
 
+  /** 심야 취사장을 도는 건 선배가 아니라 당직훈육관이다 */
+  protected override closeupKey(): string {
+    return 'duty_closeup';
+  }
+
   create(): void {
     this.zone = 'micro';
     this.seniorState = 'away';
     this.cookProgressMs = 0;
     this.lightsLastSec = -1;
+    this.stepTimer = null;
 
     // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
     // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문과 복도 끝을 함께 담는다.
@@ -117,7 +125,8 @@ export class MicrowaveScene extends BaseMainScene {
       .setDepth(30)
       .setVisible(false);
 
-    this.senior = new Cadet(this, 690, 700, 'senior');
+    // 전투복+전투모+훈육 완장의 당직훈육관
+    this.senior = new Cadet(this, 690, 700, 'duty');
     this.senior.setScale(0.3).setVisible(false).setDepth(6);
 
     // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신만 보인다
@@ -168,6 +177,20 @@ export class MicrowaveScene extends BaseMainScene {
           duration: Q3_MICROWAVE.reactMs(this.day) * 1.6,
           ease: 'Sine.easeIn',
         });
+        // 다가오는 전투화 발소리 — 가까워질수록 커진다.
+        // 화면을 안 보고 있어도 '오고 있다'가 귀로 먼저 들어온다.
+        this.stepTimer?.remove();
+        let step = 0;
+        this.stepTimer = this.time.addEvent({
+          delay: 300,
+          repeat: 7,
+          callback: () => {
+            if (this.finished || this.seniorState !== 'in') return;
+            step += 1;
+            audio.footstep(Math.min(1, 0.25 + step * 0.12));
+          },
+        });
+
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
         this.time.delayedCall(reactMs, () => {
           if (this.finished || this.seniorState !== 'in') return;
@@ -180,6 +203,8 @@ export class MicrowaveScene extends BaseMainScene {
       },
       onLeave: () => {
         this.seniorState = 'away';
+        this.stepTimer?.remove();
+        this.stepTimer = null;
         this.tweens.killTweensOf(this.senior);
         this.senior.setVisible(false);
       },

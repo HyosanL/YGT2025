@@ -133,6 +133,11 @@ export abstract class BaseMainScene extends Phaser.Scene {
     });
   }
 
+  /** 잡혔을 때 화면을 덮는 클로즈업 텍스처 — 추격자가 다른 씬은 오버라이드한다 */
+  protected closeupKey(): string {
+    return 'senior_closeup';
+  }
+
   /** 이 퀘스트가 HP를 쓰는가 — false면 HP 바를 감추고 갱신도 하지 않는다 */
   protected usesHp(): boolean {
     return true;
@@ -494,7 +499,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     audio.gameover();
 
     const face = this.add
-      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40, 'senior_closeup')
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40, this.closeupKey())
       .setDepth(3550)
       .setAlpha(0);
     // 화면 가로를 넘치도록 — 얼굴이 코앞까지 들이닥친 느낌

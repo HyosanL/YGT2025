@@ -396,6 +396,18 @@ class AudioManagerImpl {
     this.noiseBurst(this.now, 0.15, 0.4, 500);
   }
 
+  /**
+   * 복도를 울리는 전투화 발소리 — 저역 '툭' + 짧은 노이즈.
+   * 다가오는 정도(0=멀리, 1=코앞)에 따라 커지고 밝아져 거리감을 준다.
+   */
+  footstep(nearness = 0.5): void {
+    if (!this.ready) return;
+    const n = Math.max(0, Math.min(1, nearness));
+    const gain = 0.12 + 0.5 * n;
+    this.tone('sine', 70 + 22 * n, this.now, 0.11, gain, 40);
+    this.noiseBurst(this.now, 0.05, gain * 0.5, 700 + 900 * n);
+  }
+
   /** 전자레인지 "삐-" — 실제처럼 1초간 이어지는 고음 비프 (피에조 부저 느낌) */
   microwaveBeep(): void {
     if (!this.ready || !this.ctx || !this.master) return;

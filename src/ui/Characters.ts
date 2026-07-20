@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, UI } from '../config';
 
-export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
+export type CadetKind = 'player' | 'junior' | 'peer' | 'senior' | 'duty';
 export type CadetMotion =
   | 'idle' | 'walk' | 'run' | 'dance' | 'salute'
   | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point' | 'hide'
@@ -41,6 +41,7 @@ const LABELS: Record<CadetKind, string> = {
   junior: '후배 (1학년)',
   peer: '동기 (2학년)',
   senior: '선배 (3학년)',
+  duty: '당직훈육관',
 };
 
 /** kind+motion → 텍스처 키. 없는 모션은 idle로 폴백. */
@@ -56,6 +57,11 @@ const POSE: Record<CadetKind, Partial<Record<CadetMotion, string>>> = {
   senior: {
     idle: 'senior_idle', walk: 'senior_walk', run: 'senior_run', salute: 'senior_idle',
     point: 'senior_point', charge: 'senior_charge',
+  },
+  // 당직훈육관 — 전투복+전투모+훈육 완장. 심야 취사장을 도는 건 선배가 아니라 이 사람이다.
+  duty: {
+    idle: 'duty_idle', walk: 'duty_walk_a', run: 'duty_charge', salute: 'duty_idle',
+    point: 'duty_idle', charge: 'duty_charge',
   },
 };
 const DOBOK: Partial<Record<CadetMotion, string>> = {
@@ -76,6 +82,9 @@ const CYCLE: Record<string, [string, string]> = {
   'senior.run': ['senior_run', 'senior_run_b'],
   'senior.walk': ['senior_walk', 'senior_walk_b'],
   'senior.charge': ['senior_charge', 'senior_charge_b'],
+  'duty.walk': ['duty_walk_a', 'duty_walk_b'],
+  'duty.run': ['duty_charge', 'duty_charge_b'],
+  'duty.charge': ['duty_charge', 'duty_charge_b'],
   // 복도 방문자 — 걸어오는 2프레임 (한 장짜리면 한 발 든 채 미끄러진다)
   'visitor.walk': ['visitor_walk_a', 'visitor_walk_b'],
   'dobok.walk': ['player_dobok_walk', 'player_dobok_walk_b'],
@@ -280,7 +289,7 @@ export class Cadet extends Phaser.GameObjects.Container {
       let i = 0;
       this.applyTexture(cycle[0], uprightH);
       this.cycleTimer = this.scene.time.addEvent({
-        delay: motion === 'run' ? 130 : 200,
+        delay: motion === 'run' ? 110 : 300,
         loop: true,
         callback: () => {
           if (!this.active) return;
