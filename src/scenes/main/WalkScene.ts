@@ -28,6 +28,13 @@ interface Guard {
   turnSpeed: number;
   /** 다음 방향 전환 시각 (elapsedMs 기준) */
   nextThinkMs: number;
+  /** 순찰 기준점 — 이 자리를 중심으로 도로변을 오르내린다 */
+  homeY: number;
+  /** 순찰 진행 방향 (+1 아래쪽 / -1 위쪽) */
+  patrolDir: 1 | -1;
+  /** 이 선배의 순찰 폭·속도 (개인차를 줘 전부 같이 움직이지 않게) */
+  patrolRange: number;
+  patrolSpeed: number;
 }
 
 /**
@@ -119,6 +126,11 @@ export class WalkScene extends BaseMainScene {
         targetGaze: baseAngle + randFloat(-ampRad, ampRad),
         turnSpeed: 0.0001,
         nextThinkMs: randFloat(0, 700), // 선배마다 다른 타이밍에 첫 방향 전환
+        homeY: wy,
+        patrolDir: chance(0.5) ? 1 : -1,
+        // 개인차 ±35% — 전원이 같은 폭·같은 속도로 움직이면 패턴이 금방 읽힌다
+        patrolRange: Q4_WALK.patrolRangePx(gameState.day) * randFloat(0.65, 1.35),
+        patrolSpeed: Q4_WALK.patrolSpeed(gameState.day) * randFloat(0.65, 1.35),
       });
     };
     // 도착 지점(무도장 입구)까지 빈 구간 없이 깔린다
@@ -233,7 +245,7 @@ export class WalkScene extends BaseMainScene {
     // ── 이동 & HP ──
     // 탈진 즉사는 없다: HP가 바닥나면 강제 걷기(탈진)로 전환되고,
     // 사각지대에서 걸으며 회복해야 다시 뛸 수 있다 (불가피한 죽음 방지)
-    const speed = this.holding ? Q4_WALK.runSpeed : Q4_WALK.walkSpeed;
+    const speed = this.holding ? Q4_WALK.runSpeed(this.day) : Q4_WALK.walkSpeed(this.day);
     this.progressPx += (speed * delta) / 1000;
     if (this.holding) {
       const drain = (Q4_WALK.runHpPerSec * delta) / 1000;
@@ -273,6 +285,11 @@ export class WalkScene extends BaseMainScene {
     let spotter: Cadet | null = null;
     this.coneG.clear();
     for (const g of this.guards) {
+      // 길가를 오르내리며 순찰한다 — 시야 공백이 고정되지 않아 외워서 뚫을 수 없다
+      g.worldY += g.patrolDir * (g.patrolSpeed * delta) / 1000;
+      if (g.worldY > g.homeY + g.patrolRange) g.patrolDir = -1;
+      else if (g.worldY < g.homeY - g.patrolRange) g.patrolDir = 1;
+
       const sy = PLAYER_Y - (g.worldY - this.progressPx);
       g.cadet.setY(sy);
       const onScreen = sy > -250 && sy < GAME_HEIGHT + 250;
@@ -299,6 +316,7 @@ export class WalkScene extends BaseMainScene {
         spotter = g.cadet;
       }
       g.cadet.setFace(inCone ? (this.holding ? '🫡' : '😡') : '👀');
+      g.cadet.setMotion('walk');
 
       // 시야 부채꼴 — 평소엔 노랑, 나를 비추는 중엔 빨강
       this.coneG.fillStyle(inCone ? 0xe94560 : 0xffd166, inCone ? 0.2 : 0.11);
