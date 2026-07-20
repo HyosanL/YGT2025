@@ -4,19 +4,11 @@ import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import { HAPTIC, vibrate } from '../../utils/haptics';
 import type { MiniSceneData } from '../../types';
+import { drawKakaoDate, drawKakaoRoom, KAKAO, type KakaoRoom } from '../../ui/kakao';
 
-export const PANEL = { x: 40, y: 150, w: GAME_WIDTH - 80, h: 980 } as const;
+export const PANEL = { x: 40, y: 116, w: GAME_WIDTH - 80, h: 1044 } as const;
 
-/** 카톡풍 팔레트 — 미니 퀘스트(채팅류) 공용 */
-/** 실제 카카오톡 채팅방 색 (청회색 배경 + 흰 헤더 + 흰/노랑 말풍선) */
-export const KAKAO = {
-  bg: 0xb2c7d9,
-  bubbleWhite: 0xffffff,
-  yellow: 0xfee500,
-  textDark: '#1f1f1f',
-  textBrown: '#3a2e1e',
-  sub: '#6b7684',
-} as const;
+export { KAKAO };
 
 export type MiniTheme = 'dark' | 'kakao';
 
@@ -40,8 +32,14 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   private panicOverlay: Phaser.GameObjects.Rectangle | null = null;
   private lastSecond = -1;
   private pulseMs = 0;
-  /** 타이머 바 y 오프셋 — 카톡 테마는 헤더 바 아래로 내린다 */
+  /** 타이머 바 y 오프셋 — 카톡 테마는 네비게이션 바 아래로 내린다 */
   private timerBarY = 90;
+  /** 카톡 테마에서 말풍선을 쌓을 수 있는 대화 영역 */
+  protected room: KakaoRoom = { top: PANEL.y, bottom: PANEL.y + PANEL.h, left: PANEL.x, right: PANEL.x + PANEL.w };
+  /** 방 제목 옆 인원수 (단체방) — setupOverlay 전에 세팅 */
+  protected roomMemberCount = 0;
+  /** 입력바 플레이스홀더 */
+  protected roomPlaceholder = '';
 
   init(data: MiniSceneData): void {
     this.returnTo = data.returnTo;
@@ -59,7 +57,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.timerText = null;
     this.lastSecond = -1;
     this.pulseMs = 0;
-    this.timerBarY = theme === 'kakao' ? 150 : 90;
+    this.timerBarY = theme === 'kakao' ? 128 : 90;
 
     // 회색 처리된 본 게임 위에 미니 퀘스트 패널이 뜬다
     const dim = this.add
@@ -68,41 +66,17 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setInteractive(); // 하위 씬으로의 입력 차단
     void dim;
 
-    const panel = this.add.graphics();
     if (theme === 'kakao') {
-      // 실제 카톡 채팅방 — 청회색 배경 + 흰 헤더(뒤로/제목/검색/메뉴)
-      panel.fillStyle(KAKAO.bg, 1);
-      panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 24);
-      panel.fillStyle(0xffffff, 1);
-      panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, 112, { tl: 24, tr: 24, bl: 0, br: 0 });
-      panel.lineStyle(2, 0xe3e7ec, 1);
-      panel.lineBetween(PANEL.x, PANEL.y + 112, PANEL.x + PANEL.w, PANEL.y + 112);
-      this.add
-        .text(PANEL.x + 26, PANEL.y + 56, '‹', {
-          fontFamily: FONT,
-          fontSize: '46px',
-          color: '#2b2b2b',
-        })
-        .setOrigin(0, 0.5);
-      this.add
-        .text(GAME_WIDTH / 2, PANEL.y + 56, title, {
-          fontFamily: FONT,
-          fontSize: '32px',
-          color: '#111111',
-          fontStyle: 'bold',
-        })
-        .setOrigin(0.5);
-      this.add
-        .text(PANEL.x + PANEL.w - 28, PANEL.y + 56, '☰', {
-          fontFamily: FONT,
-          fontSize: '30px',
-          color: '#2b2b2b',
-        })
-        .setOrigin(1, 0.5);
-      this.add
-        .text(PANEL.x + PANEL.w - 82, PANEL.y + 56, '🔍', { fontFamily: FONT, fontSize: '26px' })
-        .setOrigin(1, 0.5);
+      // 실제 카톡 채팅방 그대로 — 상태바 + 네비바 + 하늘색 대화 배경 + 입력바
+      this.room = drawKakaoRoom(
+        this,
+        { x: PANEL.x, y: PANEL.y, w: PANEL.w, h: PANEL.h },
+        { title, memberCount: this.roomMemberCount, placeholder: this.roomPlaceholder }
+      );
+      drawKakaoDate(this, PANEL.y + 196, '오늘');
+      this.room.top = PANEL.y + 226;
     } else {
+      const panel = this.add.graphics();
       panel.fillStyle(COLORS.panel, 0.98);
       panel.fillRoundedRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, 24);
       panel.lineStyle(3, COLORS.warn, 0.6);
@@ -152,7 +126,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       this.timerText = this.add
         .text(PANEL.x + PANEL.w - 65, PANEL.y + this.timerBarY + 15, '', {
           fontFamily: FONT,
-          fontSize: '56px',
+          fontSize: '48px',
           color: this.theme === 'kakao' ? KAKAO.textDark : COLORS.textCss,
           fontStyle: 'bold',
         })

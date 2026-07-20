@@ -1,9 +1,10 @@
-import { COLORS, FONT, GAME_WIDTH, M2_VOTE } from '../../config';
+import { COLORS, FONT, M2_VOTE } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import type { VoteQuestion } from '../../types';
 import { Button } from '../../ui/Button';
 import { pick, shuffle } from '../../utils/rng';
+import { drawIncoming } from '../../ui/kakao';
 import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 
 /**
@@ -21,7 +22,9 @@ export class VoteScene extends BaseMiniScene {
   }
 
   create(): void {
-    this.setupOverlay('21기 생도대 단체방', 'kakao');
+    this.roomMemberCount = 214;
+    this.roomPlaceholder = '메시지 입력';
+    this.setupOverlay('21기 생도대', 'kakao');
     this.buttons = [];
 
     const level = M2_VOTE.level(gameState.day);
@@ -37,77 +40,65 @@ export class VoteScene extends BaseMiniScene {
 
     audio.ding();
 
-    // ── 옹성오 선배 메시지 (좌측 흰 버블 — 투표 주제) ──
-    const msgY = PANEL.y + 258;
-    const avatar = this.add.graphics();
-    avatar.fillStyle(0x5a6b7e, 1);
-    avatar.fillRoundedRect(PANEL.x + 34, msgY - 36, 60, 60, 22);
-    this.add
-      .text(PANEL.x + 64, msgY - 6, '😤', { fontFamily: FONT, fontSize: '30px' })
-      .setOrigin(0.5);
-    this.add
-      .text(PANEL.x + 108, msgY - 54, '옹성오', {
-        fontFamily: FONT,
-        fontSize: '21px',
-        color: KAKAO.sub,
-      })
-      .setOrigin(0, 0.5);
-    const bubbleW = Math.min(500, this.question.msg.length * 23 + 56);
-    const bubble = this.add.graphics();
-    bubble.fillStyle(KAKAO.bubbleWhite, 1);
-    bubble.fillRoundedRect(PANEL.x + 108, msgY - 30, bubbleW, 58, 16);
-    bubble.fillTriangle(PANEL.x + 108, msgY - 22, PANEL.x + 96, msgY - 10, PANEL.x + 108, msgY + 2);
-    this.add
-      .text(PANEL.x + 108 + bubbleW / 2, msgY - 1, this.question.msg, {
-        fontFamily: FONT,
-        fontSize: '23px',
-        color: KAKAO.textDark,
-      })
-      .setOrigin(0.5);
+    // ── 옹성오 선배 메시지 (프로필 + 이름 + 흰 말풍선) ──
+    const msgH = drawIncoming(this, {
+      x: PANEL.x + 24,
+      y: this.room.top,
+      name: '옹성오',
+      avatarKey: 'avatar_ong',
+      avatarEmoji: '😤',
+      text: this.question.msg,
+      maxWidth: 400,
+      fontSize: 24,
+      time: '오후 10:02',
+    });
 
-    // ── 투표 카드 (카톡 투표 스타일) ──
-    const cardX = PANEL.x + 30;
-    const cardY = PANEL.y + 335;
-    const cardW = PANEL.w - 60;
-    const cardH = 605;
+    // ── 투표 카드 (카톡 투표 말풍선 — 프로필 아래에 이어 붙는다) ──
+    const cardX = PANEL.x + 108;
+    const cardY = this.room.top + msgH - 8;
+    const cardW = PANEL.w - 148;
+    // 선지 수에 맞춰 카드 높이를 정확히 잡아 입력바를 침범하지 않게 한다
+    const optionGap = 96;
+    const optionH = 88;
+    const optionTop = 200;
+    const cardH = optionTop + (optionCount - 1) * optionGap + optionH / 2 + 36;
     const card = this.add.graphics();
     card.fillStyle(KAKAO.bubbleWhite, 1);
-    card.fillRoundedRect(cardX, cardY, cardW, cardH, 18);
+    card.fillRoundedRect(cardX, cardY, cardW, cardH, 14);
     // 카드 헤더 + 구분선
     this.add
-      .text(cardX + 28, cardY + 36, '📊 익명 투표 (라고 쓰고 실명제)', {
+      .text(cardX + 24, cardY + 34, '📊 익명 투표 (라고 쓰고 실명제)', {
         fontFamily: FONT,
-        fontSize: '26px',
+        fontSize: '24px',
         color: KAKAO.textDark,
         fontStyle: 'bold',
       })
       .setOrigin(0, 0.5);
     card.lineStyle(2, 0xe1e6ec, 1);
-    card.lineBetween(cardX + 20, cardY + 66, cardX + cardW - 20, cardY + 66);
+    card.lineBetween(cardX + 18, cardY + 62, cardX + cardW - 18, cardY + 62);
 
     this.add
-      .text(GAME_WIDTH / 2, cardY + 150, this.question.q, {
+      .text(cardX + cardW / 2, cardY + 108, this.question.q, {
         fontFamily: FONT,
-        fontSize: '29px',
+        fontSize: '25px',
         color: KAKAO.textDark,
-        wordWrap: { width: cardW - 90 },
+        wordWrap: { width: cardW - 70 },
         align: 'center',
         lineSpacing: 9,
       })
       .setOrigin(0.5);
 
     const circled = ['①', '②', '③', '④'];
-    const startY = cardY + 300;
+    const startY = cardY + optionTop;
     options.forEach((option, i) => {
-      const btn = new Button(this, GAME_WIDTH / 2, startY + i * 126, {
+      const btn = new Button(this, cardX + cardW / 2, startY + i * optionGap, {
         label: `${circled[i] ?? `${i + 1}.`} ${option}`,
-        width: cardW - 60,
-        height: 108,
+        width: cardW - 48,
+        height: optionH,
         color: 0xf4f6f9,
         labelColor: KAKAO.textDark,
-        strokeColor: 0x9fb0c2,
         fontSize: 23,
-        wrapWidth: cardW - 130,
+        wrapWidth: cardW - 118,
         onClick: () => this.choose(i),
       });
       this.buttons.push(btn);

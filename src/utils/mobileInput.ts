@@ -29,6 +29,7 @@ export interface HiddenInputOptions {
     border: string;
     color: string;
     caretColor: string;
+    textAlign: string;
   }>;
   /**
    * 입력창 바로 위에 붙는 안내 라벨 (예: 따라 쳐야 할 문장).
@@ -55,7 +56,7 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     borderRadius: '12px',
     color: opts.style?.color ?? '#f5f5f5',
     caretColor: opts.style?.caretColor ?? '#ffb400',
-    textAlign: 'center',
+    textAlign: opts.style?.textAlign ?? 'center',
     outline: 'none',
     padding: '0 10px',
     // iOS가 포커스 시 자동 줌하지 않도록 16px 이상 유지

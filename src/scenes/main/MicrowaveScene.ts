@@ -4,19 +4,30 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
-import { chance, pick, randFloat, randRange } from '../../utils/rng';
+import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
 
-const LAUNDRY_X = 140;
-const MICRO_X = 630;
-const PLAYER_Y = 1080;
-/** 전자레인지 위치 (배경 이미지 기준) */
-const OVEN_X = 506;
-const OVEN_Y = 1084;
-/** 복도 저편에서 선배가 갑자기 나타날 수 있는 여러 지점 */
-const SENIOR_SPOTS = [430, 560, 680] as const;
+/**
+ * 배경(bg_micro)을 화면에 얹은 뒤의 실제 좌표들.
+ * 카메라 눈높이(소실점)가 HORIZON — 서 있는 사람의 머리는 거리와 무관하게 이 선 근처에 온다.
+ * 그래서 가까이 있을수록 몸이 아래로 길게 뻗어 화면 밖으로 나가고(= 상반신만 보임),
+ * 멀리 있을수록 작아진다. 이 규칙으로 크기를 정하면 발이 바닥에 붙는다.
+ */
+const HORIZON = 550;
+/** 전자레인지 (배경 픽셀에서 실측한 밝은 몸체 영역의 중심) */
+const OVEN_X = 461;
+const OVEN_Y = 924;
+/** 세탁실 문 — 중심 x, 문턱(바닥) y, 문 높이 */
+const DOOR_X = 113;
+const DOOR_FLOOR_Y = 1092;
+const DOOR_H = 724;
+/** 전자레인지 앞: 카메라 코앞이라 뒷모습 상반신만 화면에 들어온다 */
+const NEAR = { x: 618, y: 1162, scale: 3.4 } as const;
+/** 세탁실 문 안: 문 높이의 약 80%를 채우는 크기로 쏙 들어간다 */
+const HIDE_SCALE = (DOOR_H * 0.8) / 300;
+const HIDE = { x: DOOR_X, y: DOOR_FLOOR_Y - 120 * HIDE_SCALE, scale: HIDE_SCALE } as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -56,22 +67,24 @@ export class MicrowaveScene extends BaseMainScene {
     this.lightsLastSec = -1;
 
     // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
-    // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문이 보이게 한다.
-    addSceneBg(this, 'bg_micro').x += 150;
+    // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문과 복도 끝을 함께 담는다.
+    addSceneBg(this, 'bg_micro').x += 80;
     // 조리 중에만 켜지는 내부 조명 (창 안쪽 따뜻한 빛 + 주변 은은한 글로우)
     this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffe9b0, 0.20);
-    this.ovenLight.fillCircle(OVEN_X, OVEN_Y, 120);
-    this.ovenLight.fillStyle(0xffd98a, 0.55);
-    this.ovenLight.fillRoundedRect(OVEN_X - 62, OVEN_Y - 40, 124, 80, 8);
-    this.add.text(OVEN_X, OVEN_Y, '🍜', { fontFamily: FONT, fontSize: '44px' }).setOrigin(0.5);
+    this.ovenLight.fillStyle(0xffe9b0, 0.18);
+    this.ovenLight.fillCircle(OVEN_X - 90, OVEN_Y, 200);
+    this.ovenLight.fillStyle(0xffd98a, 0.5);
+    this.ovenLight.fillRoundedRect(OVEN_X - 205, OVEN_Y - 80, 235, 165, 10);
+    this.add
+      .text(OVEN_X - 90, OVEN_Y + 6, '🍜', { fontFamily: FONT, fontSize: '52px' })
+      .setOrigin(0.5);
     addVignette(this, 0.3);
 
     // 조리 게이지
-    const barBg = this.add.graphics();
+    const barBg = this.add.graphics().setDepth(29);
     barBg.fillStyle(0x000000, 0.55);
     barBg.fillRoundedRect(GAME_WIDTH / 2 - 250, 80, 500, 44, 10);
-    this.cookFill = this.add.graphics();
+    this.cookFill = this.add.graphics().setDepth(29);
     this.cookLabel = this.add
       .text(GAME_WIDTH / 2, 102, '조리 0%', {
         fontFamily: FONT,
@@ -80,13 +93,13 @@ export class MicrowaveScene extends BaseMainScene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
-      .setDepth(10);
+      .setDepth(30);
 
     // 완전소등 카운트다운 — 이 시간 안에 "삐-"까지 끝내야 한다
-    const lightsBg = this.add.graphics();
+    const lightsBg = this.add.graphics().setDepth(29);
     lightsBg.fillStyle(0x000000, 0.55);
     lightsBg.fillRoundedRect(GAME_WIDTH / 2 - 250, 132, 500, 36, 10);
-    this.lightsFill = this.add.graphics();
+    this.lightsFill = this.add.graphics().setDepth(29);
     this.lightsLabel = this.add
       .text(GAME_WIDTH / 2, 150, '', {
         fontFamily: FONT,
@@ -95,26 +108,28 @@ export class MicrowaveScene extends BaseMainScene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
-      .setDepth(10);
+      .setDepth(30);
 
     this.beepText = this.add
-      .text(OVEN_X, 930, '삐 ─ 완성!!', {
+      .text(OVEN_X - 90, OVEN_Y - 160, '삐 ─ 완성!!', {
         fontFamily: FONT,
         fontSize: '44px',
         color: COLORS.safeCss,
         fontStyle: 'bold',
       })
       .setOrigin(0.5)
+      .setDepth(30)
       .setVisible(false);
 
-    this.senior = new Cadet(this, GAME_WIDTH / 2, 340, 'senior');
-    this.senior.setScale(0.7).setVisible(false).setDepth(5);
+    this.senior = new Cadet(this, 690, 700, 'senior');
+    this.senior.setScale(0.3).setVisible(false).setDepth(6);
 
-    this.player = new Cadet(this, MICRO_X, PLAYER_Y, 'player');
-    this.player.setFace('🤤');
+    // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신만 보인다
+    this.player = new Cadet(this, NEAR.x, NEAR.y, 'player', false, { back: true });
+    this.player.setScale(NEAR.scale).setDepth(8);
 
     // 홀드 버튼 — 누르는 동안 세탁실에 숨는다 (샤워장과 같은 조작감)
-    new Button(this, GAME_WIDTH / 2, GAME_HEIGHT - 190, {
+    const hideBtn = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT - 190, {
       label: '🫣 세탁실에 숨기 (꾹)',
       width: 480,
       height: 150,
@@ -123,13 +138,15 @@ export class MicrowaveScene extends BaseMainScene {
       onDown: () => this.moveTo('laundry'),
       onUp: () => this.moveTo('micro'),
     });
+    hideBtn.setDepth(30);
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 90, '누르는 동안 숨는다 · 소등 전에 조리 100%를 채우면 성공!', {
         fontFamily: FONT,
         fontSize: '24px',
         color: COLORS.subCss,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(30);
 
     this.setupCommon();
     this.cookTotalMs = Q3_MICROWAVE.cookMs(this.day);
@@ -144,17 +161,20 @@ export class MicrowaveScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        // 변칙 등장 — 대개 복도 멀리(작게), 가끔은 방 안까지 들어온다(크게)
-        if (chance(0.3)) {
-          // 방 안까지 성큼 들어온다
-          this.senior.setPosition(660, randFloat(1010, 1070)).setScale(randFloat(0.9, 1.05));
-        } else {
-          // 복도 저편에서 지나간다
-          this.senior
-            .setPosition(pick(SENIOR_SPOTS) + randFloat(-20, 20), 700)
-            .setScale(randFloat(0.42, 0.58));
-        }
-        this.senior.setVisible(true);
+        // 복도 저 끝에서 모습을 드러내 이쪽으로 걸어온다 — 멀수록 작고, 다가올수록 커진다
+        const startFeet = randFloat(672, 700);
+        const endFeet = chance(0.35) ? randFloat(980, 1060) : randFloat(850, 930);
+        this.senior.setVisible(true).setMotion('walk');
+        this.placeOnFloor(this.senior, randFloat(630, 690), startFeet);
+        this.tweens.killTweensOf(this.senior);
+        this.tweens.add({
+          targets: this.senior,
+          x: randFloat(430, 560),
+          y: endFeet - 120 * this.scaleAt(endFeet),
+          scale: this.scaleAt(endFeet),
+          duration: Q3_MICROWAVE.reactMs(this.day) * 1.6,
+          ease: 'Sine.easeIn',
+        });
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
         this.time.delayedCall(reactMs, () => {
           if (this.finished || this.seniorState !== 'in') return;
@@ -167,30 +187,45 @@ export class MicrowaveScene extends BaseMainScene {
       },
       onLeave: () => {
         this.seniorState = 'away';
+        this.tweens.killTweensOf(this.senior);
         this.senior.setVisible(false);
       },
     });
+  }
+
+  /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점(HORIZON) 근처에 온다 */
+  private scaleAt(feetY: number): number {
+    return Math.max(0.18, (feetY - HORIZON) / 300);
+  }
+
+  /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝) */
+  private placeOnFloor(cadet: Cadet, x: number, feetY: number): void {
+    const s = this.scaleAt(feetY);
+    cadet.setScale(s).setPosition(x, feetY - 120 * s);
   }
 
   private moveTo(zone: Zone): void {
     if (this.finished || this.zone === zone) return;
     this.zone = zone;
     const hiding = zone === 'laundry';
-    this.player.setMotion('run');
+    const to = hiding ? HIDE : NEAR;
     this.tweens.killTweensOf(this.player);
-    // 숨을 땐 세탁실 문 안으로 슉 들어가 사라지고, 나올 땐 다시 전자레인지 앞으로
+    // 숨을 땐 복도를 가로질러 세탁실 문 안으로 쏙 들어가 몸을 접어 넣고(정면),
+    // 나올 땐 다시 전자레인지 앞으로 뛰어와 등을 보인다.
+    this.player.setBack(!hiding);
+    this.player.setMotion(hiding ? 'hide' : 'run');
+    this.player.setBodyTint(hiding ? 0x8492ad : undefined);
     this.tweens.add({
       targets: this.player,
-      x: hiding ? LAUNDRY_X : MICRO_X,
-      alpha: hiding ? 0.1 : 1,
-      scale: hiding ? 0.72 : 1,
-      duration: 200,
+      x: to.x,
+      y: to.y,
+      scale: to.scale,
+      duration: 240,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        if (!this.finished) this.player.setMotion('idle');
+        if (!this.finished) this.player.setMotion(hiding ? 'hide' : 'idle');
       },
     });
-    this.player.setFace(hiding ? '🫣' : '🤤');
   }
 
   protected tick(delta: number): void {

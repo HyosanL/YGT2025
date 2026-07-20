@@ -4,7 +4,7 @@ import { FONT } from '../config';
 export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
 export type CadetMotion =
   | 'idle' | 'walk' | 'run' | 'dance' | 'salute'
-  | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point';
+  | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point' | 'hide';
 
 /** 옛 절차 드로잉 시절의 스타일 필드 — 색상값은 이제 무시되고 dobok/scale만 쓰인다 (호환용). */
 export interface CadetStyle {
@@ -27,6 +27,8 @@ export interface CadetStyle {
   belt?: number;
   /** Q2 판별용 중립 방문자 — 얼굴·근무복 동일, 오직 견장 줄 수(1/2/3)만 다른 이미지 사용 */
   visitorRank?: 1 | 2 | 3;
+  /** 카메라를 등지고 화면 안쪽으로 향하는 뒷모습 (전자레인지 앞·무용관 가는 길) */
+  back?: boolean;
 }
 
 /** 캐릭터가 컨테이너 scale 1일 때의 표시 높이(px) — 씬 setScale이 여기에 곱해진다. */
@@ -45,6 +47,7 @@ const POSE: Record<CadetKind, Partial<Record<CadetMotion, string>>> = {
     idle: 'player_idle', walk: 'player_walk_a', run: 'player_run', dance: 'player_dance',
     salute: 'player_salute', cheer: 'player_cheer', exhausted: 'player_exhausted',
     sneak: 'player_sneak', lying: 'player_lying', lying_punch: 'player_lying_punch',
+    hide: 'player_hide_door',
   },
   junior: { idle: 'junior_walk', walk: 'junior_walk', run: 'junior_walk', salute: 'junior_salute' },
   peer: { idle: 'peer_idle', walk: 'peer_walk', run: 'peer_walk', salute: 'peer_idle' },
@@ -53,6 +56,14 @@ const POSE: Record<CadetKind, Partial<Record<CadetMotion, string>>> = {
 const DOBOK: Partial<Record<CadetMotion, string>> = {
   idle: 'player_dobok_walk', walk: 'player_dobok_walk', run: 'player_dobok_run',
 };
+/** 도복 뒷모습 (Q4 — 무용관 쪽으로 달려가는 등을 본다) */
+const DOBOK_BACK: Partial<Record<CadetMotion, string>> = {
+  idle: 'player_dobok_walk_back', walk: 'player_dobok_walk_back', run: 'player_dobok_run_back',
+};
+/** 근무복 뒷모습 (Q3 — 전자레인지를 마주 본 등) */
+const BACK: Partial<Record<CadetMotion, string>> = {
+  idle: 'player_back_idle', walk: 'player_back_idle', run: 'player_back_idle',
+};
 /** 2프레임 순환 (걷기/구보 애니메이션) */
 const CYCLE: Record<string, [string, string]> = {
   'player.walk': ['player_walk_a', 'player_walk_b'],
@@ -60,6 +71,8 @@ const CYCLE: Record<string, [string, string]> = {
   'senior.run': ['senior_run', 'senior_run'],
   'dobok.walk': ['player_dobok_walk', 'player_dobok_walk_b'],
   'dobok.run': ['player_dobok_run', 'player_dobok_run_b'],
+  'dobok_back.walk': ['player_dobok_walk_back', 'player_dobok_walk_back_b'],
+  'dobok_back.run': ['player_dobok_run_back', 'player_dobok_run_back_b'],
 };
 
 /** 눕는 포즈 — 그림자/바운스를 끈다 */
@@ -70,6 +83,7 @@ export class Cadet extends Phaser.GameObjects.Container {
   private shadow: Phaser.GameObjects.Ellipse;
   private kind: CadetKind;
   private dobok: boolean;
+  private back: boolean;
   private visitorRank?: 1 | 2 | 3;
   private motion: CadetMotion | null = null;
   private cycleTimer: Phaser.Time.TimerEvent | null = null;
@@ -86,6 +100,7 @@ export class Cadet extends Phaser.GameObjects.Container {
     super(scene, x, y);
     this.kind = kind;
     this.dobok = styleOverride?.dobok ?? false;
+    this.back = styleOverride?.back ?? false;
     this.visitorRank = styleOverride?.visitorRank;
 
     // 스프라이트는 여백을 트림해 두어 밑변 = 발끝 → 그림자를 정확히 발밑에 둔다 (둥둥 뜨는 것 방지)
@@ -109,8 +124,31 @@ export class Cadet extends Phaser.GameObjects.Container {
 
   private texFor(motion: CadetMotion): string {
     if (this.visitorRank) return `visitor_${this.visitorRank}line`;
-    const table = this.dobok ? DOBOK : POSE[this.kind];
-    return table[motion] || table.idle || POSE[this.kind].idle || 'player_idle';
+    const front = this.dobok ? DOBOK : POSE[this.kind];
+    const table = this.back ? (this.dobok ? DOBOK_BACK : BACK) : front;
+    // 뒷모습 에셋이 없는 모션은 정면 포즈로 자연스럽게 폴백한다
+    const candidates = [table[motion], table.idle, front[motion], front.idle, 'player_idle'];
+    for (const key of candidates) {
+      if (key && this.scene.textures.exists(key)) return key;
+    }
+    return 'player_idle';
+  }
+
+  /** 카메라를 등지는지 전환 (전자레인지 앞 ↔ 세탁실 문 안 등) */
+  setBack(back: boolean): this {
+    if (this.back === back) return this;
+    this.back = back;
+    const motion = this.motion ?? 'idle';
+    this.motion = null;
+    this.setMotion(motion);
+    return this;
+  }
+
+  /** 스프라이트에만 적용되는 틴트 — 어두운 문 안, 야간 등 */
+  setBodyTint(color?: number): this {
+    if (color === undefined) this.sprite.clearTint();
+    else this.sprite.setTint(color);
+    return this;
   }
 
   private applyTexture(key: string): void {
@@ -138,10 +176,10 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     const cycleKey =
       this.dobok && (motion === 'run' || motion === 'walk')
-        ? `dobok.${motion}`
+        ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
         : `${this.kind}.${motion}`;
     const cycle = CYCLE[cycleKey];
-    if (cycle) {
+    if (cycle && this.scene.textures.exists(cycle[0]) && this.scene.textures.exists(cycle[1])) {
       let i = 0;
       this.applyTexture(cycle[0]);
       this.cycleTimer = this.scene.time.addEvent({

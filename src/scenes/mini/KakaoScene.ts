@@ -6,6 +6,7 @@ import type { KakaoPrompt } from '../../types';
 import { createHiddenInput, type HiddenInput } from '../../utils/mobileInput';
 import { pick } from '../../utils/rng';
 import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
+import { drawIncoming, drawOutgoing, KAKAO_INPUT_H } from '../../ui/kakao';
 import { Button } from '../../ui/Button';
 
 /**
@@ -34,77 +35,75 @@ export class KakaoScene extends BaseMiniScene {
 
     audio.ding();
 
-    // ── 상대 메시지 (좌측: 아바타 + 이름 + 흰 버블 + 시각) ──
-    const msgY = PANEL.y + 300;
-    const avatar = this.add.graphics();
-    avatar.fillStyle(0x7d8a99, 1);
-    avatar.fillRoundedRect(PANEL.x + 34, msgY - 38, 64, 64, 24);
-    this.add
-      .text(PANEL.x + 66, msgY - 6, '😠', { fontFamily: FONT, fontSize: '34px' })
-      .setOrigin(0.5);
-    this.add
-      .text(PANEL.x + 112, msgY - 58, '김선배', {
-        fontFamily: FONT,
-        fontSize: '22px',
-        color: KAKAO.sub,
-      })
-      .setOrigin(0, 0.5);
-
-    const bubble = this.add.graphics();
-    const msgWidth = Math.min(440, this.prompt.msg.length * 28 + 56);
-    bubble.fillStyle(KAKAO.bubbleWhite, 1);
-    bubble.fillRoundedRect(PANEL.x + 112, msgY - 32, msgWidth, 64, 16);
-    // 말풍선 꼬리
-    bubble.fillTriangle(
-      PANEL.x + 112,
-      msgY - 24,
-      PANEL.x + 100,
-      msgY - 12,
-      PANEL.x + 112,
-      msgY - 4
-    );
-    this.add
-      .text(PANEL.x + 112 + msgWidth / 2, msgY, this.prompt.msg, {
-        fontFamily: FONT,
-        fontSize: '27px',
-        color: KAKAO.textDark,
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(PANEL.x + 118 + msgWidth, msgY + 22, '오후 9:47', {
-        fontFamily: FONT,
-        fontSize: '18px',
-        color: KAKAO.sub,
-      })
-      .setOrigin(0, 0.5);
+    // ── 선배와 주고받은 대화 (앞선 대화가 있어야 진짜 채팅방처럼 보인다) ──
+    let y = this.room.top;
+    y += drawIncoming(this, {
+      x: PANEL.x + 24,
+      y,
+      name: '김선배',
+      avatarKey: 'avatar_kim',
+      avatarEmoji: '😠',
+      text: '너 어디냐',
+      maxWidth: 280,
+      time: '오후 9:44',
+    });
+    y += drawOutgoing(this, {
+      x: this.room.right - 24,
+      y,
+      text: '생활관입니다!',
+      maxWidth: 330,
+      time: '오후 9:45',
+      unread: 1,
+    });
+    y += drawIncoming(this, {
+      x: PANEL.x + 24,
+      y,
+      name: '김선배',
+      avatarKey: 'avatar_kim',
+      avatarEmoji: '😠',
+      text: this.prompt.msg,
+      maxWidth: 440,
+      time: '오후 9:47',
+    });
+    y += drawIncoming(this, {
+      x: PANEL.x + 24,
+      y,
+      name: '김선배',
+      avatarKey: 'avatar_kim',
+      avatarEmoji: '😠',
+      text: '읽씹?',
+      maxWidth: 300,
+      time: '오후 9:47',
+    });
 
     // 보낼 답장 문장은 캔버스가 아니라 입력창 위의 DOM 라벨(노란 버블)로 표시한다
     // — 가상 키보드가 올라와도 입력창과 함께 화면에 남아 항상 보인다
     this.add
-      .text(GAME_WIDTH / 2, msgY + 118, '👇 노란 문장을 그대로 입력해서 전송! (느낌표까지)', {
+      .text(GAME_WIDTH / 2, y + 24, '👇 노란 문장을 그대로 입력해서 전송! (느낌표까지)', {
         fontFamily: FONT,
-        fontSize: '25px',
-        color: '#4a5568',
+        fontSize: '24px',
+        color: '#3f4c5a',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.hintText = this.add
-      .text(GAME_WIDTH / 2, msgY + 392, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
+      .text(GAME_WIDTH / 2, y + 66, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
         fontFamily: FONT,
-        fontSize: '24px',
-        color: '#c0392b',
+        fontSize: '23px',
+        color: '#b23b2e',
       })
       .setOrigin(0.5);
 
-    new Button(this, GAME_WIDTH / 2, PANEL.y + PANEL.h - 90, {
-      label: '📨 전송',
-      width: 320,
-      height: 100,
+    // 실제 카톡처럼 입력바 오른쪽에 노란 전송 버튼
+    const barMid = PANEL.y + PANEL.h - KAKAO_INPUT_H / 2;
+    new Button(this, PANEL.x + PANEL.w - 56, barMid, {
+      label: '➤',
+      width: 88,
+      height: 88,
       color: KAKAO.yellow,
       labelColor: KAKAO.textBrown,
-      strokeColor: 0xd6c200,
-      fontSize: 36,
+      fontSize: 40,
       onClick: () => this.send(),
     });
 
@@ -114,10 +113,11 @@ export class KakaoScene extends BaseMiniScene {
       onInput: (value) => this.onTyped(value),
       onEnter: () => this.send(),
       onFocus: () => this.beginCountdown(),
-      rect: { x: PANEL.x + 40, y: msgY + 252, w: PANEL.w - 80, h: 88 },
+      rect: { x: PANEL.x + 62, y: barMid - 34, w: PANEL.w - 172, h: 68 },
       style: {
         background: '#ffffff',
-        border: '2px solid #9fb3c4',
+        border: 'none',
+        textAlign: 'left',
         color: KAKAO.textDark,
         caretColor: '#d4a017',
       },
@@ -128,7 +128,7 @@ export class KakaoScene extends BaseMiniScene {
 
     // input 밖(패널 어디든)을 탭해도 포커스 재시도 — 제스처 안에서 focus가 불려 확실해진다
     this.add
-      .zone(0, 0, GAME_WIDTH, PANEL.y + PANEL.h - 160)
+      .zone(0, 0, GAME_WIDTH, PANEL.y + PANEL.h - KAKAO_INPUT_H)
       .setOrigin(0)
       .setInteractive()
       .on('pointerdown', () => this.hiddenInput?.focus());

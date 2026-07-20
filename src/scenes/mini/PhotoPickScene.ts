@@ -4,6 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import type { LockerFlaw } from '../../types';
 import { chance, pick, randInt, shuffle } from '../../utils/rng';
+import { drawIncoming } from '../../ui/kakao';
 import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 
 const FLAWS: LockerFlaw[] = ['tilt-blanket', 'open-drawer', 'sock', 'crooked-hanger'];
@@ -20,48 +21,34 @@ interface LockerResult {
  * 옷장 일러스트는 절차 생성 — 카톡 캡처 제공 시 교체 가능.
  */
 export class PhotoPickScene extends BaseMiniScene {
+  /** 선배 메시지 말풍선이 끝나는 y — 사진은 그 아래에 붙는다 */
+  private msgBottom = 0;
+
   constructor() {
     super({ key: 'photo' });
   }
 
   create(): void {
+    this.roomMemberCount = 214;
+    this.roomPlaceholder = '메시지 입력';
     this.setupOverlay(M3_PHOTO.roomTitle, 'kakao');
     audio.ding();
 
-    // 옹성오 선배의 분노 메시지 (아바타 + 이름 + 좌측 흰 버블)
-    const msgY = PANEL.y + 232;
-    const avatar = this.add.graphics();
-    avatar.fillStyle(0x5a6b7e, 1);
-    avatar.fillRoundedRect(PANEL.x + 34, msgY - 32, 60, 60, 22);
-    this.add
-      .text(PANEL.x + 64, msgY - 2, '😡', { fontFamily: FONT, fontSize: '30px' })
-      .setOrigin(0.5);
-    this.add
-      .text(PANEL.x + 108, msgY - 50, '옹성오', {
-        fontFamily: FONT,
-        fontSize: '21px',
-        color: KAKAO.sub,
-      })
-      .setOrigin(0, 0.5);
-    const bubble = this.add.graphics();
-    bubble.fillStyle(KAKAO.bubbleWhite, 1);
-    bubble.fillRoundedRect(PANEL.x + 108, msgY - 26, PANEL.w - 168, 58, 16);
-    bubble.fillTriangle(
-      PANEL.x + 108,
-      msgY - 18,
-      PANEL.x + 96,
-      msgY - 6,
-      PANEL.x + 108,
-      msgY + 6
-    );
-    this.add
-      .text(PANEL.x + 108 + (PANEL.w - 168) / 2, msgY + 3, M3_PHOTO.seniorMsg, {
-        fontFamily: FONT,
-        fontSize: '25px',
-        color: KAKAO.textDark,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+    // 옹성오 선배의 분노 메시지 (프로필 + 이름 + 흰 말풍선)
+    this.msgBottom =
+      this.room.top +
+      drawIncoming(this, {
+        x: PANEL.x + 24,
+        y: this.room.top,
+        name: '옹성오',
+        avatarKey: 'avatar_ong',
+        avatarEmoji: '😡',
+        text: M3_PHOTO.seniorMsg,
+        maxWidth: 400,
+        fontSize: 25,
+        bold: true,
+        time: '오후 10:11',
+      });
 
     const spotMode = chance(0.5);
     if (spotMode) {
@@ -75,10 +62,10 @@ export class PhotoPickScene extends BaseMiniScene {
 
   private createChooseMode(): void {
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 300, `👉 ${M3_PHOTO.chooseInstruction}`, {
+      .text(GAME_WIDTH / 2, this.msgBottom + 16, `👉 ${M3_PHOTO.chooseInstruction}`, {
         fontFamily: FONT,
-        fontSize: '30px',
-        color: '#c2410c',
+        fontSize: '29px',
+        color: '#a63a10',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -90,8 +77,8 @@ export class PhotoPickScene extends BaseMiniScene {
     const cols = 2;
     const rows = Math.ceil(count / cols);
     const scale = rows >= 3 ? 0.46 : 0.6;
-    const cellH = rows >= 3 ? 225 : 310;
-    const startY = PANEL.y + 340 + (rows >= 3 ? 110 : 160);
+    const cellH = rows >= 3 ? 168 : 250;
+    const startY = this.msgBottom + (rows >= 3 ? 92 : 120) + (rows >= 3 ? 82 : 107);
 
     for (let i = 0; i < count; i++) {
       const col = i % cols;
@@ -137,18 +124,18 @@ export class PhotoPickScene extends BaseMiniScene {
 
   private createSpotMode(): void {
     this.add
-      .text(GAME_WIDTH / 2, PANEL.y + 300, `👉 ${M3_PHOTO.spotInstruction}`, {
+      .text(GAME_WIDTH / 2, this.msgBottom + 16, `👉 ${M3_PHOTO.spotInstruction}`, {
         fontFamily: FONT,
-        fontSize: '30px',
-        color: '#c2410c',
+        fontSize: '29px',
+        color: '#a63a10',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     const flaw = pick(FLAWS);
+    const scale = 1.35;
     const cx = GAME_WIDTH / 2;
-    const cy = PANEL.y + 665;
-    const scale = 1.5;
+    const cy = this.msgBottom + 46 + (356 * scale) / 2;
     const { flawRect } = this.drawLocker(cx, cy, scale, flaw);
 
     const frame = this.add.graphics();

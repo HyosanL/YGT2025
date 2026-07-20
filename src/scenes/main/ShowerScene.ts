@@ -7,8 +7,21 @@ import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
-const DOOR_X = GAME_WIDTH - 95;
-const CURTAIN_X = 430;
+/**
+ * 배경(bg_shower)을 얹은 뒤의 실제 좌표.
+ * 사람 키는 발끝 y 하나로 정해진다 — 멀수록(위) 작고 가까울수록(아래) 크다.
+ * 이 규칙으로만 배치하면 캐릭터가 바닥에서 뜨는 일이 없다.
+ */
+const heightAt = (feetY: number): number => Math.max(90, feetY - 500);
+/** 샤워장 안쪽 끝(입구 쪽) — 멀리서 불쑥 들어온다 */
+const DOOR_X = 438;
+const DOOR_FEET = 924;
+/** 바로 옆 칸 커튼 — 코앞이라 크게 보인다 */
+const CURTAIN_X = 104;
+const CURTAIN_FEET = 1070;
+/** 내가 샤워 중인 자리 (샤워기 바로 아래) */
+const ME_X = 248;
+const ME_FEET = 1062;
 
 type SeniorSpot = 'door' | 'curtain';
 
@@ -28,7 +41,8 @@ export class ShowerScene extends BaseMainScene {
   private songMs = 1;
   private showerTotalMs = 1;
 
-  private player!: Cadet;
+  /** 김에 가려 실루엣만 보이는 나 (전신 캐릭터가 아니라 실루엣 이미지) */
+  private me!: Phaser.GameObjects.Image;
   private senior!: Cadet;
   private songFill!: Phaser.GameObjects.Graphics;
   private timeFill!: Phaser.GameObjects.Graphics;
@@ -51,7 +65,7 @@ export class ShowerScene extends BaseMainScene {
 
     // 샤워장 배경 (생성 이미지)
     addSceneBg(this, 'bg_shower');
-    const water = this.add.particles(150, 420, '__WHITE', {
+    this.add.particles(ME_X - 12, 430, '__WHITE', {
       speedY: { min: 300, max: 420 },
       speedX: { min: -20, max: 20 },
       scale: { start: 0.12, end: 0.05 },
@@ -60,47 +74,60 @@ export class ShowerScene extends BaseMainScene {
       quantity: 2,
       tint: 0x9ad4f5,
     });
-    void water;
 
-    this.player = new Cadet(this, 210, 700, 'player');
-    this.player.setFace('🎵');
-    this.player.setMotion('dance');
+    // 나 — 옷을 벗고 씻는 중이라 몸은 짙은 김에 완전히 가려지고 실루엣만 어렴풋이 보인다
+    const meH = heightAt(ME_FEET);
+    this.me = this.add.image(ME_X, ME_FEET, 'player_shower').setOrigin(0.5, 1).setDepth(6);
+    // 두 실루엣의 원본 비율이 달라도 같은 배율을 써야 자세만 바뀌고 덩치는 그대로다
+    this.me.setScale(meH / (this.me.height || meH));
+    this.tweens.add({
+      targets: this.me,
+      y: ME_FEET - 10,
+      duration: 320,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
-    // 샤워 중이라 몸은 김에 가려진다 (옷 입고 씻는 것처럼 보이지 않게)
-    const veil = this.add.graphics().setDepth(7);
-    veil.fillStyle(0xeaf7fa, 0.38);
-    veil.fillEllipse(210, 800, 280, 230);
-    veil.fillStyle(0xeaf7fa, 0.26);
-    veil.fillEllipse(210, 690, 240, 190);
+    // 몸을 감싸는 짙은 수증기 (에셋의 김과 이어져 몸을 확실히 가린다)
+    const bank = this.add.graphics().setDepth(7);
+    for (const [y, rx, ry, a] of [
+      [ME_FEET - meH * 0.42, 210, 95, 0.5],
+      [ME_FEET - meH * 0.16, 260, 130, 0.55],
+      [ME_FEET + 40, 340, 150, 0.6],
+    ] as const) {
+      bank.fillStyle(0xeef7fa, a);
+      bank.fillEllipse(ME_X, y, rx, ry);
+    }
     this.add
-      .particles(210, 760, '__WHITE', {
-        x: { min: -80, max: 80 },
-        y: { min: -70, max: 70 },
-        speedY: { min: -26, max: -8 },
-        scale: { start: 2.6, end: 4.6 },
+      .particles(ME_X, ME_FEET - meH * 0.35, '__WHITE', {
+        x: { min: -120, max: 120 },
+        y: { min: -90, max: 140 },
+        speedY: { min: -30, max: -10 },
+        scale: { start: 2.8, end: 5.0 },
         alpha: { start: 0.3, end: 0 },
-        lifespan: 2200,
-        frequency: 80,
-        tint: 0xeaf7fa,
+        lifespan: 2400,
+        frequency: 70,
+        tint: 0xeef7fa,
       })
       .setDepth(7);
 
-    // 수증기
+    // 샤워장 전체에 낀 옅은 김
     this.add.particles(0, 0, '__WHITE', {
-      x: { min: 80, max: 640 },
-      y: 840,
+      x: { min: 40, max: 690 },
+      y: 900,
       speedY: { min: -18, max: -40 },
       speedX: { min: -8, max: 8 },
       scale: { start: 2.2, end: 3.8 },
-      alpha: { start: 0.05, end: 0 },
+      alpha: { start: 0.06, end: 0 },
       lifespan: 3600,
-      frequency: 420,
+      frequency: 380,
       tint: 0xdff4f6,
     });
     addVignette(this, 0.2);
 
-    this.senior = new Cadet(this, DOOR_X, 700, 'senior');
-    this.senior.setVisible(false).setDepth(6);
+    this.senior = new Cadet(this, DOOR_X, DOOR_FEET - 200, 'senior');
+    this.senior.setVisible(false).setDepth(5);
 
     // 노래 진행 바
     const songBarBg = this.add.graphics();
@@ -139,13 +166,11 @@ export class ShowerScene extends BaseMainScene {
       fontSize: 40,
       onDown: () => {
         this.holding = true;
-        this.player.setFace('😗');
-        this.player.setMotion('idle');
+        this.me.setTexture('player_shower_quiet');
       },
       onUp: () => {
         this.holding = false;
-        this.player.setFace('🎵');
-        this.player.setMotion('dance');
+        this.me.setTexture('player_shower');
       },
     });
     this.add
@@ -167,7 +192,7 @@ export class ShowerScene extends BaseMainScene {
       callback: () => {
         if (this.holding || this.finished) return;
         const note = this.add
-          .text(210 + Math.random() * 120 - 60, 560, '♪', {
+          .text(ME_X + Math.random() * 120 - 60, 560, '♪', {
             fontFamily: FONT,
             fontSize: '38px',
             color: '#ffd9e2',
@@ -198,11 +223,13 @@ export class ShowerScene extends BaseMainScene {
         this.seniorState = 'in';
         this.reacted = false;
         this.seniorSpot = chance(0.5) ? 'door' : 'curtain';
-        // 변칙 등장 — 가까이(크게) 또는 멀리(작게), 위치도 살짝 흔들린다
-        const near = chance(0.5);
-        const scale = near ? randFloat(1.0, 1.2) : randFloat(0.75, 0.9);
-        const x = (this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X) + randFloat(-24, 24);
-        this.senior.setPosition(x, near ? 724 : 664).setScale(scale);
+        // 입구(방 안쪽 끝)에서 불쑥, 또는 바로 옆 칸 커튼에서 코앞으로.
+        // 발끝 y로 크기가 결정되므로 어느 쪽이든 바닥에 발이 붙는다.
+        const feet =
+          (this.seniorSpot === 'door' ? DOOR_FEET : CURTAIN_FEET) + randFloat(-16, 16);
+        const x = (this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X) + randFloat(-22, 22);
+        const s = heightAt(feet) / 300;
+        this.senior.setScale(s).setPosition(x, feet - 120 * s);
         this.senior.setVisible(true);
         // 옆 칸 커튼 쪽은 더 가깝지만, 반응창은 터치 반응 한계(360ms) 밑으로 안 내려간다
         const reactMs = Math.max(
