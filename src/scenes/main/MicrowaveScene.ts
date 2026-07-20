@@ -16,15 +16,21 @@ type Zone = 'laundry' | 'micro';
  * 멀리 있을수록 작아진다. 이 규칙으로 크기를 정하면 발이 바닥에 붙는다.
  */
 const HORIZON = 550;
+/**
+ * 배경(bg_micro)을 **좌우반전**했다.
+ * 전에는 복도가 내가 서 있는 쪽으로 뻗어 있어, 다가오는 훈육관이 내 등에 가려 안 보였다.
+ * 이제 복도는 내 반대편으로 뻗고, 아래 x좌표는 전부 화면 중앙 기준으로 뒤집은 값이다
+ * (x' = GAME_WIDTH − x).
+ */
 /** 전자레인지 (배경 픽셀에서 실측한 밝은 몸체 영역의 중심) */
-const OVEN_X = 461;
+const OVEN_X = GAME_WIDTH - 461;
 const OVEN_Y = 924;
 /** 세탁실 문 — 중심 x, 문턱(바닥) y, 문 높이 */
-const DOOR_X = 113;
+const DOOR_X = GAME_WIDTH - 113;
 const DOOR_FLOOR_Y = 1092;
 const DOOR_H = 724;
 /** 전자레인지 앞: 카메라 코앞이라 뒷모습 상반신만 화면에 들어온다 */
-const NEAR = { x: 618, y: 1162, scale: 3.4 } as const;
+const NEAR = { x: GAME_WIDTH - 618, y: 1162, scale: 3.4 } as const;
 /** 세탁실 문 안: 문 높이의 약 80%를 채우는 크기로 쏙 들어간다 */
 const HIDE_SCALE = (DOOR_H * 0.8) / 300;
 const HIDE = { x: DOOR_X, y: DOOR_FLOOR_Y - 120 * HIDE_SCALE, scale: HIDE_SCALE } as const;
@@ -76,12 +82,12 @@ export class MicrowaveScene extends BaseMainScene {
 
     // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
     // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문과 복도 끝을 함께 담는다.
-    addSceneBg(this, 'bg_micro').x += 80;
+    addSceneBg(this, 'bg_micro').x -= 80;
     // 조리 중에만 켜지는 내부 조명 — 창 안쪽이 따뜻하게 밝아지는 것만으로 충분하다
     // (주변 원형 글로우와 🍜 이모티콘은 과해서 걷어냈다)
     this.ovenLight = this.add.graphics().setVisible(false);
     this.ovenLight.fillStyle(0xffd98a, 0.5);
-    this.ovenLight.fillRoundedRect(OVEN_X - 205, OVEN_Y - 80, 235, 165, 10);
+    this.ovenLight.fillRoundedRect(OVEN_X - 30, OVEN_Y - 80, 235, 165, 10);
     addVignette(this, 0.3);
 
     // 조리 게이지
@@ -115,7 +121,7 @@ export class MicrowaveScene extends BaseMainScene {
       .setDepth(30);
 
     this.beepText = this.add
-      .text(OVEN_X - 90, OVEN_Y - 160, '삐 ─ 완성!!', {
+      .text(OVEN_X + 90, OVEN_Y - 160, '삐 ─ 완성!!', {
         fontFamily: FONT,
         fontSize: '44px',
         color: COLORS.safeCss,
@@ -126,7 +132,7 @@ export class MicrowaveScene extends BaseMainScene {
       .setVisible(false);
 
     // 전투복+전투모+훈육 완장의 당직훈육관
-    this.senior = new Cadet(this, 690, 700, 'duty');
+    this.senior = new Cadet(this, 430, 700, 'duty');
     this.senior.setScale(0.3).setVisible(false).setDepth(6);
 
     // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신만 보인다
@@ -167,11 +173,11 @@ export class MicrowaveScene extends BaseMainScene {
         const startFeet = randFloat(672, 700);
         const endFeet = chance(0.35) ? randFloat(980, 1060) : randFloat(850, 930);
         this.senior.setVisible(true).setMotion('walk');
-        this.placeOnFloor(this.senior, randFloat(630, 690), startFeet);
+        this.placeOnFloor(this.senior, randFloat(400, 470), startFeet);
         this.tweens.killTweensOf(this.senior);
         this.tweens.add({
           targets: this.senior,
-          x: randFloat(430, 560),
+          x: randFloat(330, 430),
           y: endFeet - 120 * this.scaleAt(endFeet),
           scale: this.scaleAt(endFeet),
           duration: Q3_MICROWAVE.reactMs(this.day) * 1.6,

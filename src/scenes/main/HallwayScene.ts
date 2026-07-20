@@ -45,6 +45,8 @@ const heightAt = (feetYPx: number): number => Math.max(40, (feetYPx - VANISH_Y) 
 const DOOR_DEPTHS = [0.58, 0.42, 0.28, 0.18] as const;
 /** 내 앞에 서는 지점 (조작 버튼 위) */
 const ARRIVE_K = 0.7;
+/** 후배가 경례를 올리는 시점 (여정 비율) — 내가 받아줄 여유를 남긴다 */
+const JUNIOR_SALUTE_U = 0.5;
 
 interface Visitor {
   cadet: Cadet;
@@ -56,6 +58,8 @@ interface Visitor {
   /** 걸어오는 데 걸리는 시간 */
   travelMs: number;
   resolved: boolean;
+  /** 후배가 이미 경례를 올렸는지 */
+  saluted: boolean;
 }
 
 /**
@@ -215,6 +219,7 @@ export class HallwayScene extends BaseMainScene {
       startedAtMs: this.elapsedMs + Q2_HALLWAY.stepOutMs,
       travelMs,
       resolved: false,
+      saluted: false,
     };
     // 복도 가운데로 걸어 나오는 한 걸음
     this.tweens.add({
@@ -227,21 +232,44 @@ export class HallwayScene extends BaseMainScene {
     this.spawned += 1;
   }
 
-  /** 문이 안쪽으로 열렸다 닫히는 표시 — 어디서 나왔는지 눈에 띄게 한다 */
+  /**
+   * 문이 **방 안쪽으로** 열렸다 닫힌다.
+   * 복도 쪽으로 젖혀지면 사람이 나오는 길을 막는 꼴이라, 경첩(복도 안쪽 모서리)에
+   * 붙여 놓고 어두운 실내가 그 자리에서 벌어졌다가 다시 닫히게 그린다.
+   */
   private flashDoor(k: number, side: -1 | 1): void {
     const feet = floorY(k);
     const h = heightAt(feet) * 1.15; // 문은 사람보다 조금 높다
     const w = h * 0.42;
     const x = wallX(k, side);
+    // 경첩은 복도 안쪽(소실점 쪽) 모서리 — 문짝이 방 안으로 젖혀지며 그쪽부터 열린다
+    const hingeX = x + (side === -1 ? w / 2 : -w / 2);
+    const dir = side === -1 ? -1 : 1; // 열리는 방향(경첩에서 바깥쪽 모서리로)
     const g = this.add.graphics().setDepth(4);
-    g.fillStyle(0x2a2118, 0.85);
-    g.fillRect(x - w / 2, feet - h, w, h);
-    g.lineStyle(3, 0x14141a, 1);
-    g.strokeRect(x - w / 2, feet - h, w, h);
-    this.tweens.add({
-      targets: g,
-      alpha: 0,
-      duration: Q2_HALLWAY.stepOutMs + 260,
+    const draw = (open: number): void => {
+      g.clear();
+      if (open <= 0.01) return;
+      const ow = w * open;
+      const left = dir === -1 ? hingeX - ow : hingeX;
+      // 열린 틈 = 불 꺼진 방 안
+      g.fillStyle(0x1a1510, 0.9);
+      g.fillRect(left, feet - h, ow, h);
+      g.lineStyle(3, 0x14141a, 1);
+      g.strokeRect(left, feet - h, ow, h);
+    };
+    const state = { open: 0 };
+    this.tweens.chain({
+      targets: state,
+      tweens: [
+        { open: 1, duration: 200, ease: 'Cubic.easeOut', onUpdate: () => draw(state.open) },
+        {
+          open: 0,
+          delay: Q2_HALLWAY.stepOutMs,
+          duration: 260,
+          ease: 'Cubic.easeIn',
+          onUpdate: () => draw(state.open),
+        },
+      ],
       onComplete: () => g.destroy(),
     });
   }
@@ -269,6 +297,18 @@ export class HallwayScene extends BaseMainScene {
     if (this.finished) return;
     const v = this.visitor;
     if (!v || v.resolved) return;
+
+    // 후배가 아직 경례를 안 올렸는데 내가 먼저 굽신거리면 그게 더 쪽팔린다.
+    // (선배는 반대로 내가 먼저 해야 하므로 이 규칙에서 제외)
+    if (v.kind === 'junior' && !v.saluted) {
+      v.resolved = true;
+      this.flashJudge('너무 빨라!', COLORS.warnCss);
+      speechBubble(this, v.cadet.x, v.cadet.y - 170, '(어...?)', 800);
+      this.loseHeart('후배가 경례하기도 전에 먼저 받아버렸다... 쪽팔림');
+      this.retire(v);
+      return;
+    }
+
     const correct: Action = v.kind === 'senior' ? 'salute' : 'greet';
 
     if (action !== correct) {
@@ -355,9 +395,12 @@ export class HallwayScene extends BaseMainScene {
     const x = Phaser.Math.Linear(wallX(k, v.side), VANISH_X + v.side * 40, Math.min(1, u * 1.6));
     this.place(v.cadet, k, x);
 
-    // 후배는 내 앞에 이르면 **먼저** 절도 있게 경례한다 (내가 인사로 받아야 한다)
-    if (v.kind === 'junior' && u >= 0.92) {
+    // 후배는 여정의 절반쯤에서 **먼저** 절도 있게 경례한다 —
+    // 내가 그걸 보고 인사로 받아줄 시간이 남아야 하므로 일찍 올린다.
+    if (v.kind === 'junior' && u >= JUNIOR_SALUTE_U && !v.saluted) {
+      v.saluted = true;
       v.cadet.setMotion('salute');
+      audio.tick();
     }
 
     // 선배는 데드라인을 넘어서는 순간 끝 — 내가 먼저 경례했어야 했다

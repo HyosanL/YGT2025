@@ -35,6 +35,12 @@ export interface CadetStyle {
 
 /** 캐릭터가 컨테이너 scale 1일 때의 표시 높이(px) — 씬 setScale이 여기에 곱해진다. */
 const BASE_H = 300;
+/**
+ * 컨테이너 로컬 좌표에서 **발이 닿는 바닥선**. 그림자도 여기 놓인다.
+ * 스프라이트를 이 선에 '밑변 기준'으로 붙여야, 자세마다 키가 달라도 발이 뜨지 않는다.
+ * (선 자세 기준으로 배율을 고정하면서 origin이 중앙이면 짧은 포즈가 공중에 뜬다)
+ */
+const FOOT_Y = BASE_H * 0.4;
 
 const LABELS: Record<CadetKind, string> = {
   player: '생도 (2학년)',
@@ -127,10 +133,11 @@ export class Cadet extends Phaser.GameObjects.Container {
     this.visitorRank = styleOverride?.visitorRank;
 
     // 스프라이트는 여백을 트림해 두어 밑변 = 발끝 → 그림자를 정확히 발밑에 둔다 (둥둥 뜨는 것 방지)
-    this.shadow = scene.add.ellipse(0, BASE_H * 0.4, BASE_H * 0.3, BASE_H * 0.06, 0x2b5f9e, 0.22);
+    this.shadow = scene.add.ellipse(0, FOOT_Y, BASE_H * 0.3, BASE_H * 0.06, 0x2b5f9e, 0.22);
     this.add(this.shadow);
 
-    this.sprite = scene.add.image(0, 0, this.texFor('idle')).setOrigin(0.5, 0.6);
+    // origin을 '밑변'으로 두고 바닥선에 붙인다 — 어떤 배율이든 발끝이 그림자에 정확히 온다
+    this.sprite = scene.add.image(0, FOOT_Y, this.texFor('idle')).setOrigin(0.5, 1);
     this.add(this.sprite);
 
     if (showLabel) {
@@ -162,9 +169,9 @@ export class Cadet extends Phaser.GameObjects.Container {
     const texH = src.height || 1;
     const dispH = BASE_H;
     const dispW = (texW / texH) * dispH;
-    // 텍스처 비율 → 컨테이너 로컬 좌표 (스프라이트 origin 0.5, 0.6)
+    // 텍스처 비율 → 컨테이너 로컬 좌표 (스프라이트는 밑변이 FOOT_Y에 붙어 있다)
     const lx = (fx: number): number => (fx - 0.5) * dispW;
-    const ly = (fy: number): number => (fy - 0.6) * dispH;
+    const ly = (fy: number): number => FOOT_Y - (1 - fy) * dispH;
 
     const g = this.scene.add.graphics();
     const boardW = 0.135 * dispW;
@@ -272,7 +279,7 @@ export class Cadet extends Phaser.GameObjects.Container {
     this.cycleTimer = null;
     this.idleTween?.remove();
     this.idleTween = null;
-    this.sprite.setPosition(0, 0);
+    this.sprite.setPosition(0, FOOT_Y);
 
     this.shadow.setVisible(!LYING.has(motion));
 
@@ -305,7 +312,7 @@ export class Cadet extends Phaser.GameObjects.Container {
     if (motion === 'idle' || motion === 'dance') {
       this.idleTween = this.scene.tweens.add({
         targets: this.sprite,
-        y: motion === 'dance' ? -8 : -4,
+        y: FOOT_Y + (motion === 'dance' ? -8 : -4),
         duration: motion === 'dance' ? 300 : 750,
         yoyo: true,
         repeat: -1,

@@ -79,9 +79,12 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
       color: opts.label.color,
       fontWeight: 'bold',
       borderRadius: '12px',
-      padding: '0 10px',
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
+      padding: '4px 10px',
+      // 일차가 오르면 답장이 길어진다 — nowrap으로 두면 끝이 잘려 뭘 칠지 못 본다
+      whiteSpace: 'normal',
+      wordBreak: 'keep-all',
+      lineHeight: '1.2',
+      textAlign: 'center',
       zIndex: '30',
       pointerEvents: 'none',
     } satisfies Partial<CSSStyleDeclaration>);
@@ -97,18 +100,34 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     const sy = r.height / GAME_HEIGHT;
     const rect = opts.rect ?? { x: 60, y: GAME_HEIGHT - 150, w: GAME_WIDTH - 120, h: 90 };
     const h = rect.h * sy;
-    const labelH = labelEl ? Math.max(30, h * 0.85) : 0;
+    const left = r.left + rect.x * sx;
+    const width = rect.w * sx;
+
+    // 따라 칠 문장이 길면 한 줄에 안 들어간다 — 폭에 맞춰 글자 크기를 줄이고,
+    // 그래도 작아지면 두 줄로 눕혀 라벨을 키운다. (잘려서 안 보이는 것이 최악)
+    const text = opts.label?.text ?? '';
+    const CHAR_W = 0.56; // 한글 기준 글자 폭 ≈ 글꼴 크기의 절반 남짓
+    const baseH = Math.max(30, h * 0.85);
+    let labelLines = 1;
+    let labelFont = Math.min(baseH * 0.5, width / Math.max(1, text.length * CHAR_W));
+    if (labelFont < 15 && text.length > 0) {
+      labelLines = 2;
+      labelFont = Math.min(baseH * 0.46, width / Math.max(1, (text.length / 2) * CHAR_W));
+    }
+    labelFont = Math.max(13, labelFont);
+    const labelH = labelEl ? Math.max(baseH, labelFont * 1.35 * labelLines + 8) : 0;
     const labelGap = labelEl ? 6 : 0;
+
     let top = r.top + rect.y * sy;
     // iOS는 키보드가 떠도 레이아웃 뷰포트가 안 줄어든다 — 키보드에 가려질 위치면
-    // 보이는 영역(visualViewport) 하단 바로 위로 끌어올린다 (라벨 포함)
+    // 보이는 영역(visualViewport) 하단 바로 위로 끌어올린다 (라벨 포함).
+    // 라벨이 화면 위로 밀려 나가지 않도록 라벨 높이까지 셈에 넣는다.
     const vv = window.visualViewport;
     if (vv) {
       const maxTop = vv.offsetTop + vv.height - h - 12;
-      if (top > maxTop) top = Math.max(12 + labelH + labelGap, maxTop);
+      const minTop = vv.offsetTop + labelH + labelGap + 12;
+      if (top > maxTop) top = Math.max(minTop, maxTop);
     }
-    const left = r.left + rect.x * sx;
-    const width = rect.w * sx;
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
     el.style.width = `${width}px`;
@@ -119,7 +138,7 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
       labelEl.style.width = `${width}px`;
       labelEl.style.height = `${labelH}px`;
       labelEl.style.top = `${top - labelH - labelGap}px`;
-      labelEl.style.fontSize = `${Math.max(15, Math.round(labelH * 0.48))}px`;
+      labelEl.style.fontSize = `${Math.round(labelFont)}px`;
     }
   };
 
