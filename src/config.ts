@@ -186,10 +186,10 @@ export const Q1_SHOWER = {
   reactMs: (day: number): number => paced(760, day, REACT_FLOOR_MS),
   /** 등장 리듬 — 실제 간격은 패턴(연타/페인트/뜸들이기)으로 흩어진다 */
   tempo: (day: number): SeniorTempoSpec => ({
-    baseGapMs: paced(2300, day, 900),
+    baseGapMs: paced(1700, day, 800),
     baseStayMs: Math.round(900 * Math.min(1.5, Math.pow(pace(day), 0.35))),
     // 반응 유예만큼은 반드시 노래를 들을 틈이 있어야 한다
-    minRecoveryMs: Math.max(700, paced(1200, day, 700)),
+    minRecoveryMs: Math.max(650, paced(1000, day, 650)),
     // 선배가 화면을 절반 넘게 차지하면 노래를 끝낼 수 없다 — 45%로 묶는다
     maxPresenceRatio: 0.45,
   }),
@@ -206,27 +206,26 @@ export const Q2_HALLWAY = {
    * 한 사람이 복도 저 끝에서 내 앞까지 걸어오는 시간.
    * 이 시간이 곧 견장을 읽고 판단할 시간이라 일차가 오를수록 짧아진다(지수 가속).
    */
-  approachMs: (day: number): number => paced(3400, day, 1500),
-  /** 앞사람을 처리하고 다음 사람이 문에서 나오기까지의 텀 — 한 명씩 순서대로 상대한다 */
-  gapMs: (day: number): number => paced(700, day, 320),
+  approachMs: (day: number): number => paced(2400, day, 1150),
+  /** 문이 열리고 복도로 나와 몸을 돌리기까지 (이 동안은 아직 다가오지 않는다) */
+  stepOutMs: 420,
+  /** 앞사람을 처리하고 다음 사람 문이 열리기까지의 텀 — 한 명씩 순서대로 상대한다 */
+  gapMs: (day: number): number => paced(420, day, 180),
   /**
-   * **선배 경례 데드라인** — 선배가 이 지점(복도 진행률)을 넘어서기 전에 내가 먼저
-   * 경례해야 한다. 늦으면 "先경례" 실패로 그 자리에서 잡힌다.
-   * 1일차 0.72(꽤 가까이 와도 됨) → 후반 0.42(멀리서 알아보고 미리 해야 함).
+   * **선배 경례 데드라인** — 걸어오는 여정의 이 비율을 넘기기 전에 내가 먼저
+   * 경례해야 한다(0=문 앞, 1=내 앞 도착). 늦으면 그 자리에서 잡힌다.
+   * 1일차 0.78(거의 다 와도 됨) → 후반 0.40(중간쯤에서 미리 알아봐야 함).
    */
-  saluteDeadline: (day: number): number => lerp(0.72, 0.42, difficulty(day)),
-  /** 후배·동기는 지나쳐 가기 전(=도착)까지만 응대하면 된다 */
-  greetDeadline: 0.97,
+  saluteDeadline: (day: number): number => lerp(0.78, 0.4, difficulty(day)),
   /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
   seniorShare: (day: number): number => Math.min(0.42, 0.18 + day * 0.014),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
-  /** 후배에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
-  hpSaluteJunior: 55,
-  /** 동기에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
-  hpSalutePeer: 55,
-  /** 후배·동기를 그냥 지나쳐버렸을 때 페널티 */
-  hpMiss: 28,
+  /**
+   * 응대를 그르치거나 놓쳤을 때의 대가 — HP가 아니라 **하트**를 깎는다.
+   * 하트 한 칸은 LIFE_UNITS(5)단위이므로 2단위 ≈ 1/3칸.
+   */
+  missLifeUnits: 2,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -239,9 +238,9 @@ export const Q3_MICROWAVE = {
   reactMs: (day: number): number => paced(820, day, REACT_FLOOR_MS),
   /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
   tempo: (day: number): SeniorTempoSpec => ({
-    baseGapMs: paced(2400, day, 950),
+    baseGapMs: paced(1800, day, 850),
     baseStayMs: Math.round(1000 * Math.min(1.5, Math.pow(pace(day), 0.35))),
-    minRecoveryMs: Math.max(800, paced(1400, day, 800)),
+    minRecoveryMs: Math.max(700, paced(1150, day, 700)),
     // 조리는 전자레인지 앞에 있어야만 진행된다 — 점유율 상한이 곧 클리어 보장선
     maxPresenceRatio: 0.42,
   }),

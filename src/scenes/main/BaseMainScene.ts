@@ -81,7 +81,8 @@ export abstract class BaseMainScene extends Phaser.Scene {
     this.seniorActive = false;
     this.seniorTimer = null;
     this.day = gameState.day;
-    this.hpBar = new HpBar(this);
+    // 복도처럼 HP를 안 쓰는 퀘스트는 바를 띄우지 않는다 (대가는 하트로만 치른다)
+    if (this.usesHp()) this.hpBar = new HpBar(this);
     // 목숨 하트 (HP 바 아래) — 부분 채움 + 반투명 빈 하트
     this.livesBar = new LivesBar(this, 26, 70, 38);
     this.livesBar.setLives(gameState.livesUnits);
@@ -130,6 +131,11 @@ export abstract class BaseMainScene extends Phaser.Scene {
       this.events.off(Phaser.Scenes.Events.RESUME, this.onSceneResume, this);
       audio.stopAll();
     });
+  }
+
+  /** 이 퀘스트가 HP를 쓰는가 — false면 HP 바를 감추고 갱신도 하지 않는다 */
+  protected usesHp(): boolean {
+    return true;
   }
 
   /** 씬별 BGM 트랙 — 노래 자체가 게임플레이인 샤워, 정적이 연출인 벽치기는 null로 오버라이드 */
@@ -209,7 +215,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     // resumeContext가 설정된 프레임 = 미니퀘스트/일시정지 진입 직후 —
     // scene.pause()와 같은 프레임에 tick이 한 번 더 돌며 노래를 되살리는 것을 방지
     if (this.finished || this.resumeContext !== null) return;
-    this.hpBar.setHp(gameState.hp);
+    if (this.usesHp()) this.hpBar.setHp(gameState.hp);
     this.livesBar.setLives(gameState.livesUnits);
     this.tick(delta);
   }
@@ -351,7 +357,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
         stayMs = t.baseStayMs * jitter(1.5, 2.0);
         break;
       case 'lull':
-        gapMs = t.baseGapMs * jitter(1.8, 2.6);
+        gapMs = t.baseGapMs * jitter(1.5, 2.0);
         break;
       case 'single':
         break;
@@ -371,9 +377,9 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
     this.seniorTimer = this.time.delayedCall(gapMs + extraDelayMs, () => {
       if (this.finished) return;
+      // 등장 신호는 문소리와 선배 본인으로 충분하다 —
+      // 붉은 테두리와 화면 흔들림은 과해서 걷어냈다
       audio.door();
-      this.setDanger('in');
-      this.cameras.main.shake(140, 0.006);
       this.seniorActive = true;
       h.onEnter();
       this.seniorTimer = this.time.delayedCall(stayMs, () => {
@@ -464,18 +470,17 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
     this.tweens.killTweensOf(senior);
     senior.setVisible(true).setAlpha(1).setDepth(3500);
-    senior.setMotion('run');
+    // 옆모습으로 가로질러 오는 게 아니라, 정면으로 성큼성큼 달려든다
+    senior.setMotion('charge');
+    senior.setScale(Math.max(0.5, senior.scale));
+    senior.setPosition(GAME_WIDTH / 2, GAME_HEIGHT * 0.42);
     this.tweens.add({
       targets: senior,
-      x: GAME_WIDTH / 2,
-      y: GAME_HEIGHT / 2 + 140,
-      scale: 1.5,
-      duration: 420,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        senior.setMotion('idle');
-        this.slamCloseup(line);
-      },
+      y: GAME_HEIGHT / 2 + 150,
+      scale: 1.7,
+      duration: 460,
+      ease: 'Cubic.easeIn',
+      onComplete: () => this.slamCloseup(line),
     });
     this.time.delayedCall(2100, () => {
       if (gameState.practiceMode) this.finishPractice(false, reason);
@@ -515,7 +520,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
       showToast(this, message);
       this.cameras.main.shake(200, 0.006);
     }
-    this.hpBar.setHp(gameState.hp);
+    if (this.usesHp()) this.hpBar.setHp(gameState.hp);
     if (dead) this.fail('HP가 바닥나 쓰러졌다...');
   }
 }

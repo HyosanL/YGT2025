@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q2_HALLWAY } from '../../config';
 import { audio } from '../../core/AudioManager';
-import { Button, textChip, type TextChip } from '../../ui/Button';
+import { Button, showToast, textChip, type TextChip } from '../../ui/Button';
+import { gameState } from '../../core/GameState';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { addSceneBg } from '../../ui/Scenery';
 import { BaseMainScene } from './BaseMainScene';
@@ -20,10 +21,10 @@ const RANK_OF: Record<VisitorKind, 1 | 2 | 3> = { junior: 1, peer: 2, senior: 3 
  * 화면 좌표·크기는 전부 k 하나에서 나오므로 발이 바닥에서 뜨지 않는다.
  */
 const VANISH_X = GAME_WIDTH / 2;
-const VANISH_Y = GAME_HEIGHT * 0.529;
+const VANISH_Y = GAME_HEIGHT * 0.46;
 /** 화면 맨 아래(k=1)에서 좌우 벽 밑단의 x — 여기서 소실점으로 수렴한다 */
-const NEAR_WALL_L = -278;
-const NEAR_WALL_R = 992;
+const NEAR_WALL_L = -194;
+const NEAR_WALL_R = 900;
 
 const floorY = (k: number): number => VANISH_Y + (GAME_HEIGHT - VANISH_Y) * k;
 const wallX = (k: number, side: -1 | 1): number =>
@@ -41,16 +42,16 @@ const heightAt = (feetYPx: number): number => Math.max(40, (feetYPx - VANISH_Y) 
  * 복도가 짧게 느껴진다는 피드백에 따라 **저 끝 문(k=0.14)까지** 열어 두었다 —
  * 멀리서 걸어올수록 견장을 읽을 시간이 길어지므로 난이도 조절 폭도 넓어진다.
  */
-const DOOR_DEPTHS = [0.14, 0.2, 0.28] as const;
-/** 내 앞을 지나치는 지점 (k=1이면 화면 밖) */
-const ARRIVE_K = 0.86;
+const DOOR_DEPTHS = [0.58, 0.42, 0.28, 0.18] as const;
+/** 내 앞에 서는 지점 (조작 버튼 위) */
+const ARRIVE_K = 0.7;
 
 interface Visitor {
   cadet: Cadet;
   kind: VisitorKind;
   side: -1 | 1;
   fromK: number;
-  /** 이 사람이 걷기 시작한 시각 */
+  /** 문에서 나와 몸을 돌리고 **복도를 따라 걷기 시작한** 시각 */
   startedAtMs: number;
   /** 걸어오는 데 걸리는 시간 */
   travelMs: number;
@@ -87,6 +88,11 @@ export class HallwayScene extends BaseMainScene {
 
   constructor() {
     super({ key: 'hallway' });
+  }
+
+  /** 복도는 HP를 쓰지 않는다 — 실수의 대가는 하트로만 치른다 */
+  protected override usesHp(): boolean {
+    return false;
   }
 
   create(): void {
@@ -150,7 +156,6 @@ export class HallwayScene extends BaseMainScene {
     this.approachMs = Q2_HALLWAY.approachMs(this.day);
     this.saluteDeadline = Q2_HALLWAY.saluteDeadline(this.day);
     this.updateCount();
-    this.drawDeadline();
 
     this.time.delayedCall(500, () => this.spawnNext());
   }
@@ -159,14 +164,19 @@ export class HallwayScene extends BaseMainScene {
     this.countText.setText(`${this.cleared} / ${this.target}`);
   }
 
-  /** 선배 경례 데드라인을 바닥에 그어 둔다 — 이 선을 넘기 전에 경례해야 한다 */
-  private drawDeadline(): void {
-    const y = floorY(this.saluteDeadline);
+  /**
+   * 선배 경례 데드라인을 바닥에 그어 둔다.
+   * 데드라인은 '문에서 내 앞까지'의 비율이라 사람마다 출발 문이 다르면 선 위치도 달라진다 —
+   * 그래서 지금 오고 있는 사람 기준으로 매 프레임 다시 긋는다.
+   */
+  private drawDeadline(v: Visitor | null): void {
     this.deadlineG.clear();
-    this.deadlineG.lineStyle(5, COLORS.accent, 0.5);
-    // 원근에 맞춰 복도 폭만큼만 (좌우 벽 사이)
-    const half = (wallX(this.saluteDeadline, 1) - wallX(this.saluteDeadline, -1)) / 2;
-    this.deadlineG.lineBetween(VANISH_X - half * 0.75, y, VANISH_X + half * 0.75, y);
+    if (!v || v.resolved) return;
+    const k = Phaser.Math.Linear(v.fromK, ARRIVE_K, this.saluteDeadline);
+    const y = floorY(k);
+    this.deadlineG.lineStyle(5, COLORS.accent, 0.45);
+    const half = (wallX(k, 1) - wallX(k, -1)) / 2;
+    this.deadlineG.lineBetween(VANISH_X - half * 0.7, y, VANISH_X + half * 0.7, y);
   }
 
   private pickKind(): VisitorKind {
@@ -185,12 +195,14 @@ export class HallwayScene extends BaseMainScene {
     const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
     const fromK = DOOR_DEPTHS[Math.floor(Math.random() * DOOR_DEPTHS.length)] ?? 0.2;
 
-    const cadet = new Cadet(this, wallX(fromK, side), 0, kind, false, {
-      visitorRank: RANK_OF[kind],
-    });
+    const doorX = wallX(fromK, side);
+    const cadet = new Cadet(this, doorX, 0, kind, false, { visitorRank: RANK_OF[kind] });
     cadet.setDepth(5);
     cadet.setMotion('walk');
-    this.place(cadet, fromK, wallX(fromK, side));
+    this.place(cadet, fromK, doorX);
+
+    // 문이 안쪽으로 열리는 순간 — 문틀이 어둡게 벌어졌다 닫힌다
+    this.flashDoor(fromK, side);
 
     // 걷는 시간에 ±15% 흔들림 — 매번 같은 속도로 오면 몸이 외워버린다
     const travelMs = this.approachMs * (0.85 + Math.random() * 0.3);
@@ -199,12 +211,39 @@ export class HallwayScene extends BaseMainScene {
       kind,
       side,
       fromK,
-      startedAtMs: this.elapsedMs,
+      // 문에서 복도 한가운데로 나와 몸을 돌리는 동안은 아직 다가오지 않는다
+      startedAtMs: this.elapsedMs + Q2_HALLWAY.stepOutMs,
       travelMs,
       resolved: false,
     };
+    // 복도 가운데로 걸어 나오는 한 걸음
+    this.tweens.add({
+      targets: cadet,
+      x: Phaser.Math.Linear(doorX, VANISH_X, 0.45),
+      duration: Q2_HALLWAY.stepOutMs,
+      ease: 'Sine.easeOut',
+    });
     audio.door();
     this.spawned += 1;
+  }
+
+  /** 문이 안쪽으로 열렸다 닫히는 표시 — 어디서 나왔는지 눈에 띄게 한다 */
+  private flashDoor(k: number, side: -1 | 1): void {
+    const feet = floorY(k);
+    const h = heightAt(feet) * 1.15; // 문은 사람보다 조금 높다
+    const w = h * 0.42;
+    const x = wallX(k, side);
+    const g = this.add.graphics().setDepth(4);
+    g.fillStyle(0x2a2118, 0.85);
+    g.fillRect(x - w / 2, feet - h, w, h);
+    g.lineStyle(3, 0x14141a, 1);
+    g.strokeRect(x - w / 2, feet - h, w, h);
+    this.tweens.add({
+      targets: g,
+      alpha: 0,
+      duration: Q2_HALLWAY.stepOutMs + 260,
+      onComplete: () => g.destroy(),
+    });
   }
 
   /** 깊이 k와 x를 받아 발끝이 바닥에 닿도록 배치 */
@@ -214,10 +253,14 @@ export class HallwayScene extends BaseMainScene {
     cadet.setScale(s).setPosition(x, feet - 120 * s);
   }
 
-  /** 지금 이 사람이 복도의 어디까지 왔는지 (0=저 끝, 1=코앞) */
+  /** 걸어온 여정의 진행률 (0=문 앞, 1=내 앞 도착) */
+  private progressU(v: Visitor): number {
+    return Phaser.Math.Clamp((this.elapsedMs - v.startedAtMs) / v.travelMs, 0, 1);
+  }
+
+  /** 지금 이 사람이 복도의 어디쯤인지 (0=소실점, 1=화면 맨 아래) */
   private progressK(v: Visitor): number {
-    const u = Phaser.Math.Clamp((this.elapsedMs - v.startedAtMs) / v.travelMs, 0, 1);
-    return Phaser.Math.Linear(v.fromK, ARRIVE_K, u);
+    return Phaser.Math.Linear(v.fromK, ARRIVE_K, this.progressU(v));
   }
 
   // ── 판정 ─────────────────────────────────────
@@ -237,8 +280,7 @@ export class HallwayScene extends BaseMainScene {
       }
       this.flashJudge('실수!', COLORS.accentCss);
       speechBubble(this, v.cadet.x, v.cadet.y - 170, '풉 ㅋㅋ 왜 경례함?', 800);
-      this.applyDamage(
-        v.kind === 'peer' ? Q2_HALLWAY.hpSalutePeer : Q2_HALLWAY.hpSaluteJunior,
+      this.loseHeart(
         v.kind === 'peer' ? '동기한테 경례해버렸다... 개쪽팔림' : '후배한테 경례로 받아버렸다...'
       );
       this.retire(v);
@@ -247,9 +289,9 @@ export class HallwayScene extends BaseMainScene {
 
     // 정답 — 선배는 얼마나 미리 했는지로 등급이 갈린다
     v.resolved = true;
-    const k = this.progressK(v);
+    const u = this.progressU(v);
     if (v.kind === 'senior') {
-      const margin = (this.saluteDeadline - k) / this.saluteDeadline;
+      const margin = (this.saluteDeadline - u) / Math.max(0.01, this.saluteDeadline);
       this.flashJudge(margin > 0.35 ? '군기 좋다!' : '아슬아슬!', margin > 0.35 ? COLORS.safeCss : COLORS.warnCss);
       speechBubble(this, v.cadet.x, v.cadet.y - 170, '음, 됐다.', 700);
     } else {
@@ -279,6 +321,18 @@ export class HallwayScene extends BaseMainScene {
     this.time.delayedCall(Q2_HALLWAY.gapMs(this.day), () => this.spawnNext());
   }
 
+  /** 복도 퀘스트의 대가는 HP가 아니라 하트다 (약 1/3칸) */
+  private loseHeart(reason: string): void {
+    if (this.finished) return;
+    audio.buzz();
+    showToast(this, reason);
+    this.cameras.main.shake(180, 0.005);
+    const alive = gameState.practiceMode
+      ? true
+      : gameState.deductLifeUnits(Q2_HALLWAY.missLifeUnits);
+    if (!alive) this.fail('실수가 쌓여 목숨이 바닥났다...');
+  }
+
   private flashJudge(text: string, color: string): void {
     this.judgeText.setText(text).setColor(color).setAlpha(1).setScale(0.6);
     this.tweens.killTweensOf(this.judgeText);
@@ -291,20 +345,23 @@ export class HallwayScene extends BaseMainScene {
   protected tick(delta: number): void {
     this.elapsedMs += delta;
     const v = this.visitor;
+    this.drawDeadline(v);
     if (!v || v.resolved) return;
 
+    if (this.elapsedMs < v.startedAtMs) return; // 아직 문 앞에서 나오는 중
+    const u = this.progressU(v);
     const k = this.progressK(v);
-    // 문 앞에서 출발해 복도 한가운데로 합류하며 다가온다
-    const u = (k - v.fromK) / (ARRIVE_K - v.fromK);
-    const x = Phaser.Math.Linear(
-      wallX(k, v.side),
-      VANISH_X + v.side * 50,
-      Math.min(1, Math.max(0, u) * 1.5)
-    );
+    // 문 앞에서 복도 한가운데로 합류하며 다가온다
+    const x = Phaser.Math.Linear(wallX(k, v.side), VANISH_X + v.side * 40, Math.min(1, u * 1.6));
     this.place(v.cadet, k, x);
 
+    // 후배는 내 앞에 이르면 **먼저** 절도 있게 경례한다 (내가 인사로 받아야 한다)
+    if (v.kind === 'junior' && u >= 0.92) {
+      v.cadet.setMotion('salute');
+    }
+
     // 선배는 데드라인을 넘어서는 순간 끝 — 내가 먼저 경례했어야 했다
-    if (v.kind === 'senior' && k >= this.saluteDeadline) {
+    if (v.kind === 'senior' && u >= this.saluteDeadline) {
       v.resolved = true;
       v.cadet.setMotion('idle');
       this.failCaught(
@@ -314,10 +371,11 @@ export class HallwayScene extends BaseMainScene {
       );
       return;
     }
-    // 후배·동기는 지나쳐 가면 어색해질 뿐
-    if (v.kind !== 'senior' && k >= Q2_HALLWAY.greetDeadline) {
+    // 후배·동기는 내 앞에 다 와서까지 응대를 안 하면 어색해진다
+    if (v.kind !== 'senior' && u >= 1) {
       v.resolved = true;
-      this.applyDamage(Q2_HALLWAY.hpMiss, '그냥 지나쳐버렸다... 어색해졌다');
+      this.flashJudge('놓쳤다!', COLORS.accentCss);
+      this.loseHeart('제때 응대하지 못했다... 어색해졌다');
       this.retire(v);
     }
   }

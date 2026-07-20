@@ -199,7 +199,23 @@ export function showHelpPanel(scene: Phaser.Scene, onClose: () => void): Phaser.
         .setOrigin(0.5)
     );
 
-    let y = 300;
+    // 목록 높이를 먼저 계산해 [닫기] 자리를 확보한다.
+    // (예전엔 닫기 y가 1050 고정이라 항목이 늘면 마지막 줄 버튼을 덮어버렸다)
+    const LIST_TOP = 300;
+    const CLOSE_Y = 1058;
+    const LIST_BOTTOM = CLOSE_Y - 78;
+    const headerH = 48;
+    const sectionGap = 18;
+    const rowCount = SECTIONS.reduce((n, sec) => n + Math.ceil(sec.topics.length / 2), 0);
+    const fixed = SECTIONS.length * (headerH + sectionGap);
+    // 남은 공간에 줄 수를 나눠 담되 터치 타깃이 뭉개지지 않게 하한을 둔다
+    const rowH = Math.max(
+      76,
+      Math.min(96, (LIST_BOTTOM - LIST_TOP - fixed) / Math.max(1, rowCount))
+    );
+    const btnH = Math.max(64, rowH - 12);
+
+    let y = LIST_TOP;
     for (const section of SECTIONS) {
       c.add(
         scene.add.text(80, y, section.label, {
@@ -209,27 +225,32 @@ export function showHelpPanel(scene: Phaser.Scene, onClose: () => void): Phaser.
           fontStyle: 'bold',
         })
       );
-      y += 48;
+      y += headerH;
       // 두 칸 그리드
       section.topics.forEach((topic, i) => {
         const col = i % 2;
         const row = Math.floor(i / 2);
-        const btn = new Button(scene, GAME_WIDTH / 2 + (col === 0 ? -155 : 155), y + 40 + row * 96, {
+        const btn = new Button(
+          scene,
+          GAME_WIDTH / 2 + (col === 0 ? -155 : 155),
+          y + btnH / 2 + row * rowH,
+          {
           label: `${topic.icon} ${topic.title}`,
           width: 296,
-          height: 84,
+          height: btnH,
           fontSize: 26,
           onClick: () => showDetail(topic),
-        });
+          }
+        );
         c.add(btn);
       });
-      y += Math.ceil(section.topics.length / 2) * 96 + 18;
+      y += Math.ceil(section.topics.length / 2) * rowH + sectionGap;
     }
 
-    const closeBtn = new Button(scene, GAME_WIDTH / 2, 1050, {
+    const closeBtn = new Button(scene, GAME_WIDTH / 2, CLOSE_Y, {
       label: '닫기',
       width: 280,
-      height: 86,
+      height: 80,
       onClick: () => {
         root.destroy();
         onClose();

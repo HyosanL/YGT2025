@@ -4,7 +4,9 @@ import { COLORS, FONT, UI } from '../config';
 export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
 export type CadetMotion =
   | 'idle' | 'walk' | 'run' | 'dance' | 'salute'
-  | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point' | 'hide';
+  | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point' | 'hide'
+  /** 게임오버 — 카메라 정면으로 달려든다 */
+  | 'charge';
 
 /** 옛 절차 드로잉 시절의 스타일 필드 — 색상값은 이제 무시되고 dobok/scale만 쓰인다 (호환용). */
 export interface CadetStyle {
@@ -51,7 +53,10 @@ const POSE: Record<CadetKind, Partial<Record<CadetMotion, string>>> = {
   },
   junior: { idle: 'junior_walk', walk: 'junior_walk', run: 'junior_walk', salute: 'junior_salute' },
   peer: { idle: 'peer_idle', walk: 'peer_walk', run: 'peer_walk', salute: 'peer_idle' },
-  senior: { idle: 'senior_idle', walk: 'senior_walk', run: 'senior_run', salute: 'senior_idle', point: 'senior_point' },
+  senior: {
+    idle: 'senior_idle', walk: 'senior_walk', run: 'senior_run', salute: 'senior_idle',
+    point: 'senior_point', charge: 'senior_charge',
+  },
 };
 const DOBOK: Partial<Record<CadetMotion, string>> = {
   idle: 'player_dobok_walk', walk: 'player_dobok_walk', run: 'player_dobok_run',
@@ -69,6 +74,10 @@ const CYCLE: Record<string, [string, string]> = {
   'player.walk': ['player_walk_a', 'player_walk_b'],
   'player.run': ['player_run', 'player_run_b'],
   'senior.run': ['senior_run', 'senior_run_b'],
+  'senior.walk': ['senior_walk', 'senior_walk_b'],
+  'senior.charge': ['senior_charge', 'senior_charge_b'],
+  // 복도 방문자 — 걸어오는 2프레임 (한 장짜리면 한 발 든 채 미끄러진다)
+  'visitor.walk': ['visitor_walk_a', 'visitor_walk_b'],
   'dobok.walk': ['player_dobok_walk', 'player_dobok_walk_b'],
   'dobok.run': ['player_dobok_run', 'player_dobok_run_b'],
   'dobok_back.walk': ['player_dobok_walk_back', 'player_dobok_walk_back_b'],
@@ -79,7 +88,7 @@ const CYCLE: Record<string, [string, string]> = {
 const LYING = new Set<CadetMotion>(['lying', 'lying_punch']);
 /** 똑바로 선 키를 그대로 유지해야 하는 자세 — 배율을 선 자세에 고정한다.
  *  (웅크리기·탈진·숨기처럼 실제로 낮아지는 자세는 여기서 뺀다) */
-const UPRIGHT = new Set<CadetMotion>(['idle', 'walk', 'run', 'salute', 'dance', 'cheer', 'point']);
+const UPRIGHT = new Set<CadetMotion>(['idle', 'walk', 'run', 'salute', 'dance', 'cheer', 'point', 'charge']);
 
 export class Cadet extends Phaser.GameObjects.Container {
   private sprite: Phaser.GameObjects.Image;
@@ -177,7 +186,11 @@ export class Cadet extends Phaser.GameObjects.Container {
   }
 
   private texFor(motion: CadetMotion): string {
-    if (this.visitorRank) return 'visitor_base';
+    if (this.visitorRank) {
+      if (motion === 'salute') return 'visitor_salute';
+      if (motion === 'walk' || motion === 'run') return 'visitor_walk_a';
+      return 'visitor_base';
+    }
     const front = this.dobok ? DOBOK : POSE[this.kind];
     const table = this.back ? (this.dobok ? DOBOK_BACK : BACK) : front;
     // 뒷모습 에셋이 없는 모션은 정면 포즈로 자연스럽게 폴백한다
@@ -254,8 +267,9 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     this.shadow.setVisible(!LYING.has(motion));
 
-    const cycleKey =
-      this.dobok && (motion === 'run' || motion === 'walk')
+    const cycleKey = this.visitorRank
+      ? `visitor.${motion}`
+      : this.dobok && (motion === 'run' || motion === 'walk')
         ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
         : `${this.kind}.${motion}`;
     const cycle = CYCLE[cycleKey];
