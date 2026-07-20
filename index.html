@@ -14,6 +14,15 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- 손그림 화풍에 맞춘 만화체 한글 폰트 (Jua = 제목·버튼, Poor Story = 본문).
+         구글이 한글을 유니코드 구간별로 잘게 쪼개 주므로 실제로 쓰는 글자만 내려받는다.
+         첫 방문 온라인 시 서비스워커가 캐시해 두어 이후에는 오프라인에서도 뜬다. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jua&family=Poor+Story&display=swap"
+      rel="stylesheet"
+    />
     <title>YGT 2025</title>
     <script>
       // 카카오톡 인앱 브라우저는 오디오/키보드/저장이 불안정 — 기본 브라우저로 보낸다.

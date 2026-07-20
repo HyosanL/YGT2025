@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT } from '../config';
+import { COLORS, FONT, UI } from '../config';
 
 export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
 export type CadetMotion =
@@ -77,6 +77,9 @@ const CYCLE: Record<string, [string, string]> = {
 
 /** 눕는 포즈 — 그림자/바운스를 끈다 */
 const LYING = new Set<CadetMotion>(['lying', 'lying_punch']);
+/** 똑바로 선 키를 그대로 유지해야 하는 자세 — 배율을 선 자세에 고정한다.
+ *  (웅크리기·탈진·숨기처럼 실제로 낮아지는 자세는 여기서 뺀다) */
+const UPRIGHT = new Set<CadetMotion>(['idle', 'walk', 'run', 'salute', 'dance', 'cheer', 'point']);
 
 export class Cadet extends Phaser.GameObjects.Container {
   private sprite: Phaser.GameObjects.Image;
@@ -88,6 +91,8 @@ export class Cadet extends Phaser.GameObjects.Container {
   private motion: CadetMotion | null = null;
   private cycleTimer: Phaser.Time.TimerEvent | null = null;
   private idleTween: Phaser.Tweens.Tween | null = null;
+  /** 선 자세 기준 높이 캐시 (setBack/dobok 전환 시 무효화) */
+  private baseH: number | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -138,6 +143,7 @@ export class Cadet extends Phaser.GameObjects.Container {
   setBack(back: boolean): this {
     if (this.back === back) return this;
     this.back = back;
+    this.baseH = null; // 앞/뒤 에셋은 키가 다를 수 있다 — 기준 높이 재측정
     const motion = this.motion ?? 'idle';
     this.motion = null;
     this.setMotion(motion);
@@ -151,12 +157,37 @@ export class Cadet extends Phaser.GameObjects.Container {
     return this;
   }
 
-  private applyTexture(key: string): void {
+  /**
+   * 텍스처 교체 + 크기 정규화.
+   *
+   * 에셋은 투명 여백을 트림해 두어 파일 높이 = 인물의 실제 세로 길이다. 그래서 프레임마다
+   * 높이로 스케일을 따로 계산하면, 무릎을 굽힌 구보 프레임처럼 세로가 짧은 포즈가 도리어
+   * 확대되어 걷는 내내 덩치가 커졌다 작아졌다 한다.
+   * 순환 애니메이션은 `refH`(첫 프레임 높이)를 넘겨 **두 프레임이 같은 배율**을 쓰게 한다.
+   */
+  private applyTexture(key: string, refH?: number): void {
     if (!this.scene.textures.exists(key)) return;
     this.sprite.setTexture(key);
     const src = this.sprite.texture.getSourceImage() as { height?: number };
-    const th = src.height || this.sprite.height || BASE_H;
+    const th = refH || src.height || this.sprite.height || BASE_H;
     this.sprite.setScale(BASE_H / th);
+  }
+
+  /** 트림된 원본 텍스처의 세로 픽셀 수 (스케일 기준값) */
+  private texHeight(key: string): number {
+    const src = this.scene.textures.get(key).getSourceImage() as { height?: number };
+    return src.height || BASE_H;
+  }
+
+  /**
+   * 이 캐릭터의 모든 자세가 공유하는 기준 높이 = 똑바로 선 자세(idle)의 픽셀 높이.
+   * 모든 컷이 같은 카메라 거리에서 그려졌으므로, 서 있는 키 하나로 배율을 고정해야
+   * 구보(무릎 굽힘)·경례처럼 세로가 짧은 포즈가 확대되지 않는다.
+   * 반대로 웅크리기·탈진처럼 정말 낮은 자세는 낮은 대로 보이는 게 맞다.
+   */
+  private standH(): number {
+    if (this.baseH === null) this.baseH = this.texHeight(this.texFor('idle'));
+    return this.baseH;
   }
 
   setFace(_emoji: string): void {
@@ -179,22 +210,25 @@ export class Cadet extends Phaser.GameObjects.Container {
         ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
         : `${this.kind}.${motion}`;
     const cycle = CYCLE[cycleKey];
+    // 걷기·구보처럼 '서서 이동하는' 자세는 선 키(standH)를 공통 배율로 쓴다
+    const uprightH = UPRIGHT.has(motion) ? this.standH() : undefined;
+
     if (cycle && this.scene.textures.exists(cycle[0]) && this.scene.textures.exists(cycle[1])) {
       let i = 0;
-      this.applyTexture(cycle[0]);
+      this.applyTexture(cycle[0], uprightH);
       this.cycleTimer = this.scene.time.addEvent({
         delay: motion === 'run' ? 130 : 200,
         loop: true,
         callback: () => {
           if (!this.active) return;
           i ^= 1;
-          this.applyTexture(cycle[i]);
+          this.applyTexture(cycle[i], uprightH);
         },
       });
       return;
     }
 
-    this.applyTexture(this.texFor(motion));
+    this.applyTexture(this.texFor(motion), uprightH);
 
     if (motion === 'idle' || motion === 'dance') {
       this.idleTween = this.scene.tweens.add({
@@ -255,22 +289,28 @@ export function speechBubble(
   durationMs = 1200,
   depth = 800
 ): void {
-  const bubble = scene.add
-    .text(x, y, text, {
-      fontFamily: FONT,
-      fontSize: '30px',
-      color: '#1a1a2e',
-      backgroundColor: '#f5f5f5',
-      padding: { x: 20, y: 12 },
-      align: 'center',
-    })
-    .setOrigin(0.5, 1)
-    .setDepth(depth);
-  scene.tweens.add({
-    targets: bubble,
-    y: y - 20,
-    duration: durationMs,
-    onComplete: () => bubble.destroy(),
-  });
-  scene.time.delayedCall(durationMs, () => bubble.destroy());
+  const box = scene.add.container(x, y).setDepth(depth);
+  const label = scene.add
+    .text(0, 0, text, { fontFamily: FONT, fontSize: '30px', color: COLORS.inkCss, align: 'center' })
+    .setOrigin(0.5);
+  const w = label.width + 40;
+  const h = label.height + 26;
+  const g = scene.add.graphics();
+  g.fillStyle(COLORS.ink, 1);
+  g.fillRoundedRect(-w / 2 + UI.shadow, -h / 2 + UI.shadow, w, h, UI.radius);
+  g.fillStyle(COLORS.white, 1);
+  g.fillRoundedRect(-w / 2, -h / 2, w, h, UI.radius);
+  g.lineStyle(UI.stroke, COLORS.ink, 1);
+  g.strokeRoundedRect(-w / 2, -h / 2, w, h, UI.radius);
+  // 아래쪽 꼬리
+  g.fillStyle(COLORS.white, 1);
+  g.fillTriangle(-14, h / 2 - 2, 14, h / 2 - 2, 0, h / 2 + 20);
+  g.lineStyle(UI.stroke, COLORS.ink, 1);
+  g.lineBetween(-14, h / 2, 0, h / 2 + 20);
+  g.lineBetween(14, h / 2, 0, h / 2 + 20);
+  box.add([g, label]);
+  box.setY(y - h / 2 - 18);
+
+  scene.tweens.add({ targets: box, y: box.y - 20, duration: durationMs });
+  scene.time.delayedCall(durationMs, () => box.destroy());
 }

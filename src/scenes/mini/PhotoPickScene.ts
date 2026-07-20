@@ -7,7 +7,25 @@ import { chance, pick, randInt, shuffle } from '../../utils/rng';
 import { drawIncoming } from '../../ui/kakao';
 import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 
-const FLAWS: LockerFlaw[] = ['tilt-blanket', 'open-drawer', 'sock', 'crooked-hanger'];
+const FLAWS: LockerFlaw[] = ['tilt-cap', 'open-drawer', 'sock', 'crooked-hanger'];
+
+/** 옷장 그림의 표시 규격 — 에셋 원본 비율(452:512)을 그대로 지킨다 (찌그러지면 히트영역도 어긋난다) */
+const LOCKER_W = 236;
+const LOCKER_H = 267;
+
+/**
+ * 흠집별 텍스처 키와 '틀린 부분'의 히트영역.
+ *
+ * 히트영역은 눈대중이 아니라 **정답 컷과 흠집 컷을 픽셀 차분해 실측**한 값이다
+ * (scratchpad/lockerdiff.cjs). 예전에는 대충 적은 사각형이라 제대로 짚어도 오답이 났다.
+ * 좌표계는 컨테이너 중심 기준, LOCKER_W×LOCKER_H 규격.
+ */
+const FLAW_SPEC: Record<LockerFlaw, { key: string; rect: [number, number, number, number] }> = {
+  'tilt-cap': { key: 'locker_tilt', rect: [-56, -125, 90, 90] },
+  'open-drawer': { key: 'locker_drawer', rect: [-100, 56, 106, 78] },
+  sock: { key: 'locker_sock', rect: [-10, 42, 90, 90] },
+  'crooked-hanger': { key: 'locker_hanger', rect: [-45, -44, 90, 98] },
+};
 
 interface LockerResult {
   container: Phaser.GameObjects.Container;
@@ -91,9 +109,15 @@ export class PhotoPickScene extends BaseMiniScene {
       // 사진 프레임 + 번호
       const frame = this.add.graphics();
       frame.lineStyle(4, 0xffffff, 0.9);
-      frame.strokeRoundedRect(x - 118 * scale - 6, y - 178 * scale - 6, 236 * scale + 12, 356 * scale + 12, 8);
+      frame.strokeRoundedRect(
+        x - (LOCKER_W / 2) * scale - 6,
+        y - (LOCKER_H / 2) * scale - 6,
+        LOCKER_W * scale + 12,
+        LOCKER_H * scale + 12,
+        8
+      );
       this.add
-        .text(x - 118 * scale, y - 178 * scale - 28, `${i + 1}`, {
+        .text(x - (LOCKER_W / 2) * scale, y - (LOCKER_H / 2) * scale - 28, `${i + 1}`, {
           fontFamily: FONT,
           fontSize: '28px',
           color: KAKAO.sub,
@@ -102,7 +126,7 @@ export class PhotoPickScene extends BaseMiniScene {
         .setOrigin(0, 0.5);
 
       container.setInteractive(
-        new Phaser.Geom.Rectangle(-118, -178, 236, 356),
+        new Phaser.Geom.Rectangle(-LOCKER_W / 2, -LOCKER_H / 2, LOCKER_W, LOCKER_H),
         Phaser.Geom.Rectangle.Contains
       );
       container.on('pointerdown', () => {
@@ -135,16 +159,22 @@ export class PhotoPickScene extends BaseMiniScene {
     const flaw = pick(FLAWS);
     const scale = 1.35;
     const cx = GAME_WIDTH / 2;
-    const cy = this.msgBottom + 46 + (356 * scale) / 2;
+    const cy = this.msgBottom + 46 + (LOCKER_H * scale) / 2;
     const { flawRect } = this.drawLocker(cx, cy, scale, flaw);
 
     const frame = this.add.graphics();
     frame.lineStyle(5, 0xffffff, 0.9);
-    frame.strokeRoundedRect(cx - 118 * scale - 8, cy - 178 * scale - 8, 236 * scale + 16, 356 * scale + 16, 10);
+    frame.strokeRoundedRect(
+      cx - (LOCKER_W / 2) * scale - 8,
+      cy - (LOCKER_H / 2) * scale - 8,
+      LOCKER_W * scale + 16,
+      LOCKER_H * scale + 16,
+      10
+    );
 
     // 사진 전체를 탭 영역으로 — 틀린 부분이면 성공, 아니면 실패
     const zone = this.add
-      .zone(cx, cy, 236 * scale, 356 * scale)
+      .zone(cx, cy, LOCKER_W * scale, LOCKER_H * scale)
       .setOrigin(0.5)
       .setInteractive();
     zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -163,41 +193,17 @@ export class PhotoPickScene extends BaseMiniScene {
     );
   }
 
-  // ── 옷장 절차 생성 ─────────────────────────
+  // ── 옷장 그리기 ─────────────────────────────
 
   private drawLocker(x: number, y: number, scale: number, flaw: LockerFlaw | null): LockerResult {
     const c = this.add.container(x, y).setScale(scale);
-    const key =
-      flaw === 'tilt-blanket'
-        ? 'locker_tilt'
-        : flaw === 'open-drawer'
-          ? 'locker_drawer'
-          : flaw === 'sock'
-            ? 'locker_sock'
-            : flaw === 'crooked-hanger'
-              ? 'locker_hanger'
-              : 'locker_ok';
-    c.add(this.add.image(0, 0, key).setOrigin(0.5).setDisplaySize(236, 356));
+    const key = flaw ? FLAW_SPEC[flaw].key : 'locker_ok';
+    c.add(this.add.image(0, 0, key).setOrigin(0.5).setDisplaySize(LOCKER_W, LOCKER_H));
 
-    // 틀린 부분 히트 영역 (이미지 로컬 좌표, 236x356 기준 근사)
-    let flawRect: Phaser.Geom.Rectangle | null = null;
-    switch (flaw) {
-      case 'tilt-blanket':
-        flawRect = new Phaser.Geom.Rectangle(-118, -178, 236, 96);
-        break;
-      case 'crooked-hanger':
-        flawRect = new Phaser.Geom.Rectangle(-110, -86, 170, 150);
-        break;
-      case 'open-drawer':
-        flawRect = new Phaser.Geom.Rectangle(-118, 36, 236, 140);
-        break;
-      case 'sock':
-        flawRect = new Phaser.Geom.Rectangle(-70, 24, 170, 120);
-        break;
-      case null:
-        break;
-    }
-
-    return { container: c, flawRect };
+    const r = flaw ? FLAW_SPEC[flaw].rect : null;
+    return {
+      container: c,
+      flawRect: r ? new Phaser.Geom.Rectangle(r[0], r[1], r[2], r[3]) : null,
+    };
   }
 }

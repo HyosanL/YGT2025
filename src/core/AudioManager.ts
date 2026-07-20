@@ -47,6 +47,8 @@ const SONG_URL = '/audio/shower-song.mp3';
 const AMBIENT_URLS = {
   water: '/audio/shower-water.mp3',
   microwave: '/audio/microwave-hum.mp3',
+  /** 옆방 1학년들 떠드는 소리 — 실제 대사를 벽 너머로 들리게 저역만 남겨 구운 루프 */
+  chatter: '/audio/next-room-chatter.wav',
 } as const;
 type AmbientKey = keyof typeof AMBIENT_URLS;
 
@@ -727,12 +729,40 @@ class AudioManagerImpl {
   }
 
   /**
-   * 옆방 떠드는 소리 — 벽 너머의 웅성거림 (밴드패스 노이즈 + 느린 게인 흔들림).
+   * 옆방 떠드는 소리 — 실제 대화 음원을 루프로 흘린다.
+   * 음원은 이미 벽 너머 특성(고역 제거)으로 구워져 있고, 여기서 로우패스를
+   * 한 번 더 얹어 '벽을 통해 들어오는' 느낌을 마무리한다.
+   * 음원 미로드 시에는 기존 밴드패스 노이즈 웅성거림으로 폴백.
    * 매 프레임 불러도 안전 (self-heal).
    */
   startChatter(): void {
     if (!this.ready || this.chatterStop || !this.ctx || !this.master) return;
     const ctx = this.ctx;
+
+    const real = this.ambientBuf.get('chatter');
+    if (real) {
+      const src = ctx.createBufferSource();
+      src.buffer = real;
+      src.loop = true;
+      // 벽 한 겹 더 — 남은 자음 성분을 눌러 말이 안 알아들리게 한다
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 700;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.85;
+      src.connect(lp).connect(gain).connect(this.sfxBus ?? this.master);
+      src.start();
+      this.chatterStop = () => {
+        try {
+          src.stop();
+        } catch {
+          // 이미 정지된 소스는 무시
+        }
+        gain.disconnect();
+      };
+      return;
+    }
+
     const buf = this.getNoiseBuffer();
     if (!buf) return;
     const src = ctx.createBufferSource();
@@ -771,9 +801,10 @@ class AudioManagerImpl {
     this.chatterStop = null;
   }
 
-  /** 벽 너머 말소리 한 마디 — 웅얼웅얼 (말풍선 등장에 맞춰 호출) */
+  /** 벽 너머 말소리 한 마디 — 웅얼웅얼 (말풍선 등장에 맞춰 호출).
+   *  실음원이 흐르는 중이면 그쪽이 이미 말소리라 겹쳐 울리지 않게 건너뛴다. */
   chatterBlip(): void {
-    if (!this.ready) return;
+    if (!this.ready || this.ambientBuf.has('chatter')) return;
     const syllables = 3 + Math.floor(Math.random() * 3);
     let t = this.now;
     for (let i = 0; i < syllables; i++) {

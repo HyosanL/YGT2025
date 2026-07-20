@@ -77,6 +77,19 @@ const game = new Phaser.Game({
 // 개발/자동 스크린샷용 핸들 (프로덕션 동작에는 영향 없음)
 (window as unknown as { __game?: Phaser.Game }).__game = game;
 
+/**
+ * 만화체 웹폰트(Jua·Poor Story)가 늦게 도착하면 Phaser가 폴백 폰트 기준으로
+ * 글자 폭을 재 놓아 배경 패널과 어긋난다. 폰트가 준비되면 이미 그려진 텍스트를
+ * 한 번 다시 렌더시켜 폭을 맞춘다.
+ */
+void document.fonts?.ready.then(() => {
+  for (const scene of game.scene.getScenes(true)) {
+    scene.children.each((child) => {
+      if (child instanceof Phaser.GameObjects.Text) child.updateText();
+    });
+  }
+});
+
 // 다른 앱/탭으로 떠나면 자동 일시정지 + 생존시간 시계 정지.
 // (벽시계 기반 플레이 시간이 자리를 비운 사이 불어나는 것을 막는다)
 document.addEventListener('visibilitychange', () => {

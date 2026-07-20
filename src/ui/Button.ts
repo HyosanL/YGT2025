@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT } from '../config';
+import { COLORS, FONT, GAME_WIDTH, UI } from '../config';
 import { audio } from '../core/AudioManager';
 
 export interface ButtonOptions {
@@ -42,15 +42,12 @@ export class Button extends Phaser.GameObjects.Container {
     this.drawBg(this.color);
     this.add(this.bg);
 
-    const lightLabel = !opts.labelColor || opts.labelColor === COLORS.textCss;
+    // 라벨은 검정 — 밝은 플랫 버튼 위에서 가장 또렷하다 (외곽선 없이 깔끔하게)
     this.labelText = scene.add
       .text(0, 0, opts.label, {
         fontFamily: FONT,
         fontSize: `${opts.fontSize ?? 32}px`,
-        color: opts.labelColor ?? COLORS.textCss,
-        fontStyle: 'bold',
-        stroke: '#14141a',
-        strokeThickness: lightLabel ? 4 : 0,
+        color: opts.labelColor ?? COLORS.inkCss,
         align: 'center',
         ...(opts.wrapWidth ? { wordWrap: { width: opts.wrapWidth } } : {}),
       })
@@ -68,13 +65,16 @@ export class Button extends Phaser.GameObjects.Container {
     this.on('pointerdown', () => {
       if (!this.enabled) return;
       this.pressed = true;
-      this.setScale(0.95);
+      // 그림자가 있던 자리로 내려앉는다 — 실제 블록을 누른 듯한 타격감
+      this.drawBg(this.color, true);
+      this.labelText.setY(UI.btnLift);
       opts.onDown?.();
     });
     const release = (fireClick: boolean): void => {
       if (!this.pressed) return;
       this.pressed = false;
-      this.setScale(1);
+      this.drawBg(this.color, false);
+      this.labelText.setY(0);
       opts.onUp?.();
       if (fireClick && this.enabled && opts.onClick) {
         audio.tick();
@@ -93,17 +93,22 @@ export class Button extends Phaser.GameObjects.Container {
     scene.add.existing(this);
   }
 
-  private drawBg(color: number): void {
-    const w = this.btnW, h = this.btnH, r = 22;
+  /**
+   * 단색 + 굵은 검정 외곽선 + 블러 없는 아래쪽 하드 섀도.
+   * 눌리면 버튼이 섀도 두께만큼 내려앉고 섀도가 사라진다.
+   */
+  private drawBg(color: number, pressed = false): void {
+    const w = this.btnW, h = this.btnH, r = UI.btnRadius;
+    const dy = pressed ? UI.btnLift : 0;
     this.bg.clear();
-    // 하드 오프셋 그림자 (블러 없음) — 플랫 카툰 느낌
-    this.bg.fillStyle(0x14141a, 0.9);
-    this.bg.fillRoundedRect(-w / 2 + 5, -h / 2 + 6, w, h, r);
-    // 플랫 채움 + 굵은 검정 외곽선
+    if (!pressed) {
+      this.bg.fillStyle(COLORS.ink, 1);
+      this.bg.fillRoundedRect(-w / 2, -h / 2 + UI.btnLift, w, h, r);
+    }
     this.bg.fillStyle(color, 1);
-    this.bg.fillRoundedRect(-w / 2, -h / 2, w, h, r);
-    this.bg.lineStyle(4, 0x14141a, 1);
-    this.bg.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    this.bg.fillRoundedRect(-w / 2, -h / 2 + dy, w, h, r);
+    this.bg.lineStyle(UI.stroke, COLORS.ink, 1);
+    this.bg.strokeRoundedRect(-w / 2, -h / 2 + dy, w, h, r);
   }
 
   setEnabled(enabled: boolean): this {
@@ -119,30 +124,134 @@ export class Button extends Phaser.GameObjects.Container {
 
   setColor(color: number): this {
     this.color = color;
-    this.drawBg(color);
+    this.drawBg(color, this.pressed);
     return this;
   }
 }
 
-/** 화면 중앙 하단에 잠깐 떠오르는 토스트 텍스트 */
-export function showToast(scene: Phaser.Scene, message: string, color: string = COLORS.textCss): void {
-  const toast = scene.add
-    .text(360, 900, message, {
-      fontFamily: FONT,
-      fontSize: '34px',
-      color,
-      backgroundColor: 'rgba(0,0,0,0.65)',
-      padding: { x: 24, y: 14 },
-      align: 'center',
-    })
-    .setOrigin(0.5)
-    .setDepth(1500);
-  scene.tweens.add({
-    targets: toast,
-    y: 840,
-    alpha: { from: 1, to: 0 },
-    duration: 1400,
-    ease: 'Cubic.easeOut',
-    onComplete: () => toast.destroy(),
+/**
+ * 화면 위에 얹는 흰 패널/칩 — 반투명 검정 박스를 대체한다.
+ * 단색 흰 바탕 + 굵은 검정 외곽선 + 하드 섀도.
+ */
+export function drawPanel(
+  g: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  fill: number = COLORS.white,
+  radius: number = UI.radius
+): void {
+  g.fillStyle(COLORS.ink, 1);
+  g.fillRoundedRect(x + UI.shadow, y + UI.shadow, w, h, radius);
+  g.fillStyle(fill, 1);
+  g.fillRoundedRect(x, y, w, h, radius);
+  g.lineStyle(UI.stroke, COLORS.ink, 1);
+  g.strokeRoundedRect(x, y, w, h, radius);
+}
+
+export interface ChipOptions {
+  fontSize?: number;
+  /** 글자색 — 기본은 검정. 밝은 칩 위에 흰 글씨를 얹지 않도록 주의 */
+  color?: string;
+  fill?: number;
+  padX?: number;
+  padY?: number;
+  align?: string;
+  wrapWidth?: number;
+  lineSpacing?: number;
+}
+
+/**
+ * 배경 그림 위에 얹는 텍스트 칩 — 흰 패널 + 굵은 검정 외곽선 + 하드 섀도.
+ * (Text의 반투명 검정 backgroundColor는 플랫 아트와 안 어울려 전부 이걸로 바꿨다)
+ *
+ * 패널과 글자를 한 컨테이너로 묶는다 — 따로 두면 setVisible(false)가 글자만 숨기고
+ * 빈 패널이 화면에 남는다.
+ */
+export class TextChip extends Phaser.GameObjects.Container {
+  private label: Phaser.GameObjects.Text;
+  private panel: Phaser.GameObjects.Graphics;
+  private opts: ChipOptions;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, message: string, opts: ChipOptions = {}) {
+    super(scene, x, y);
+    this.opts = opts;
+    this.panel = scene.add.graphics();
+    this.label = scene.add
+      .text(0, 0, message, {
+        fontFamily: FONT,
+        fontSize: `${opts.fontSize ?? 30}px`,
+        color: opts.color ?? COLORS.inkCss,
+        align: opts.align ?? 'center',
+        lineSpacing: opts.lineSpacing ?? 6,
+        ...(opts.wrapWidth ? { wordWrap: { width: opts.wrapWidth } } : {}),
+      })
+      .setOrigin(0.5);
+    this.add([this.panel, this.label]);
+    this.redraw();
+    scene.add.existing(this);
+  }
+
+  private redraw(): void {
+    const padX = this.opts.padX ?? 22;
+    const padY = this.opts.padY ?? 12;
+    this.panel.clear();
+    drawPanel(
+      this.panel,
+      -this.label.width / 2 - padX,
+      -this.label.height / 2 - padY,
+      this.label.width + padX * 2,
+      this.label.height + padY * 2,
+      this.opts.fill ?? COLORS.white
+    );
+  }
+
+  setText(value: string): this {
+    this.label.setText(value);
+    this.redraw();
+    return this;
+  }
+
+  setTextColor(color: string): this {
+    this.label.setColor(color);
+    return this;
+  }
+}
+
+export function textChip(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  message: string,
+  opts: ChipOptions & { depth?: number } = {}
+): TextChip {
+  return new TextChip(scene, x, y, message, opts).setDepth(opts.depth ?? 10) as TextChip;
+}
+
+/**
+ * 화면 중앙 하단에 팝 하고 튀어나오는 토스트 — 노란 알약 + 검정 외곽선.
+ * 살짝 삐뚤게 얹고, 사라질 땐 페이드 대신 위로 떠오르며 줄어든다 (플랫 아트에 맞춰).
+ */
+export function showToast(scene: Phaser.Scene, message: string, color: string = COLORS.inkCss): void {
+  const box = scene.add.container(GAME_WIDTH / 2, 900).setDepth(1500);
+  const label = scene.add
+    .text(0, 0, message, { fontFamily: FONT, fontSize: '32px', color, align: 'center' })
+    .setOrigin(0.5);
+  const g = scene.add.graphics();
+  const w = label.width + 52;
+  const h = label.height + 30;
+  drawPanel(g, -w / 2, -h / 2, w, h, COLORS.warn, h / 2);
+  box.add([g, label]);
+  box.setScale(0).setAngle(Phaser.Math.Between(-5, 5));
+
+  scene.tweens.chain({
+    targets: box,
+    tweens: [
+      { scale: 1.15, duration: 130, ease: 'Cubic.easeOut' },
+      { scale: 1, duration: 90 },
+      { y: 850, scale: 0, delay: 900, duration: 260, ease: 'Back.easeIn' },
+    ],
+    onComplete: () => box.destroy(),
   });
 }

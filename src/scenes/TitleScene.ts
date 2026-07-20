@@ -61,21 +61,27 @@ export class TitleScene extends Phaser.Scene {
         fontFamily: FONT,
         fontSize: '96px',
         color: COLORS.textCss,
-        fontStyle: 'bold',
+        // 밝은 연병장 배경 위에서도 읽히도록 굵은 검정 외곽선 (플랫 카툰 로고 느낌)
+        stroke: COLORS.inkCss,
+        strokeThickness: 10,
       })
       .setOrigin(0.5);
     this.add
       .text(GAME_WIDTH / 2, 505, '공사 2학년 생도의 생존기', {
         fontFamily: FONT,
         fontSize: '32px',
-        color: COLORS.subCss,
+        color: COLORS.textCss,
+        stroke: COLORS.inkCss,
+        strokeThickness: 6,
       })
       .setOrigin(0.5);
     this.add
       .text(GAME_WIDTH / 2, 560, '— 선배에게 걸리면 게임 오버 —', {
         fontFamily: FONT,
         fontSize: '26px',
-        color: COLORS.accentCss,
+        color: COLORS.warnCss,
+        stroke: COLORS.inkCss,
+        strokeThickness: 6,
       })
       .setOrigin(0.5);
 

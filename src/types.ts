@@ -67,7 +67,7 @@ export interface VoteQuestion {
   wrongs: string[];
 }
 
-export type LockerFlaw = 'tilt-blanket' | 'open-drawer' | 'sock' | 'crooked-hanger';
+export type LockerFlaw = 'tilt-cap' | 'open-drawer' | 'sock' | 'crooked-hanger';
 
 export interface MiniSceneData {
   returnTo: string;

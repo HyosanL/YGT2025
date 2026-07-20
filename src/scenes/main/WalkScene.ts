@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q4_WALK } from '../../config';
 import { gameState } from '../../core/GameState';
-import { showToast } from '../../ui/Button';
+import { showToast, textChip, type TextChip } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { chance, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
@@ -54,8 +54,8 @@ export class WalkScene extends BaseMainScene {
   private player!: Cadet;
   private coneG!: Phaser.GameObjects.Graphics;
   private progressFill!: Phaser.GameObjects.Graphics;
-  private stateText!: Phaser.GameObjects.Text;
-  private alertText!: Phaser.GameObjects.Text;
+  private stateText!: TextChip;
+  private alertText!: TextChip;
   private road!: Phaser.GameObjects.TileSprite;
   private dojang!: Phaser.GameObjects.Container;
 
@@ -158,34 +158,25 @@ export class WalkScene extends BaseMainScene {
     this.player.setScale(1.15).setDepth(7);
     this.player.setMotion('walk');
 
-    this.alertText = this.add
-      .text(PLAYER_X, PLAYER_Y - 190, '❗ 시야에 걸렸다 — 뛰어!!', {
-        fontFamily: FONT,
-        fontSize: '34px',
-        color: COLORS.accentCss,
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        padding: { x: 16, y: 8 },
-      })
-      .setOrigin(0.5)
-      .setDepth(20)
-      .setVisible(false);
+    this.alertText = textChip(this, PLAYER_X, PLAYER_Y - 190, '❗ 시야에 걸렸다 — 뛰어!!', {
+      fontSize: 31,
+      fill: COLORS.accent,
+      color: '#ffffff',
+      depth: 20,
+    });
+    this.alertText.setVisible(false);
 
-    this.stateText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 120, '', {
-        fontFamily: FONT,
-        fontSize: '30px',
-        color: COLORS.textCss,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: { x: 20, y: 12 },
-      })
-      .setOrigin(0.5)
-      .setDepth(20);
+    this.stateText = textChip(this, GAME_WIDTH / 2, GAME_HEIGHT - 120, '', {
+      fontSize: 28,
+      depth: 20,
+    });
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 56, '시야에 걸리면 구보 필수 · 사각지대에선 걸어서 HP 회복', {
         fontFamily: FONT,
         fontSize: '22px',
-        color: COLORS.subCss,
+        color: COLORS.inkCss,
+        stroke: '#ffffff',
+        strokeThickness: 5,
       })
       .setOrigin(0.5)
       .setDepth(20);
@@ -251,7 +242,7 @@ export class WalkScene extends BaseMainScene {
         this.holding = false;
         this.exhausted = true;
         this.player.setFace('😵');
-        showToast(this, '숨이 턱 끝까지 찼다... 당분간 못 뛴다!', COLORS.warnCss);
+        showToast(this, '숨이 턱 끝까지 찼다... 당분간 못 뛴다!');
       }
     } else {
       gameState.heal((Q4_WALK.walkRegenPerSec * delta) / 1000);
@@ -355,8 +346,8 @@ export class WalkScene extends BaseMainScene {
           ? '🏃 구보 중!! (HP 소모)'
           : '🚶 걷는 중 (화면을 꾹 누르면 구보 · HP 회복)'
     );
-    this.stateText.setColor(
-      this.exhausted ? COLORS.accentCss : this.holding ? COLORS.warnCss : COLORS.textCss
+    this.stateText.setTextColor(
+      this.exhausted ? COLORS.accentCss : this.holding ? '#b46b00' : COLORS.inkCss
     );
     if (!this.exhausted) {
       this.player.setFace(this.holding ? '😤' : '😏');

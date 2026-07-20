@@ -28,21 +28,49 @@ export const LIVES_MAX = 3;
 /** 하트 1칸의 내부 단위 수 (⅕ 단위 — 미니 퀘스트 성공 보상이 1단위) */
 export const LIFE_UNITS = 5;
 
-export const FONT = "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif";
+/** 제목·버튼·강조 — 굵고 둥근 만화체 */
+export const FONT = "'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+/** 본문·대사 — 꾹꾹 눌러쓴 펜글씨체 */
+export const FONT_BODY = "'Poor Story', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 
+/**
+ * 플랫 카툰 팔레트 — 반투명·그라데이션을 쓰지 않고 '단색 + 굵은 검정 외곽선'으로만 쌓는다.
+ * (기존 어두운 남색 UI가 밝은 손그림 화면과 따로 놀아 전면 교체)
+ */
 export const COLORS = {
   bg: 0x1a1a2e,
-  panel: 0x16213e,
-  panelLight: 0x0f3460,
-  accent: 0xe94560,
-  safe: 0x4ecca3,
-  warn: 0xffb400,
-  white: 0xf5f5f5,
-  textCss: '#f5f5f5',
-  subCss: '#a8b2d1',
-  accentCss: '#e94560',
-  safeCss: '#4ecca3',
-  warnCss: '#ffb400',
+  /** 패널·말풍선 바탕 */
+  panel: 0xffffff,
+  /** 메인 테마색 (타이틀 바·포인트 패널) */
+  panelLight: 0x5ca0f2,
+  accent: 0xef476f,
+  safe: 0x06d6a0,
+  warn: 0xffd166,
+  white: 0xffffff,
+  /** 모든 외곽선·기본 글자 */
+  ink: 0x000000,
+  inkCss: '#000000',
+  /** 비활성 */
+  muted: 0xe0e0e0,
+  textCss: '#ffffff',
+  subCss: '#e8eef7',
+  accentCss: '#ef476f',
+  safeCss: '#06d6a0',
+  warnCss: '#ffd166',
+} as const;
+
+/** UI 공통 치수 — 굵은 외곽선과 블러 없는 하드 섀도가 이 화풍의 뼈대다 */
+export const UI = {
+  /** 외곽선 두께 */
+  stroke: 4,
+  /** 패널 모서리 */
+  radius: 12,
+  /** 버튼 모서리 */
+  btnRadius: 16,
+  /** 하드 섀도 오프셋 (패널) */
+  shadow: 6,
+  /** 버튼이 눌리며 내려앉는 양 = 아래 그림자 두께 */
+  btnLift: 8,
 } as const;
 
 export function clamp01(t: number): number {
@@ -56,6 +84,27 @@ export function lerp(a: number, b: number, t: number): number {
 /** 일차별 난이도 계수 0~1 (튜닝 대상) */
 export function difficulty(day: number): number {
   return Math.min(1, 0.3 + day * 0.07);
+}
+
+/**
+ * 전체 난이도 배율 — 판 전체를 한 번에 조이는 손잡이. 1.0이 기존 밸런스.
+ * 아래 tight()/harder()를 거치는 값만 영향을 받는다.
+ */
+export const DIFF_SCALE = 1.3;
+/** 반응 유예·제한시간처럼 **짧아질수록 어려워지는** 값 */
+export function tight(ms: number): number {
+  return Math.round(ms / DIFF_SCALE);
+}
+/** 요구량·빈도·속도처럼 **커질수록 어려워지는** 값 */
+export function harder(v: number): number {
+  return v * DIFF_SCALE;
+}
+/** [최소, 최대] 범위를 통째로 조인다 */
+function tightRange(r: [number, number]): [number, number] {
+  return [tight(r[0]), tight(r[1])];
+}
+function harderRange(r: [number, number]): [number, number] {
+  return [Math.round(harder(r[0])), Math.round(harder(r[1]))];
 }
 
 /** 일차별 BGM 템포 배율 — 갈수록 빨라진다 (게임오버 후 새 판은 다시 1.0부터) */
@@ -74,7 +123,7 @@ export const WALLPUNCH_UNLOCK_DAY = 5;
 // ─────────────────────────────────────────────
 export const MINI = {
   /** 하루(메인 퀘스트 1회) 안에서 미니 퀘스트 발생 확률 */
-  chance: (day: number): number => Math.min(0.85, 0.3 + day * 0.05),
+  chance: (day: number): number => Math.min(0.95, harder(0.3 + day * 0.05)),
   /** 하루 최대 발생 횟수 */
   maxPerDay: 2,
   /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
@@ -95,17 +144,13 @@ export const Q1_SHOWER = {
   showerTimeMs: (day: number): number => Math.round(lerp(14500, 16500, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간
    *  (모바일 터치 반응 한계 고려 — 커튼 등장 보정 후에도 360ms 밑으로 내려가지 않게) */
-  reactMs: (day: number): number => Math.round(lerp(650, 420, difficulty(day))),
-  /** 선배 체류 시간 범위 — 짧게 치고 빠진다 */
-  stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(800, 1100, difficulty(day))),
-    Math.round(lerp(1200, 1500, difficulty(day))),
-  ],
-  /** 선배 등장 간격 범위 — 빨리빨리 돌아온다 */
-  gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1500, 1200, difficulty(day))),
-    Math.round(lerp(2500, 2000, difficulty(day))),
-  ],
+  reactMs: (day: number): number => tight(lerp(650, 420, difficulty(day))),
+  /** 선배 체류 시간 범위 — 길수록 오래 숨죽여야 한다 */
+  stayMsRange: (day: number): [number, number] =>
+    harderRange([lerp(800, 1100, difficulty(day)), lerp(1200, 1500, difficulty(day))]),
+  /** 선배 등장 간격 범위 — 짧을수록 자주 들이닥친다 */
+  gapMsRange: (day: number): [number, number] =>
+    tightRange([lerp(1500, 1200, difficulty(day)), lerp(2500, 2000, difficulty(day))]),
 } as const;
 
 // ─────────────────────────────────────────────
@@ -113,37 +158,30 @@ export const Q1_SHOWER = {
 // 제한시간 안에 올바른 응대를 골라야 한다. 후배 인사만 카운트.
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 필요 성공 횟수 = 후배 경례를 인사로 받은 횟수 (3~4회, 일차 비례) */
-  targetCount: (day: number): number => Math.min(4, 3 + Math.floor((day - 1) / 8)),
-  /** 접근 시간 — 빠른 템포 */
-  approachMs: (day: number): number => Math.round(lerp(700, 480, difficulty(day))),
-  /** 한 명당 응답 제한시간 — 안에 인사든 경례든 해야 한다 */
-  responseMs: (day: number): number => Math.round(lerp(1500, 950, difficulty(day))),
-  /** 다음 사람까지 간격 */
-  gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(400, 250, difficulty(day))),
-    Math.round(lerp(750, 450, difficulty(day))),
-  ],
+  /** 제한시간 안에 제대로 응대해야 하는 인원 수 */
+  targetCount: (day: number): number => Math.min(10, 6 + Math.floor((day - 1) / 3)),
+  /**
+   * 한 박자 길이 — 사람이 이 간격으로 문에서 나와 이 간격으로 내 앞에 도착한다.
+   * 리듬게임의 템포 그 자체라 일차가 오를수록 빨라진다.
+   */
+  beatMs: (day: number): number => tight(lerp(1500, 950, difficulty(day))),
+  /** 문에서 나와 내 앞까지 걸어오는 데 걸리는 박자 수 (이만큼 미리 견장을 읽을 시간이 있다) */
+  approachBeats: 2,
+  /**
+   * 판정 창 — 도착 박자 기준 ±이 시간 안에 눌러야 한다.
+   * 선배에게 늦게 경례하는 것도 실수이므로 뒤쪽 창도 좁다.
+   */
+  hitWindowMs: (day: number): number => tight(lerp(420, 300, difficulty(day))),
   /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
-  seniorShare: (day: number): number => Math.min(0.34, 0.15 + day * 0.012),
+  seniorShare: (day: number): number => Math.min(0.42, harder(0.15 + day * 0.012)),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
-  /** 후배에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 (문가 선배가 볼 때는 정석 대응이라 무penalty) */
+  /** 후배에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
   hpSaluteJunior: 55,
   /** 동기에게 경례해버린 굴욕 페널티 — 두 번이면 죽는다 */
   hpSalutePeer: 55,
-  /** 응답 타임아웃 페널티 (후배/동기 — 선배 무시는 즉시 게임 오버) */
-  hpTimeout: 8,
-  /** 문가 감시 선배 체류 시간 — 이 동안 후배 인사를 하면 발각 */
-  watcherStayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(900, 1200, difficulty(day))),
-    Math.round(lerp(1400, 1800, difficulty(day))),
-  ],
-  /** 문가 감시 선배 등장 간격 */
-  watcherGapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1500, 1000, difficulty(day))),
-    Math.round(lerp(2800, 1800, difficulty(day))),
-  ],
+  /** 박자를 놓쳤을 때 페널티 (후배/동기 — 선배를 놓치면 즉시 게임 오버) */
+  hpMiss: 28,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -153,21 +191,17 @@ export const Q3_MICROWAVE = {
   /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 11~16초, 선배 조우 3~5회 */
   cookMs: (day: number): number => Math.round(lerp(5500, 7500, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
-  reactMs: (day: number): number => Math.round(lerp(700, 420, difficulty(day))),
-  /** 짧게 치고 빠진다 */
-  stayMsRange: (day: number): [number, number] => [
-    Math.round(lerp(900, 1200, difficulty(day))),
-    Math.round(lerp(1300, 1700, difficulty(day))),
-  ],
+  reactMs: (day: number): number => tight(lerp(700, 420, difficulty(day))),
+  /** 길수록 오래 숨어 있어야 하고 그만큼 조리가 밀린다 */
+  stayMsRange: (day: number): [number, number] =>
+    harderRange([lerp(900, 1200, difficulty(day)), lerp(1300, 1700, difficulty(day))]),
   /** 빨리빨리 돌아온다 */
-  gapMsRange: (day: number): [number, number] => [
-    Math.round(lerp(1600, 1300, difficulty(day))),
-    Math.round(lerp(2500, 1900, difficulty(day))),
-  ],
+  gapMsRange: (day: number): [number, number] =>
+    tightRange([lerp(1600, 1300, difficulty(day)), lerp(2500, 1900, difficulty(day))]),
   /** 완전소등까지 제한시간 — 소등 전에 "삐-"까지 끝내야 한다.
    *  숨는 시간(선배 조우 기대값)을 감안해 조리 시간 대비 넉넉하되,
    *  세탁실 캠핑은 반드시 실패하는 수준으로 설정 */
-  lightsOutMs: (day: number): number => Math.round(lerp(13500, 20000, difficulty(day))),
+  lightsOutMs: (day: number): number => tight(lerp(13500, 20000, difficulty(day))),
 } as const;
 
 // ─────────────────────────────────────────────
@@ -181,15 +215,15 @@ export const Q4_WALK = {
   /** 구보 속도 (px/s) */
   runSpeed: 500,
   /** 구보 HP 소모 (초당) — 전 구간을 내리 뛰면 탈진하는 수치 */
-  runHpPerSec: 14,
+  runHpPerSec: harder(14),
   /** 걷는 동안 HP 회복 (초당) — 사각지대 걷기의 보상 */
   walkRegenPerSec: 3,
   /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다 */
-  graceMs: (day: number): number => Math.round(lerp(650, 430, difficulty(day))),
+  graceMs: (day: number): number => tight(lerp(650, 430, difficulty(day))),
   /** 도로변 선배 배치 간격 (월드 px) — 시야가 서로 겹치는 구간이 생길 만큼 촘촘하다 */
-  seniorSpacingPx: (day: number): number => Math.round(lerp(1200, 850, difficulty(day))),
+  seniorSpacingPx: (day: number): number => tight(lerp(1200, 850, difficulty(day))),
   /** 같은 지점에 맞은편 선배가 하나 더 서는(시야 교차 구간) 확률 */
-  pairChance: 0.2,
+  pairChance: harder(0.2),
   /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움).
    *  선배가 길가에서 멀리 떨어져 있어(측면 ~300px) 시야 끝자락만 도로 중앙에 닿는다 */
   vision: {
@@ -198,14 +232,12 @@ export const Q4_WALK = {
     /** 정면 기준 좌우 회전 폭 (도) */
     ampDeg: 80,
     /** 시선 회전 속도 (도/초) — 일차가 오를수록 빨라진다 */
-    turnDegPerSec: (day: number): number => lerp(90, 230, difficulty(day)),
+    turnDegPerSec: (day: number): number => harder(lerp(90, 230, difficulty(day))),
     /** 방향 전환(새 목표각 선택) 간격 (ms) — 일차가 오를수록 잦아진다 */
-    thinkMsRange: (day: number): [number, number] => [
-      Math.round(lerp(900, 420, difficulty(day))),
-      Math.round(lerp(1700, 850, difficulty(day))),
-    ],
+    thinkMsRange: (day: number): [number, number] =>
+      tightRange([lerp(900, 420, difficulty(day)), lerp(1700, 850, difficulty(day))]),
     /** 홱 돌아보기(3배속 스냅 회전) 확률 */
-    snapChance: (day: number): number => lerp(0.15, 0.5, difficulty(day)),
+    snapChance: (day: number): number => Math.min(0.75, harder(lerp(0.15, 0.5, difficulty(day)))),
   },
 } as const;
 
@@ -214,7 +246,7 @@ export const Q4_WALK = {
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
   /** 벽을 쳤을 때 벽 너머에 선배가 있을 확률 — 목숨 +1 도박의 리스크 */
-  seniorChance: (day: number): number => Math.min(0.45, 0.28 + day * 0.012),
+  seniorChance: (day: number): number => Math.min(0.55, harder(0.28 + day * 0.012)),
   /** 결과 공개 전 정적 시간 범위 (ms) */
   suspenseMsRange: [400, 1000] as const,
 } as const;
@@ -224,7 +256,7 @@ export const Q5_WALLPUNCH = {
 // ─────────────────────────────────────────────
 export const M1_KAKAO = {
   /** 제한 시간 (고정 11초 — 시간이 이 게임의 전부) */
-  timeMs: 11000,
+  timeMs: tight(11000),
   /** 붉은 펄스 시작 임계 (남은 ms) */
   panicMs: 4000,
   /** 일차별 문장 티어: 길수록 높은 티어 */
@@ -256,7 +288,7 @@ export const M1_KAKAO = {
 // M2. 투표하기 (함정 선지 독해)
 // ─────────────────────────────────────────────
 export const M2_VOTE = {
-  timeMs: (day: number): number => Math.max(7000, 11500 - day * 150),
+  timeMs: (day: number): number => tight(Math.max(7000, 11500 - day * 150)),
   level: (day: number): number => Math.min(3, 1 + Math.floor(day / 5)),
   /** 선지 수 — 레벨 1은 2지선다, 이후 3지선다 */
   optionCount: (level: number): number => (level === 1 ? 2 : 3),
@@ -409,9 +441,9 @@ export const M3_PHOTO = {
   chooseInstruction: '제대로 정리된 옷장을 고르세요',
   spotInstruction: '잘못된 부분을 터치하세요',
   /** 고르기 모드 제한 시간 */
-  chooseTimeMs: 4500,
+  chooseTimeMs: tight(4500),
   /** 틀린그림찾기 모드 제한 시간 */
-  spotTimeMs: 7000,
+  spotTimeMs: tight(7000),
   /** 고르기 모드 선택지 수 (일차가 늘면 6장) */
   chooseCount: (day: number): number => (day >= 12 ? 6 : 4),
 } as const;

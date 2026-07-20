@@ -69,15 +69,11 @@ export class MicrowaveScene extends BaseMainScene {
     // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
     // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문과 복도 끝을 함께 담는다.
     addSceneBg(this, 'bg_micro').x += 80;
-    // 조리 중에만 켜지는 내부 조명 (창 안쪽 따뜻한 빛 + 주변 은은한 글로우)
+    // 조리 중에만 켜지는 내부 조명 — 창 안쪽이 따뜻하게 밝아지는 것만으로 충분하다
+    // (주변 원형 글로우와 🍜 이모티콘은 과해서 걷어냈다)
     this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffe9b0, 0.18);
-    this.ovenLight.fillCircle(OVEN_X - 90, OVEN_Y, 200);
     this.ovenLight.fillStyle(0xffd98a, 0.5);
     this.ovenLight.fillRoundedRect(OVEN_X - 205, OVEN_Y - 80, 235, 165, 10);
-    this.add
-      .text(OVEN_X - 90, OVEN_Y + 6, '🍜', { fontFamily: FONT, fontSize: '52px' })
-      .setOrigin(0.5);
     addVignette(this, 0.3);
 
     // 조리 게이지
@@ -211,9 +207,10 @@ export class MicrowaveScene extends BaseMainScene {
     const to = hiding ? HIDE : NEAR;
     this.tweens.killTweensOf(this.player);
     // 숨을 땐 복도를 가로질러 세탁실 문 안으로 쏙 들어가 몸을 접어 넣고(정면),
-    // 나올 땐 다시 전자레인지 앞으로 뛰어와 등을 보인다.
+    // 나올 땐 다시 전자레인지 앞에 등을 보이고 선다.
+    // (짧은 거리를 미끄러지듯 옮기는 트윈이라 달리기 모션은 오히려 어색하다 — 쓰지 않는다)
     this.player.setBack(!hiding);
-    this.player.setMotion(hiding ? 'hide' : 'run');
+    this.player.setMotion(hiding ? 'hide' : 'idle');
     this.player.setBodyTint(hiding ? 0x8492ad : undefined);
     this.tweens.add({
       targets: this.player,
@@ -222,9 +219,6 @@ export class MicrowaveScene extends BaseMainScene {
       scale: to.scale,
       duration: 240,
       ease: 'Cubic.easeOut',
-      onComplete: () => {
-        if (!this.finished) this.player.setMotion(hiding ? 'hide' : 'idle');
-      },
     });
   }
 

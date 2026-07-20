@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, HP_MAX } from '../config';
+import { COLORS, FONT, HP_MAX, UI } from '../config';
 
 const BAR_W = 300;
 const BAR_H = 30;
@@ -15,24 +15,22 @@ export class HpBar extends Phaser.GameObjects.Container {
   constructor(scene: Phaser.Scene, x = 24, y = 24) {
     super(scene, x, y);
 
+    // 흰 빈 박스 안에 물감이 차오르는 느낌 — 트랙과 채움 사이 여백 3px
     const bg = scene.add.graphics();
-    bg.fillStyle(0x14141a, 0.7);
-    bg.fillRoundedRect(0, 0, BAR_W + 8, BAR_H + 8, 9);
-    bg.lineStyle(3.5, 0x14141a, 1);
-    bg.strokeRoundedRect(0, 0, BAR_W + 8, BAR_H + 8, 9);
+    bg.fillStyle(COLORS.white, 1);
+    bg.fillRoundedRect(0, 0, BAR_W + 14, BAR_H + 14, 8);
+    bg.lineStyle(UI.stroke, COLORS.ink, 1);
+    bg.strokeRoundedRect(0, 0, BAR_W + 14, BAR_H + 14, 8);
     this.add(bg);
 
     this.fill = scene.add.graphics();
     this.add(this.fill);
 
     this.label = scene.add
-      .text(BAR_W / 2 + 4, BAR_H / 2 + 4, '', {
+      .text(BAR_W / 2 + 7, BAR_H / 2 + 7, '', {
         fontFamily: FONT,
         fontSize: '22px',
-        color: COLORS.textCss,
-        fontStyle: 'bold',
-        stroke: '#14141a',
-        strokeThickness: 3,
+        color: COLORS.inkCss,
       })
       .setOrigin(0.5);
     this.add(this.label);
@@ -50,7 +48,7 @@ export class HpBar extends Phaser.GameObjects.Container {
     this.fill.clear();
     this.fill.fillStyle(color, 1);
     if (ratio > 0) {
-      this.fill.fillRoundedRect(4, 4, BAR_W * ratio, BAR_H, 6);
+      this.fill.fillRoundedRect(7, 7, BAR_W * ratio, BAR_H, 5);
     }
     this.label.setText(`HP ${shown}`);
 

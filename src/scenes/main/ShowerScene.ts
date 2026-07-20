@@ -4,7 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
-import { chance, randFloat, randRange } from '../../utils/rng';
+import { randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 /**
@@ -13,29 +13,25 @@ import { BaseMainScene } from './BaseMainScene';
  * 이 규칙으로만 배치하면 캐릭터가 바닥에서 뜨는 일이 없다.
  */
 const heightAt = (feetY: number): number => Math.max(90, feetY - 500);
-/** 샤워장 안쪽 끝(입구 쪽) — 멀리서 불쑥 들어온다 */
-const DOOR_X = 438;
-const DOOR_FEET = 924;
-/** 바로 옆 칸 커튼 — 코앞이라 크게 보인다 */
-const CURTAIN_X = 104;
-const CURTAIN_FEET = 1070;
+/** 선배는 언제나 화면 오른쪽 문에서 밀고 나온다 — 화면 밖 대기 위치 */
+const SENIOR_OFF_X = GAME_WIDTH + 190;
+/** 밀고 나와 멈추는 위치 (코앞) */
+const SENIOR_IN_X = 545;
+const SENIOR_FEET = 1055;
 /** 내가 샤워 중인 자리 (샤워기 바로 아래) */
 const ME_X = 248;
 const ME_FEET = 1062;
 
-type SeniorSpot = 'door' | 'curtain';
-
 /**
  * Q1. 샤워장에서 몰래 노래 틀기.
  * 노래는 기본 재생 — [⏸] 버튼을 누르고 있는 동안만 멈춘다 (몰래춤추기의 반전 구조).
- * 선배는 예고 없이 정문 또는 옆 칸 커튼 중 무작위 위치에서 갑자기 나타난다.
+ * 선배는 예고 없이 **화면 오른쪽 문**에서 밀고 나왔다가 다시 그쪽으로 들어간다 (방향 고정).
  * 등장 순간의 짧은 반응 유예(reactMs) 안에 버튼을 누르지 못하면 발각. 선배가 나갈 때까지 홀드 유지.
  */
 export class ShowerScene extends BaseMainScene {
   private holding = false;
   private seniorState: 'away' | 'in' = 'away';
   private reacted = false;
-  private seniorSpot: SeniorSpot = 'door';
   private songProgressMs = 0;
   private showerRemainMs = 1;
   private songMs = 1;
@@ -75,7 +71,8 @@ export class ShowerScene extends BaseMainScene {
       tint: 0x9ad4f5,
     });
 
-    // 나 — 옷을 벗고 씻는 중이라 몸은 짙은 김에 완전히 가려지고 실루엣만 어렴풋이 보인다
+    // 나 — 옷을 벗고 씻는 중이라 실루엣만 보인다.
+    // 몸을 가리는 수증기는 에셋 안에 뭉게구름으로 그려져 있다 (코드로 덧그리지 않는다).
     const meH = heightAt(ME_FEET);
     this.me = this.add.image(ME_X, ME_FEET, 'player_shower').setOrigin(0.5, 1).setDepth(6);
     // 두 실루엣의 원본 비율이 달라도 같은 배율을 써야 자세만 바뀌고 덩치는 그대로다
@@ -88,29 +85,6 @@ export class ShowerScene extends BaseMainScene {
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
-
-    // 몸을 감싸는 짙은 수증기 (에셋의 김과 이어져 몸을 확실히 가린다)
-    const bank = this.add.graphics().setDepth(7);
-    for (const [y, rx, ry, a] of [
-      [ME_FEET - meH * 0.42, 210, 95, 0.5],
-      [ME_FEET - meH * 0.16, 260, 130, 0.55],
-      [ME_FEET + 40, 340, 150, 0.6],
-    ] as const) {
-      bank.fillStyle(0xeef7fa, a);
-      bank.fillEllipse(ME_X, y, rx, ry);
-    }
-    this.add
-      .particles(ME_X, ME_FEET - meH * 0.35, '__WHITE', {
-        x: { min: -120, max: 120 },
-        y: { min: -90, max: 140 },
-        speedY: { min: -30, max: -10 },
-        scale: { start: 2.8, end: 5.0 },
-        alpha: { start: 0.3, end: 0 },
-        lifespan: 2400,
-        frequency: 70,
-        tint: 0xeef7fa,
-      })
-      .setDepth(7);
 
     // 샤워장 전체에 낀 옅은 김
     this.add.particles(0, 0, '__WHITE', {
@@ -126,8 +100,10 @@ export class ShowerScene extends BaseMainScene {
     });
     addVignette(this, 0.2);
 
-    this.senior = new Cadet(this, DOOR_X, DOOR_FEET - 200, 'senior');
-    this.senior.setVisible(false).setDepth(5);
+    // 선배는 오른쪽 문 밖에 대기하다 밀고 나온다 (크기는 발끝 y로 고정)
+    const seniorScale = heightAt(SENIOR_FEET) / 300;
+    this.senior = new Cadet(this, SENIOR_OFF_X, SENIOR_FEET - 120 * seniorScale, 'senior');
+    this.senior.setScale(seniorScale).setVisible(false).setDepth(8);
 
     // 노래 진행 바
     const songBarBg = this.add.graphics();
@@ -222,20 +198,20 @@ export class ShowerScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        this.seniorSpot = chance(0.5) ? 'door' : 'curtain';
-        // 입구(방 안쪽 끝)에서 불쑥, 또는 바로 옆 칸 커튼에서 코앞으로.
-        // 발끝 y로 크기가 결정되므로 어느 쪽이든 바닥에 발이 붙는다.
-        const feet =
-          (this.seniorSpot === 'door' ? DOOR_FEET : CURTAIN_FEET) + randFloat(-16, 16);
-        const x = (this.seniorSpot === 'door' ? DOOR_X : CURTAIN_X) + randFloat(-22, 22);
-        const s = heightAt(feet) / 300;
-        this.senior.setScale(s).setPosition(x, feet - 120 * s);
-        this.senior.setVisible(true);
-        // 옆 칸 커튼 쪽은 더 가깝지만, 반응창은 터치 반응 한계(360ms) 밑으로 안 내려간다
-        const reactMs = Math.max(
-          360,
-          Q1_SHOWER.reactMs(this.day) * (this.seniorSpot === 'curtain' ? 0.7 : 1)
-        );
+        // 언제나 화면 오른쪽 문에서 — 밖에 서 있다가 성큼 밀고 들어온다.
+        // 위치가 고정이라 '어디서 나올까'가 아니라 '얼마나 빨리 반응하나'의 게임이 된다.
+        this.tweens.killTweensOf(this.senior);
+        this.senior.setX(SENIOR_OFF_X).setVisible(true).setMotion('walk');
+        this.tweens.add({
+          targets: this.senior,
+          x: SENIOR_IN_X + randFloat(-18, 18),
+          duration: 260,
+          ease: 'Cubic.easeOut',
+          onComplete: () => {
+            if (!this.finished && this.seniorState === 'in') this.senior.setMotion('idle');
+          },
+        });
+        const reactMs = Math.max(360, Q1_SHOWER.reactMs(this.day));
         this.time.delayedCall(reactMs, () => {
           if (this.finished || this.seniorState !== 'in') return;
           if (this.holding) {
@@ -247,7 +223,16 @@ export class ShowerScene extends BaseMainScene {
       },
       onLeave: () => {
         this.seniorState = 'away';
-        this.senior.setVisible(false);
+        // 다시 오른쪽 문으로 밀고 나간다
+        this.tweens.killTweensOf(this.senior);
+        this.senior.setMotion('walk');
+        this.tweens.add({
+          targets: this.senior,
+          x: SENIOR_OFF_X,
+          duration: 240,
+          ease: 'Cubic.easeIn',
+          onComplete: () => this.senior.setVisible(false),
+        });
       },
     });
   }

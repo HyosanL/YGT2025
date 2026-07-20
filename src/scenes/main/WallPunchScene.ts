@@ -2,14 +2,18 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q5_WALLPUNCH } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
-import { Button } from '../../ui/Button';
+import { Button, textChip } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { HAPTIC, vibrate } from '../../utils/haptics';
 import { chance, pick, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
-const WALL_X = 130;
+/**
+ * 배경(bg_wallpunch_*)에서 옆방과 맞닿은 벽이 있는 화면 왼쪽 —
+ * 말풍선과 충격 연출이 새어나오는 지점.
+ */
+const WALL_X = 150;
 
 /** 벽 너머 1학년들의 수다 (칠 때마다 잠깐 조용해진다) */
 const CHATTER_LINES = [
@@ -37,10 +41,10 @@ export class WallPunchScene extends BaseMainScene {
 
   private punchBtn!: Button;
   private sleepBtn!: Button;
-  private wall!: Phaser.GameObjects.Container;
   private dim!: Phaser.GameObjects.Rectangle;
   private suspenseText!: Phaser.GameObjects.Text;
-  private player!: Cadet;
+  /** 벽 치는 컷 — 망설이는 컷 위에 겹쳐 두고 알파만 켜서 타격 순간을 만든다 */
+  private sceneHit!: Phaser.GameObjects.Image;
 
   constructor() {
     super({ key: 'wallpunch' });
@@ -55,55 +59,23 @@ export class WallPunchScene extends BaseMainScene {
     this.punchState = 'noisy';
     this.chatterEvent = null;
 
-    // 야간 생활관 호실 배경 (실제 사진 기반)
-    addSceneBg(this, 'bg_dorm_night');
+    // 실제 호실 사진을 그대로 옮긴 야간 씬 — 인물이 그 방의 그 침대에 누워 있다.
+    // (별도의 벽 오브젝트를 그리지 않는다 — 벽은 사진 속 진짜 왼쪽 벽이다)
+    addSceneBg(this, 'bg_wallpunch_idle');
+    this.sceneHit = addSceneBg(this, 'bg_wallpunch_hit', -999).setAlpha(0);
     addVignette(this, 0.35);
 
-    // 옆방과 맞닿은 벽 (왼쪽)
-    this.wall = this.add.container(WALL_X, GAME_HEIGHT / 2);
-    const wallG = this.add.graphics();
-    wallG.fillStyle(0x3d3d52, 1);
-    wallG.fillRect(-130, -GAME_HEIGHT / 2, 260, GAME_HEIGHT);
-    wallG.lineStyle(2, 0x55556e, 1);
-    for (let y = -GAME_HEIGHT / 2; y < GAME_HEIGHT / 2; y += 110) {
-      wallG.lineBetween(-130, y, 130, y);
-    }
-    this.wall.add(wallG);
-    const wallLabel = this.add
-      .text(0, -GAME_HEIGHT / 2 + 500, '옆방\n(1학년 방...?)', {
-        fontFamily: FONT,
-        fontSize: '28px',
-        color: '#8888a5',
-        align: 'center',
-      })
-      .setOrigin(0.5);
-    this.wall.add(wallLabel);
-
-    // 침대에 누운 기태 (누운 포즈 이미지에 침대·이불 포함)
-    this.player = new Cadet(this, 380, 840, 'player');
-    this.player.setScale(1.1);
-    this.player.setMotion('lying');
-    this.player.setFace('😈');
-
+    textChip(this, GAME_WIDTH / 2 + 60, 120, '옆방이 너무 시끄럽다...', { fontSize: 38, depth: 10 });
     this.add
-      .text(GAME_WIDTH / 2 + 60, 120, '옆방이 너무 시끄럽다...', {
-        fontFamily: FONT,
-        fontSize: '40px',
-        color: COLORS.textCss,
-        fontStyle: 'bold',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: { x: 24, y: 10 },
-      })
-      .setOrigin(0.5)
-      .setDepth(10);
-
-    this.add
-      .text(GAME_WIDTH / 2 + 60, 190, '치면 도박(❤️+1 or 끝장) · 참으면 그냥 하루가 간다', {
+      .text(GAME_WIDTH / 2 + 60, 200, '치면 도박(❤️+1 or 끝장) · 참으면 그냥 하루가 간다', {
         fontFamily: FONT,
         fontSize: '24px',
-        color: COLORS.accentCss,
+        color: COLORS.inkCss,
+        stroke: '#ffffff',
+        strokeThickness: 5,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(11);
 
     this.dim = this.add
       .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0)
@@ -147,7 +119,6 @@ export class WallPunchScene extends BaseMainScene {
     this.punchState = 'noisy';
     this.punchBtn.setEnabled(true);
     this.sleepBtn.setEnabled(true);
-    this.player.setFace('😠');
     audio.startChatter();
     this.spawnChatterBubble();
     this.chatterEvent = this.time.addEvent({
@@ -187,7 +158,6 @@ export class WallPunchScene extends BaseMainScene {
     this.punchState = 'done';
     this.punchBtn.setEnabled(false);
     this.sleepBtn.setEnabled(false);
-    this.player.setFace('😑');
     speechBubble(this, 400, 640, '(시끄럽지만... 참자...)', 1100, 40);
     this.time.delayedCall(1200, () => this.succeed('시끄러운 밤을 견뎌냈다. 내일은 조용하길...'));
   }
@@ -201,35 +171,21 @@ export class WallPunchScene extends BaseMainScene {
     this.sleepBtn.setEnabled(false);
     this.stopNoisy(); // 순간 정적
 
-    // 쾅! 쾅! 쾅! — 3연타
+    // 쾅! 쾅! 쾅! — 3연타. 누운 채 팔을 뻗는 컷으로 갈아끼웠다 되돌리길 반복한다
+    // (두 컷이 같은 방·같은 구도라 알파만 바꿔도 동작으로 읽힌다)
     audio.wallBang();
-    this.player.punchOnce('left');
     this.cameras.main.shake(520, 0.007);
-    this.tweens.add({
-      targets: this.wall,
-      x: WALL_X - 14,
-      duration: 85,
-      yoyo: true,
-      repeat: 2,
-    });
-    // 벽에 금 가는 연출 — 타격마다 하나씩
     for (let i = 0; i < 3; i++) {
       this.time.delayedCall(i * 170, () => {
-        const crack = this.add
-          .text(WALL_X + randFloat(-70, 70), randFloat(380, 760), '💢', {
-            fontFamily: FONT,
-            fontSize: '40px',
-          })
-          .setOrigin(0.5)
-          .setDepth(20);
-        this.time.delayedCall(2500, () => crack.destroy());
+        if (this.finished) return;
+        this.sceneHit.setAlpha(1);
+        this.time.delayedCall(110, () => this.sceneHit.setAlpha(0));
       });
     }
 
     // 정적... 심장박동
     this.dim.setFillStyle(0x000000, 0.45);
     this.suspenseText.setText('. . .');
-    this.player.setFace('😰');
     audio.startHeartbeat();
 
     const suspense = randFloat(
@@ -248,7 +204,6 @@ export class WallPunchScene extends BaseMainScene {
           audio.door();
           const senior = new Cadet(this, GAME_WIDTH - 160, 620, 'senior');
           senior.setScale(0.85);
-          this.player.setFace('😱');
           this.failCaught(
             senior,
             '벽 너머엔 선배가 놀러와 있었다... 문이 벌컥 열렸다.',
@@ -260,7 +215,6 @@ export class WallPunchScene extends BaseMainScene {
 
       // 무사 — 옆방이 조용해졌다. 도박 성공, 목숨 +1
       this.punchState = 'done';
-      this.player.setFace('😌');
       speechBubble(this, 400, 640, '조용해졌다... 취침해야겠다...', 1500, 40);
 
       // 연습 모드에서는 목숨 보상이 없다

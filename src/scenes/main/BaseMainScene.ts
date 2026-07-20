@@ -357,8 +357,10 @@ export abstract class BaseMainScene extends Phaser.Scene {
   }
 
   /**
-   * 선배에게 걸린 경우의 게임 오버 — 그 선배가 화면 중앙으로 달려와
-   * "뭐 하냐?" 한마디를 던지고 끝난다.
+   * 선배에게 걸린 경우의 게임 오버 — 두 박자로 몰아친다.
+   * ① 다리가 회오리로 뭉개질 만큼 빠르게 달려와 화면 중앙에 선다.
+   * ② 그대로 상반신 클로즈업으로 확 붙으며 "뭐 하냐?" — 모자 챙 그림자에 눈이 잠긴 얼굴이
+   *    화면을 꽉 채운다.
    */
   protected failCaught(senior: Cadet, reason: string, line = '뭐 하냐?'): void {
     if (this.finished) return;
@@ -376,7 +378,6 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
     this.tweens.killTweensOf(senior);
     senior.setVisible(true).setAlpha(1).setDepth(3500);
-    senior.setFace('😡');
     senior.setMotion('run');
     this.tweens.add({
       targets: senior,
@@ -387,15 +388,35 @@ export abstract class BaseMainScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => {
         senior.setMotion('idle');
-        speechBubble(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, line, 1500, 3600);
-        this.cameras.main.shake(300, 0.01);
-        audio.gameover();
+        this.slamCloseup(line);
       },
     });
-    this.time.delayedCall(1750, () => {
+    this.time.delayedCall(2100, () => {
       if (gameState.practiceMode) this.finishPractice(false, reason);
       else this.scene.start('Result', { success: false, reason });
     });
+  }
+
+  /** 상반신 클로즈업이 화면을 덮치며 한마디 던진다 */
+  private slamCloseup(line: string): void {
+    this.cameras.main.shake(320, 0.012);
+    audio.gameover();
+
+    const face = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40, 'senior_closeup')
+      .setDepth(3550)
+      .setAlpha(0);
+    // 화면 가로를 넘치도록 — 얼굴이 코앞까지 들이닥친 느낌
+    const target = (GAME_WIDTH * 1.18) / face.width;
+    face.setScale(target * 1.35);
+    this.tweens.add({
+      targets: face,
+      alpha: 1,
+      scale: target,
+      duration: 220,
+      ease: 'Cubic.easeOut',
+    });
+    speechBubble(this, GAME_WIDTH / 2, GAME_HEIGHT - 200, line, 1600, 3600);
   }
 
   /** HP 감소 + 토스트. HP 0 도달 시 게임 오버 */
@@ -405,7 +426,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
     if (message) {
       audio.buzz();
       vibrate(HAPTIC.damage);
-      showToast(this, message, COLORS.warnCss);
+      showToast(this, message);
       this.cameras.main.shake(200, 0.006);
     }
     this.hpBar.setHp(gameState.hp);

@@ -4,13 +4,14 @@ import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import { HAPTIC, vibrate } from '../../utils/haptics';
 import type { MiniSceneData } from '../../types';
-import { drawKakaoDate, drawKakaoRoom, KAKAO, type KakaoRoom } from '../../ui/kakao';
+import { drawKakaoDate, drawKakaoDetailPage, drawKakaoRoom, KAKAO, type KakaoRoom } from '../../ui/kakao';
 
 export const PANEL = { x: 40, y: 116, w: GAME_WIDTH - 80, h: 1044 } as const;
 
 export { KAKAO };
 
-export type MiniTheme = 'dark' | 'kakao';
+/** 'kakao' = 채팅방(하늘색), 'kakaoPage' = 투표 상세보기(흰 전체화면), 'dark' = 기본 패널 */
+export type MiniTheme = 'dark' | 'kakao' | 'kakaoPage';
 
 /**
  * 미니 퀘스트 공통 베이스 (메인 씬 pause 위에 오버레이로 launch됨).
@@ -57,7 +58,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     this.timerText = null;
     this.lastSecond = -1;
     this.pulseMs = 0;
-    this.timerBarY = theme === 'kakao' ? 128 : 90;
+    this.timerBarY = theme === 'dark' ? 90 : 128;
 
     // 회색 처리된 본 게임 위에 미니 퀘스트 패널이 뜬다
     const dim = this.add
@@ -66,7 +67,14 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setInteractive(); // 하위 씬으로의 입력 차단
     void dim;
 
-    if (theme === 'kakao') {
+    if (theme === 'kakaoPage') {
+      // 투표 상세보기 — 흰 전체화면 페이지
+      this.room = drawKakaoDetailPage(
+        this,
+        { x: PANEL.x, y: PANEL.y, w: PANEL.w, h: PANEL.h },
+        { title }
+      );
+    } else if (theme === 'kakao') {
       // 실제 카톡 채팅방 그대로 — 상태바 + 네비바 + 하늘색 대화 배경 + 입력바
       this.room = drawKakaoRoom(
         this,
@@ -124,10 +132,10 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       barBg.fillRoundedRect(PANEL.x + 30, PANEL.y + this.timerBarY, PANEL.w - 160, 30, 8);
       this.timerFill = this.add.graphics();
       this.timerText = this.add
-        .text(PANEL.x + PANEL.w - 65, PANEL.y + this.timerBarY + 15, '', {
+        .text(PANEL.x + PANEL.w - 78, PANEL.y + this.timerBarY + 15, '', {
           fontFamily: FONT,
           fontSize: '48px',
-          color: this.theme === 'kakao' ? KAKAO.textDark : COLORS.textCss,
+          color: this.theme === 'dark' ? COLORS.textCss : KAKAO.textDark,
           fontStyle: 'bold',
         })
         .setOrigin(0.5);
@@ -167,7 +175,7 @@ export abstract class BaseMiniScene extends Phaser.Scene {
     }
     this.timerText
       ?.setText(`${sec}`)
-      .setColor(panic ? COLORS.accentCss : this.theme === 'kakao' ? KAKAO.textDark : COLORS.textCss);
+      .setColor(panic ? COLORS.accentCss : this.theme === 'dark' ? COLORS.textCss : KAKAO.textDark);
     if (this.panicOverlay) {
       this.panicOverlay.setFillStyle(
         0xe94560,
