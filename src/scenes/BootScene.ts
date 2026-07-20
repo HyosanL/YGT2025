@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { flushQueue } from '../core/Leaderboard';
+import { IMAGE_KEYS } from '../assets/manifest';
 
 /**
  * 에셋 로딩 + 로딩바.
- * 현재 버전은 모든 그래픽/사운드를 절차 생성하므로 외부 로딩이 없다 —
- * 추후 사용자 제공 에셋(음원, 카톡 캡처)을 preload에 추가하면 로딩바가 실제로 동작한다.
+ * 제미나이로 생성한 캐릭터/배경/소품 PNG(public/assets/img/)를 여기서 프리로드한다.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -13,6 +13,11 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
+    const base = import.meta.env.BASE_URL || '/';
+    for (const key of IMAGE_KEYS) {
+      this.load.image(key, `${base}assets/img/${key}.png`);
+    }
+
     const barBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 420, 26, 0x000000, 0.6);
     const bar = this.add
       .rectangle(GAME_WIDTH / 2 - 205, GAME_HEIGHT / 2, 0, 16, COLORS.accent)

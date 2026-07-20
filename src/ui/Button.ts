@@ -29,7 +29,6 @@ export class Button extends Phaser.GameObjects.Container {
   private btnW: number;
   private btnH: number;
   private color: number;
-  private strokeColor: number;
   private enabled = true;
   private pressed = false;
 
@@ -38,17 +37,20 @@ export class Button extends Phaser.GameObjects.Container {
     this.btnW = Math.max(88, opts.width ?? 280);
     this.btnH = Math.max(88, opts.height ?? 96);
     this.color = opts.color ?? COLORS.panelLight;
-    this.strokeColor = opts.strokeColor ?? COLORS.white;
 
     this.bg = scene.add.graphics();
     this.drawBg(this.color);
     this.add(this.bg);
 
+    const lightLabel = !opts.labelColor || opts.labelColor === COLORS.textCss;
     this.labelText = scene.add
       .text(0, 0, opts.label, {
         fontFamily: FONT,
         fontSize: `${opts.fontSize ?? 32}px`,
         color: opts.labelColor ?? COLORS.textCss,
+        fontStyle: 'bold',
+        stroke: '#14141a',
+        strokeThickness: lightLabel ? 4 : 0,
         align: 'center',
         ...(opts.wrapWidth ? { wordWrap: { width: opts.wrapWidth } } : {}),
       })
@@ -92,11 +94,16 @@ export class Button extends Phaser.GameObjects.Container {
   }
 
   private drawBg(color: number): void {
+    const w = this.btnW, h = this.btnH, r = 22;
     this.bg.clear();
+    // 하드 오프셋 그림자 (블러 없음) — 플랫 카툰 느낌
+    this.bg.fillStyle(0x14141a, 0.9);
+    this.bg.fillRoundedRect(-w / 2 + 5, -h / 2 + 6, w, h, r);
+    // 플랫 채움 + 굵은 검정 외곽선
     this.bg.fillStyle(color, 1);
-    this.bg.fillRoundedRect(-this.btnW / 2, -this.btnH / 2, this.btnW, this.btnH, 20);
-    this.bg.lineStyle(3, this.strokeColor, 0.25);
-    this.bg.strokeRoundedRect(-this.btnW / 2, -this.btnH / 2, this.btnW, this.btnH, 20);
+    this.bg.fillRoundedRect(-w / 2, -h / 2, w, h, r);
+    this.bg.lineStyle(4, 0x14141a, 1);
+    this.bg.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
   }
 
   setEnabled(enabled: boolean): this {

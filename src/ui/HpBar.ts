@@ -16,8 +16,10 @@ export class HpBar extends Phaser.GameObjects.Container {
     super(scene, x, y);
 
     const bg = scene.add.graphics();
-    bg.fillStyle(0x000000, 0.5);
-    bg.fillRoundedRect(0, 0, BAR_W + 8, BAR_H + 8, 8);
+    bg.fillStyle(0x14141a, 0.7);
+    bg.fillRoundedRect(0, 0, BAR_W + 8, BAR_H + 8, 9);
+    bg.lineStyle(3.5, 0x14141a, 1);
+    bg.strokeRoundedRect(0, 0, BAR_W + 8, BAR_H + 8, 9);
     this.add(bg);
 
     this.fill = scene.add.graphics();
@@ -29,6 +31,8 @@ export class HpBar extends Phaser.GameObjects.Container {
         fontSize: '22px',
         color: COLORS.textCss,
         fontStyle: 'bold',
+        stroke: '#14141a',
+        strokeThickness: 3,
       })
       .setOrigin(0.5);
     this.add(this.label);

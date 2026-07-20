@@ -56,8 +56,7 @@ export class WalkScene extends BaseMainScene {
   private progressFill!: Phaser.GameObjects.Graphics;
   private stateText!: Phaser.GameObjects.Text;
   private alertText!: Phaser.GameObjects.Text;
-  private dashes: Phaser.GameObjects.Rectangle[] = [];
-  private sideDecor: Phaser.GameObjects.Container[] = [];
+  private road!: Phaser.GameObjects.TileSprite;
   private dojang!: Phaser.GameObjects.Container;
 
   constructor() {
@@ -75,68 +74,27 @@ export class WalkScene extends BaseMainScene {
     this.distancePx = Q4_WALK.distancePx(gameState.day);
     this.graceMs = Q4_WALK.graceMs(gameState.day);
 
-    // ── 탑다운 배경: 잔디 → 인도 → 도로 ──
-    const bg = this.add.graphics();
-    // 양옆 잔디
-    bg.fillGradientStyle(0x3f7d4e, 0x3f7d4e, 0x35693f, 0x35693f, 1);
-    bg.fillRect(0, 0, ROAD_L - 34, GAME_HEIGHT);
-    bg.fillRect(ROAD_R + 34, 0, GAME_WIDTH - ROAD_R - 34, GAME_HEIGHT);
-    // 인도 (연석)
-    bg.fillStyle(0xb9b2a0, 1);
-    bg.fillRect(ROAD_L - 34, 0, 34, GAME_HEIGHT);
-    bg.fillRect(ROAD_R, 0, 34, GAME_HEIGHT);
-    // 아스팔트
-    bg.fillGradientStyle(0x4a4d60, 0x4a4d60, 0x424556, 0x424556, 1);
-    bg.fillRect(ROAD_L, 0, ROAD_R - ROAD_L, GAME_HEIGHT);
-    // 도로 가장자리 실선
-    bg.fillStyle(0xe8e4d8, 0.75);
-    bg.fillRect(ROAD_L + 8, 0, 6, GAME_HEIGHT);
-    bg.fillRect(ROAD_R - 14, 0, 6, GAME_HEIGHT);
-
-    // 중앙 점선 (스크롤 연출)
-    this.dashes = [];
-    for (let i = 0; i < 11; i++) {
-      const d = this.add.rectangle(PLAYER_X, 0, 12, 66, 0xf5f5f5, 0.45).setDepth(1);
-      this.dashes.push(d);
-    }
-
-    // 길가 장식 (수풀) — 가장자리로 바짝 붙여 선배 자리와 겹치지 않게
-    this.sideDecor = [];
-    for (let i = 0; i < 8; i++) {
-      const c = this.add.container(0, 0).setDepth(1);
-      const g = this.add.graphics();
-      const leftSide = i % 2 === 0;
-      const bx = leftSide ? 22 : GAME_WIDTH - 22;
-      g.fillStyle(0x2e5e3e, 1);
-      g.fillCircle(0, 0, 26);
-      g.fillCircle(-16, 12, 18);
-      g.fillCircle(18, 10, 20);
-      g.fillStyle(0x4e8d55, 1);
-      g.fillCircle(4, -6, 15);
-      c.add(g);
-      c.setX(bx + randFloat(-8, 8));
-      this.sideDecor.push(c);
-    }
+    // ── 탑다운 도로 배경 (붉은 벽돌, 세로 스크롤 타일) ──
+    this.road = this.add
+      .tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 'bg_road')
+      .setDepth(-1000);
+    const rt = this.textures.get('bg_road').getSourceImage() as { width: number };
+    this.road.tileScaleX = this.road.tileScaleY = GAME_WIDTH / (rt.width || GAME_WIDTH);
 
     // 시야 부채꼴 레이어 (캐릭터 아래)
     this.coneG = this.add.graphics().setDepth(3);
 
-    // 골인 지점 — 태권도장 (마지막에 스크롤되어 내려온다)
+    // 골인 지점 — 무용관 (마지막에 스크롤되어 내려온다). 간판 글씨는 코드로 얹는다.
     this.dojang = this.add.container(PLAYER_X, -9999).setDepth(5);
-    const dg = this.add.graphics();
-    dg.fillStyle(0x8a4a3c, 1);
-    dg.fillRoundedRect(-190, -90, 380, 150, 14);
-    dg.fillStyle(0x5c2f28, 1);
-    dg.fillRect(-210, -110, 420, 34);
-    dg.fillStyle(0xf5ecd8, 1);
-    dg.fillRoundedRect(-120, -46, 240, 72, 10);
-    this.dojang.add(dg);
+    const dojangImg = this.add.image(0, 0, 'dojang').setOrigin(0.5);
+    dojangImg.setScale(360 / dojangImg.height);
+    this.dojang.add(dojangImg);
     this.dojang.add(
       this.add
-        .text(0, -10, '🥋 태권도장', {
+        .text(0, -dojangImg.displayHeight * 0.31, '무용관', {
           fontFamily: FONT,
-          fontSize: '36px',
-          color: '#5c2f28',
+          fontSize: '26px',
+          color: '#2b2f3c',
           fontStyle: 'bold',
         })
         .setOrigin(0.5)
@@ -311,17 +269,7 @@ export class WalkScene extends BaseMainScene {
     }
 
     // ── 스크롤 비주얼 ──
-    const dashSpan = 150;
-    const dashOff = this.progressPx % dashSpan;
-    this.dashes.forEach((d, i) => {
-      d.y = (i - 1) * dashSpan + dashOff;
-    });
-    const decorSpan = 460;
-    const decorTotal = decorSpan * this.sideDecor.length;
-    this.sideDecor.forEach((c, i) => {
-      const raw = (i * decorSpan + this.progressPx) % decorTotal;
-      c.setY(raw - decorSpan / 2);
-    });
+    this.road.tilePositionY = -this.progressPx / this.road.tileScaleY;
     this.dojang.setY(PLAYER_Y - (this.distancePx + 430 - this.progressPx));
 
     // ── 선배 시야 판정 (변칙 회전) ──

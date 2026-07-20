@@ -180,87 +180,32 @@ export class PhotoPickScene extends BaseMiniScene {
 
   private drawLocker(x: number, y: number, scale: number, flaw: LockerFlaw | null): LockerResult {
     const c = this.add.container(x, y).setScale(scale);
+    const key =
+      flaw === 'tilt-blanket'
+        ? 'locker_tilt'
+        : flaw === 'open-drawer'
+          ? 'locker_drawer'
+          : flaw === 'sock'
+            ? 'locker_sock'
+            : flaw === 'crooked-hanger'
+              ? 'locker_hanger'
+              : 'locker_ok';
+    c.add(this.add.image(0, 0, key).setOrigin(0.5).setDisplaySize(236, 356));
 
-    const g = this.add.graphics();
-    // 외곽 프레임
-    g.fillStyle(0x9aa0ab, 1);
-    g.fillRoundedRect(-118, -178, 236, 356, 10);
-    g.fillStyle(0x757b88, 1);
-    g.fillRoundedRect(-104, -164, 208, 328, 8);
-    // 선반 구분선
-    g.lineStyle(5, 0x5a606c, 1);
-    g.lineBetween(-104, -58, 104, -58);
-    g.lineBetween(-104, 88, 104, 88);
-    c.add(g);
-
-    // 상단: 개어놓은 모포 3장
-    const blanketColors = [0x44603c, 0x53724a, 0x44603c];
-    for (let i = 0; i < 3; i++) {
-      const by = -80 - i * 28;
-      const blanket = this.add.rectangle(0, by, 160, 24, blanketColors[i]);
-      blanket.setStrokeStyle(2, 0x2f4229);
-      if (flaw === 'tilt-blanket' && i === 2) {
-        blanket.setAngle(13);
-        blanket.x = 16;
-        blanket.y = by - 4;
-      }
-      c.add(blanket);
-    }
-
-    // 중단: 옷걸이 봉 + 정복 2벌
-    const rod = this.add.rectangle(0, -44, 190, 6, 0x3d434e);
-    c.add(rod);
-    for (let i = 0; i < 2; i++) {
-      const ux = i === 0 ? -45 : 45;
-      const uniform = this.add.rectangle(ux, 12, 62, 104, 0x223154);
-      uniform.setStrokeStyle(2, 0x141f38);
-      if (flaw === 'crooked-hanger' && i === 1) {
-        uniform.setAngle(17);
-        uniform.y = 22;
-      }
-      c.add(uniform);
-      const hook = this.add.rectangle(ux, -46, 5, 16, 0xd0d4dc);
-      if (flaw === 'crooked-hanger' && i === 1) hook.setAngle(17);
-      c.add(hook);
-    }
-
-    // 하단: 서랍
-    const drawerY = 126;
-    if (flaw === 'open-drawer') {
-      const gap = this.add.rectangle(0, drawerY, 196, 56, 0x1c1f26);
-      c.add(gap);
-      const drawer = this.add.rectangle(20, drawerY + 16, 196, 56, 0x646b78);
-      drawer.setStrokeStyle(2, 0x3d434e);
-      c.add(drawer);
-      const handle = this.add.rectangle(20, drawerY + 16, 52, 8, 0xd0d4dc);
-      c.add(handle);
-    } else {
-      const drawer = this.add.rectangle(0, drawerY, 196, 56, 0x646b78);
-      drawer.setStrokeStyle(2, 0x3d434e);
-      c.add(drawer);
-      const handle = this.add.rectangle(0, drawerY, 52, 8, 0xd0d4dc);
-      c.add(handle);
-      if (flaw === 'sock') {
-        const sock = this.add.ellipse(62, drawerY - 32, 44, 26, 0xf0f0e8);
-        sock.setAngle(-25);
-        c.add(sock);
-      }
-    }
-
-    // 틀린 부분 히트 영역 (로컬 좌표)
+    // 틀린 부분 히트 영역 (이미지 로컬 좌표, 236x356 기준 근사)
     let flawRect: Phaser.Geom.Rectangle | null = null;
     switch (flaw) {
       case 'tilt-blanket':
-        flawRect = new Phaser.Geom.Rectangle(-90, -170, 200, 100);
+        flawRect = new Phaser.Geom.Rectangle(-118, -178, 236, 96);
         break;
       case 'crooked-hanger':
-        flawRect = new Phaser.Geom.Rectangle(-5, -50, 110, 135);
+        flawRect = new Phaser.Geom.Rectangle(-110, -86, 170, 150);
         break;
       case 'open-drawer':
-        flawRect = new Phaser.Geom.Rectangle(-104, 95, 230, 80);
+        flawRect = new Phaser.Geom.Rectangle(-118, 36, 236, 140);
         break;
       case 'sock':
-        flawRect = new Phaser.Geom.Rectangle(25, 75, 85, 55);
+        flawRect = new Phaser.Geom.Rectangle(-70, 24, 170, 120);
         break;
       case null:
         break;

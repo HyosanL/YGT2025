@@ -4,13 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
-import {
-  addVignette,
-  drawDoor,
-  drawLightShaft,
-  drawLockerCabinet,
-  drawWindowView,
-} from '../../ui/Scenery';
+import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { HAPTIC, vibrate } from '../../utils/haptics';
 import { chance, pick, randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
@@ -61,37 +55,8 @@ export class WallPunchScene extends BaseMainScene {
     this.punchState = 'noisy';
     this.chatterEvent = null;
 
-    // 소등 후 어두운 생활관 호실
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x11142a, 0x11142a, 0x1c2036, 0x1c2036, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    // 바닥
-    bg.fillGradientStyle(0x232741, 0x232741, 0x1a1d31, 0x1a1d31, 1);
-    bg.fillRect(0, 940, GAME_WIDTH, GAME_HEIGHT - 940);
-    bg.lineStyle(2, 0xffffff, 0.04);
-    for (let x = 280; x < GAME_WIDTH; x += 110) bg.lineBetween(x, 940, x, GAME_HEIGHT);
-    // 벽 포스터
-    bg.fillStyle(0x2c3450, 1);
-    bg.fillRect(300, 290, 92, 124);
-    bg.fillStyle(0x38415e, 1);
-    bg.fillRect(308, 298, 76, 108);
-    this.add
-      .text(346, 352, '정\n신\n력', {
-        fontFamily: FONT,
-        fontSize: '22px',
-        color: '#8a94b8',
-        align: 'center',
-        lineSpacing: 2,
-      })
-      .setOrigin(0.5);
-
-    // 달빛 창문 + 바닥으로 떨어지는 빛
-    drawWindowView(this, GAME_WIDTH - 230, 170, 170, 230, { night: true });
-    drawLightShaft(this, GAME_WIDTH - 145, 412, 170, GAME_WIDTH - 210, 940, 330, 0xbdd7ee, 0.07);
-
-    // 옷장 + 출입문 (선배가 벌컥 열고 들어올 그 문)
-    drawLockerCabinet(this, 350, 700, 0.9);
-    drawDoor(this, GAME_WIDTH - 160, 430, 130, 240, 0x6e5236, '복도');
+    // 야간 생활관 호실 배경 (실제 사진 기반)
+    addSceneBg(this, 'bg_dorm_night');
     addVignette(this, 0.35);
 
     // 옆방과 맞닿은 벽 (왼쪽)
@@ -114,29 +79,11 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5);
     this.wall.add(wallLabel);
 
-    // 침대 — 벽에 붙어 있고, 기태는 누운 채 벽을 친다
-    const bed = this.add.graphics();
-    bed.fillStyle(0x4a3a28, 1);
-    bed.fillRoundedRect(250, 762, 316, 112, 12); // 프레임
-    bed.fillStyle(0x2c3348, 1);
-    bed.fillRoundedRect(258, 752, 300, 34, 8); // 매트리스
-    bed.fillStyle(0xe4e6ec, 1);
-    bed.fillRoundedRect(260, 748, 58, 40, 10); // 베개 (벽쪽)
-    bed.fillStyle(0x1c2036, 1);
-    bed.fillRect(256, 874, 20, 40); // 다리
-    bed.fillRect(540, 874, 20, 40);
-
-    this.player = new Cadet(this, 398, 800, 'player');
-    this.player.setScale(0.95);
-    this.player.setAngle(-90); // 머리가 벽 쪽으로 — 누운 자세
+    // 침대에 누운 기태 (누운 포즈 이미지에 침대·이불 포함)
+    this.player = new Cadet(this, 380, 840, 'player');
+    this.player.setScale(1.1);
+    this.player.setMotion('lying');
     this.player.setFace('😈');
-
-    // 이불 — 하반신 덮기 (플레이어 위 레이어)
-    const blanket = this.add.graphics().setDepth(5);
-    blanket.fillStyle(0x3f5d3f, 1);
-    blanket.fillRoundedRect(432, 752, 132, 92, 14);
-    blanket.fillStyle(0x4e714e, 1);
-    blanket.fillRect(432, 768, 132, 10);
 
     this.add
       .text(GAME_WIDTH / 2 + 60, 120, '옆방이 너무 시끄럽다...', {

@@ -2,123 +2,77 @@ import Phaser from 'phaser';
 import { FONT } from '../config';
 
 export type CadetKind = 'player' | 'junior' | 'peer' | 'senior';
-export type CadetMotion = 'idle' | 'walk' | 'run' | 'dance' | 'salute';
+export type CadetMotion =
+  | 'idle' | 'walk' | 'run' | 'dance' | 'salute'
+  | 'cheer' | 'exhausted' | 'sneak' | 'lying' | 'lying_punch' | 'point';
 
+/** 옛 절차 드로잉 시절의 스타일 필드 — 색상값은 이제 무시되고 dobok/scale만 쓰인다 (호환용). */
 export interface CadetStyle {
-  uniform: number;
-  uniformDark: number;
-  trousers: number;
-  shoe: number;
-  cap: number;
-  capBand: number;
-  skin: number;
-  hair: number;
-  /** 학년 — 견장의 금색 막대 수로 표시 */
-  rank: number;
-  scale: number;
-  face: string;
-  label: string;
-  /** 왼팔 완장 (기본: 선배만) */
-  armband: boolean;
-  /** 큰 정모 (기본: 선배만) */
-  bigCap: boolean;
-  /** 도복 모드 — 단추/견장/정모를 없애고 띠 매듭을 그린다 (오버라이드 전용) */
+  uniform?: number;
+  uniformDark?: number;
+  trousers?: number;
+  shoe?: number;
+  cap?: number;
+  capBand?: number;
+  skin?: number;
+  hair?: number;
+  rank?: number;
+  scale?: number;
+  face?: string;
+  label?: string;
+  armband?: boolean;
+  bigCap?: boolean;
+  /** 태권도 도복 룩 (Q4) */
   dobok?: boolean;
-  /** 허리띠 색 (기본: 제복 벨트색, 도복이면 띠 색) */
   belt?: number;
+  /** Q2 판별용 중립 방문자 — 얼굴·근무복 동일, 오직 견장 줄 수(1/2/3)만 다른 이미지 사용 */
+  visitorRank?: 1 | 2 | 3;
 }
 
-// 공군사관생도 근무복 모티브 — 남색 근무복 + 개리슨모(약모).
-// 학년 구분은 견장 막대 수 + 파이핑/완장 색으로.
-const STYLE: Record<CadetKind, CadetStyle> = {
-  player: {
-    uniform: 0x223154,
-    uniformDark: 0x18233d,
-    trousers: 0x1b2540,
-    shoe: 0x14141c,
-    cap: 0x1c2946,
-    capBand: 0xffd700,
-    skin: 0xffd9b3,
-    hair: 0x2a2018,
-    rank: 2,
-    scale: 1.0,
-    face: '😏',
-    label: '기태 (2학년)',
-    armband: false,
-    bigCap: false,
-  },
-  junior: {
-    uniform: 0x2e3f6a,
-    uniformDark: 0x223154,
-    trousers: 0x24304f,
-    shoe: 0x14141c,
-    cap: 0x263659,
-    capBand: 0xd9e2f2,
-    skin: 0xffe0c2,
-    hair: 0x2a2018,
-    rank: 1,
-    scale: 0.85,
-    face: '😳',
-    label: '후배 (1학년)',
-    armband: false,
-    bigCap: false,
-  },
-  peer: {
-    uniform: 0x223154,
-    uniformDark: 0x18233d,
-    trousers: 0x1b2540,
-    shoe: 0x14141c,
-    cap: 0x1c2946,
-    capBand: 0xffd700,
-    skin: 0xffe0c2,
-    hair: 0x241c14,
-    rank: 2,
-    scale: 1.0,
-    face: '🙂',
-    label: '동기 (2학년)',
-    armband: false,
-    bigCap: false,
-  },
-  senior: {
-    uniform: 0x1a2440,
-    uniformDark: 0x111a30,
-    trousers: 0x141c32,
-    shoe: 0x0d0d12,
-    cap: 0x141f38,
-    capBand: 0xe94560,
-    skin: 0xffd0a8,
-    hair: 0x1c1712,
-    rank: 3,
-    scale: 1.2,
-    face: '😠',
-    label: '선배 (3학년)',
-    armband: true,
-    bigCap: true,
-  },
+/** 캐릭터가 컨테이너 scale 1일 때의 표시 높이(px) — 씬 setScale이 여기에 곱해진다. */
+const BASE_H = 300;
+
+const LABELS: Record<CadetKind, string> = {
+  player: '기태 (2학년)',
+  junior: '후배 (1학년)',
+  peer: '동기 (2학년)',
+  senior: '선배 (3학년)',
 };
 
-/** 모션별 스윙 파라미터 — halfMs는 반 주기, 각도는 라디안 */
-const MOTION_PARAMS = {
-  walk: { halfMs: 240, leg: 0.3, arm: 0.38, bob: 3, lean: 0 },
-  run: { halfMs: 130, leg: 0.62, arm: 0.85, bob: 7, lean: 5 },
-  dance: { halfMs: 300, leg: 0.05, arm: 0.28, bob: 2, lean: 4 },
-} as const;
+/** kind+motion → 텍스처 키. 없는 모션은 idle로 폴백. */
+const POSE: Record<CadetKind, Partial<Record<CadetMotion, string>>> = {
+  player: {
+    idle: 'player_idle', walk: 'player_walk_a', run: 'player_run', dance: 'player_dance',
+    salute: 'player_salute', cheer: 'player_cheer', exhausted: 'player_exhausted',
+    sneak: 'player_sneak', lying: 'player_lying', lying_punch: 'player_lying_punch',
+  },
+  junior: { idle: 'junior_walk', walk: 'junior_walk', run: 'junior_walk', salute: 'junior_salute' },
+  peer: { idle: 'peer_idle', walk: 'peer_walk', run: 'peer_walk', salute: 'peer_idle' },
+  senior: { idle: 'senior_idle', walk: 'senior_walk', run: 'senior_run', salute: 'senior_idle', point: 'senior_point' },
+};
+const DOBOK: Partial<Record<CadetMotion, string>> = {
+  idle: 'player_dobok_walk', walk: 'player_dobok_walk', run: 'player_dobok_run',
+};
+/** 2프레임 순환 (걷기/구보 애니메이션) */
+const CYCLE: Record<string, [string, string]> = {
+  'player.walk': ['player_walk_a', 'player_walk_b'],
+  'player.run': ['player_run', 'player_run_b'],
+  'senior.run': ['senior_run', 'senior_run'],
+  'dobok.run': ['player_dobok_run', 'player_dobok_run_b'],
+};
 
-/**
- * 팔/다리가 분리된 리그 구조의 생도 캐릭터 (도형 + 이모지 얼굴).
- * setMotion으로 걷기/뛰기/춤/경례 등 동작 전환, 학년은 견장 막대 수로 구분.
- * 컨테이너 좌표(x/y/scale)는 씬이 제어하고, 동작 연출은 내부 rig에만 적용된다.
- */
+/** 눕는 포즈 — 그림자/바운스를 끈다 */
+const LYING = new Set<CadetMotion>(['lying', 'lying_punch']);
+
 export class Cadet extends Phaser.GameObjects.Container {
-  private faceText: Phaser.GameObjects.Text;
-  private rig: Phaser.GameObjects.Container;
-  private leftArm: Phaser.GameObjects.Container;
-  private rightArm: Phaser.GameObjects.Container;
-  private leftLeg: Phaser.GameObjects.Container;
-  private rightLeg: Phaser.GameObjects.Container;
+  private sprite: Phaser.GameObjects.Image;
+  private shadow: Phaser.GameObjects.Ellipse;
+  private kind: CadetKind;
+  private dobok: boolean;
+  private visitorRank?: 1 | 2 | 3;
   private motion: CadetMotion | null = null;
-  private phaseTween: Phaser.Tweens.Tween | null = null;
-  private style: CadetStyle;
+  private cycleTimer: Phaser.Time.TimerEvent | null = null;
+  private idleTween: Phaser.Tweens.Tween | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -129,281 +83,86 @@ export class Cadet extends Phaser.GameObjects.Container {
     styleOverride?: Partial<CadetStyle>
   ) {
     super(scene, x, y);
-    // 오버라이드로 제복 색·완장 등 '학년 티'를 지울 수 있다 (견장 판별 게임용)
-    const st: CadetStyle = { ...STYLE[kind], ...styleOverride };
-    this.style = st;
-    const s = st.scale;
-    const u = (n: number): number => n * s;
+    this.kind = kind;
+    this.dobok = styleOverride?.dobok ?? false;
+    this.visitorRank = styleOverride?.visitorRank;
 
-    // 그림자 — 바닥에 고정 (rig의 바운스에 따라 움직이지 않도록 밖에 둠)
-    const shadow = scene.add.graphics();
-    shadow.fillStyle(0x000000, 0.22);
-    shadow.fillEllipse(0, u(102), u(100), u(20));
-    this.add(shadow);
+    this.shadow = scene.add.ellipse(0, BASE_H * 0.42, BASE_H * 0.34, BASE_H * 0.07, 0x2b5f9e, 0.18);
+    this.add(this.shadow);
 
-    this.rig = scene.add.container(0, 0);
-    this.add(this.rig);
-
-    // 다리 (골반 피벗)
-    this.leftLeg = this.buildLeg(scene, u(-22), s);
-    this.rightLeg = this.buildLeg(scene, u(22), s);
-    this.rig.add(this.leftLeg);
-    this.rig.add(this.rightLeg);
-
-    // 몸통 (제복 상의)
-    const torso = scene.add.graphics();
-    // 목
-    torso.fillStyle(st.skin, 1);
-    torso.fillRect(u(-10), u(-76), u(20), u(18));
-    // 상의
-    torso.fillStyle(st.uniform, 1);
-    torso.fillRoundedRect(u(-52), u(-62), u(104), u(96), u(16));
-    const dobok = st.dobok ?? false;
-    // 앞섶 라인
-    torso.lineStyle(u(2.5), st.uniformDark, 1);
-    torso.lineBetween(0, u(-58), 0, u(28));
-    if (!dobok) {
-      // 단추
-      torso.fillStyle(0xffd700, 1);
-      for (const by of [-38, -14, 10]) torso.fillCircle(0, u(by), u(4.5));
-    }
-    // 칼라 (도복은 V넥 깃으로 읽힌다)
-    torso.fillStyle(st.uniformDark, 1);
-    torso.fillTriangle(u(-20), u(-62), u(-2), u(-62), u(-14), u(-46));
-    torso.fillTriangle(u(20), u(-62), u(2), u(-62), u(14), u(-46));
-    if (!dobok) {
-      // 왼가슴 주머니
-      torso.lineStyle(u(2), st.uniformDark, 0.9);
-      torso.strokeRoundedRect(u(-42), u(-32), u(24), u(18), u(4));
-      // 오른가슴 명찰
-      torso.fillStyle(0xf5f5f5, 1);
-      torso.fillRect(u(18), u(-30), u(24), u(9));
-    }
-    // 허리띠
-    torso.fillStyle(st.belt ?? 0x20202c, 1);
-    torso.fillRect(u(-52), u(18), u(104), u(13));
-    if (dobok) {
-      // 띠 매듭 + 아래로 늘어진 두 가닥
-      const beltColor = st.belt ?? 0x20202c;
-      torso.fillStyle(beltColor, 1);
-      torso.fillRoundedRect(u(-11), u(15), u(22), u(19), u(4));
-      torso.fillRect(u(-15), u(31), u(10), u(24));
-      torso.fillRect(u(5), u(31), u(10), u(24));
-      torso.lineStyle(u(2), 0x000000, 0.25);
-      torso.strokeRoundedRect(u(-11), u(15), u(22), u(19), u(4));
-    } else {
-      // 버클
-      torso.fillStyle(0xffd700, 1);
-      torso.fillRect(u(-8), u(18), u(16), u(13));
-      // 견장 + 학년 계급장 (막대 수 = 학년)
-      torso.fillStyle(st.uniformDark, 1);
-      torso.fillRoundedRect(u(-52), u(-64), u(30), u(11), u(4));
-      torso.fillRoundedRect(u(22), u(-64), u(30), u(11), u(4));
-      torso.fillStyle(0xffd700, 1);
-      for (let i = 0; i < st.rank; i++) {
-        torso.fillRect(u(-48 + i * 8), u(-62), u(5), u(7));
-        torso.fillRect(u(26 + i * 8), u(-62), u(5), u(7));
-      }
-    }
-    // 애니풍 셀셰이딩 (오른쪽 음영) + 라인아트 외곽선
-    torso.fillStyle(0x000000, 0.08);
-    torso.fillRoundedRect(u(12), u(-62), u(40), u(96), u(16));
-    torso.lineStyle(u(2.5), 0x1b2233, 0.55);
-    torso.strokeRoundedRect(u(-52), u(-62), u(104), u(96), u(16));
-    this.rig.add(torso);
-
-    // 팔 (어깨 피벗) — 완장은 스타일 소관 (기본: 선배)
-    this.leftArm = this.buildArm(scene, u(-50), s, st.armband);
-    this.rightArm = this.buildArm(scene, u(50), s, false);
-    this.rig.add(this.leftArm);
-    this.rig.add(this.rightArm);
-
-    // 머리 + 정모
-    const head = scene.add.container(0, u(-104));
-    const hg = scene.add.graphics();
-    hg.fillStyle(st.skin, 1);
-    hg.fillCircle(u(-38), u(4), u(9));
-    hg.fillCircle(u(38), u(4), u(9));
-    hg.fillCircle(0, 0, u(40));
-    hg.lineStyle(u(2.5), 0x1b2233, 0.5);
-    hg.strokeCircle(0, 0, u(40));
-    // 앞머리
-    hg.fillStyle(st.hair, 1);
-    hg.fillRect(u(-38), u(-32), u(76), u(10));
-    if (st.dobok) {
-      // 도복 = 맨머리 — 정모 대신 머리카락 돔
-      hg.fillStyle(st.hair, 1);
-      hg.fillEllipse(0, u(-22), u(80), u(42));
-      hg.fillStyle(0xffffff, 0.08);
-      hg.fillEllipse(u(-14), u(-34), u(30), u(9));
-    } else {
-      // 개리슨모(약모) — 머리에 낮게 얹힌 접힌 모자. 선배(bigCap)는 조금 크다
-      const big = st.bigCap;
-      const gw = big ? 47 : 42; // 절반 폭
-      const capTop = big ? -68 : -63;
-      const capBot = -38;
-      hg.fillStyle(st.cap, 1);
-      hg.fillPoints(
-        [
-          new Phaser.Geom.Point(u(-gw), u(capBot)),
-          new Phaser.Geom.Point(u(-gw + 12), u(capTop)),
-          new Phaser.Geom.Point(u(gw - 12), u(capTop)),
-          new Phaser.Geom.Point(u(gw), u(capBot)),
-        ],
-        true
-      );
-      // 중앙 접힘(크리스) 라인
-      hg.lineStyle(u(2), 0x000000, 0.25);
-      hg.lineBetween(0, u(capTop + 2), 0, u(capBot - 2));
-      // 위 능선 파이핑 (학년 색)
-      hg.lineStyle(u(3), st.capBand, 1);
-      hg.lineBetween(u(-gw + 12), u(capTop + 1), u(gw - 12), u(capTop + 1));
-      // 아래 가장자리 셰이딩
-      hg.lineStyle(u(2), 0x000000, 0.2);
-      hg.lineBetween(u(-gw + 2), u(capBot), u(gw - 2), u(capBot));
-      // 앞 좌측 모표 (작은 금장)
-      hg.fillStyle(0xffd700, 1);
-      hg.fillCircle(u(-24), u(-46), u(4.5));
-    }
-    head.add(hg);
-
-    this.faceText = scene.add
-      .text(0, u(6), st.face, { fontFamily: FONT, fontSize: `${34 * s}px` })
-      .setOrigin(0.5);
-    head.add(this.faceText);
-    this.rig.add(head);
+    this.sprite = scene.add.image(0, 0, this.texFor('idle')).setOrigin(0.5, 0.6);
+    this.add(this.sprite);
 
     if (showLabel) {
-      const label = scene.add
-        .text(0, u(124), st.label, {
-          fontFamily: FONT,
-          fontSize: '24px',
-          color: '#a8b2d1',
-        })
-        .setOrigin(0.5);
-      this.add(label);
+      this.add(
+        scene.add
+          .text(0, BASE_H * 0.5, LABELS[kind], { fontFamily: FONT, fontSize: '24px', color: '#39507a' })
+          .setOrigin(0.5)
+      );
     }
 
     scene.add.existing(this);
     this.setMotion('idle');
   }
 
-  private buildLeg(scene: Phaser.Scene, x: number, s: number): Phaser.GameObjects.Container {
-    const u = (n: number): number => n * s;
-    const leg = scene.add.container(x, u(28));
-    const g = scene.add.graphics();
-    g.fillStyle(this.style.trousers, 1);
-    g.fillRoundedRect(u(-13), u(-8), u(26), u(64), u(7));
-    g.lineStyle(u(2.2), 0x1b2233, 0.5);
-    g.strokeRoundedRect(u(-13), u(-8), u(26), u(64), u(7));
-    g.fillStyle(this.style.shoe, 1);
-    g.fillRoundedRect(u(-15), u(52), u(32), u(18), u(6));
-    g.fillStyle(0xffffff, 0.18);
-    g.fillEllipse(u(-2), u(58), u(20), u(5));
-    leg.add(g);
-    return leg;
+  private texFor(motion: CadetMotion): string {
+    if (this.visitorRank) return `visitor_${this.visitorRank}line`;
+    const table = this.dobok ? DOBOK : POSE[this.kind];
+    return table[motion] || table.idle || POSE[this.kind].idle || 'player_idle';
   }
 
-  private buildArm(
-    scene: Phaser.Scene,
-    x: number,
-    s: number,
-    armband: boolean
-  ): Phaser.GameObjects.Container {
-    const u = (n: number): number => n * s;
-    const arm = scene.add.container(x, u(-46));
-    const g = scene.add.graphics();
-    g.fillStyle(this.style.uniform, 1);
-    g.fillRoundedRect(u(-11), u(-8), u(22), u(62), u(9));
-    g.lineStyle(u(2.2), 0x1b2233, 0.5);
-    g.strokeRoundedRect(u(-11), u(-8), u(22), u(62), u(9));
-    if (armband) {
-      g.fillStyle(0xe94560, 1);
-      g.fillRect(u(-11), u(8), u(22), u(14));
-      g.fillStyle(0xf5f5f5, 1);
-      g.fillRect(u(-11), u(13), u(22), u(3));
-    }
-    g.fillStyle(this.style.uniformDark, 1);
-    g.fillRect(u(-11), u(42), u(22), u(8));
-    g.fillStyle(this.style.skin, 1);
-    g.fillCircle(0, u(58), u(10));
-    arm.add(g);
-    return arm;
+  private applyTexture(key: string): void {
+    if (!this.scene.textures.exists(key)) return;
+    this.sprite.setTexture(key);
+    const src = this.sprite.texture.getSourceImage() as { height?: number };
+    const th = src.height || this.sprite.height || BASE_H;
+    this.sprite.setScale(BASE_H / th);
   }
 
-  setFace(emoji: string): void {
-    this.faceText.setText(emoji);
+  setFace(_emoji: string): void {
+    // 포즈 이미지에 표정이 포함되어 있어 별도 처리 없음 (호환용 no-op)
   }
 
-  /**
-   * 동작 전환. 같은 모션이면 no-op이라 tick에서 매 프레임 호출해도 안전하다.
-   * - idle: 숨쉬기 수준의 미세한 바운스
-   * - walk/run: 팔다리 스윙 + 바운스 (run은 몸을 앞으로 기울인다)
-   * - dance: 팔 벌리고 좌우로 들썩들썩
-   * - salute: 오른손(화면 왼팔) 거수경례
-   */
   setMotion(motion: CadetMotion): void {
     if (!this.active || this.motion === motion) return;
     this.motion = motion;
-    this.phaseTween?.remove();
-    this.phaseTween = null;
-    this.scene.tweens.killTweensOf(this.leftArm);
-    this.scene.tweens.killTweensOf(this.rightArm);
-    this.scene.tweens.killTweensOf(this.rig);
-    this.rig.setPosition(0, 0).setAngle(0);
-    this.leftArm.rotation = 0;
-    this.rightArm.rotation = 0;
-    this.leftLeg.rotation = 0;
-    this.rightLeg.rotation = 0;
+    this.cycleTimer?.remove();
+    this.cycleTimer = null;
+    this.idleTween?.remove();
+    this.idleTween = null;
+    this.sprite.setPosition(0, 0);
 
-    if (motion === 'idle') {
-      this.phaseTween = this.scene.tweens.add({
-        targets: this.rig,
-        y: 2 * this.style.scale,
-        duration: 750,
+    this.shadow.setVisible(!LYING.has(motion));
+
+    const cycleKey = this.dobok && motion === 'run' ? 'dobok.run' : `${this.kind}.${motion}`;
+    const cycle = CYCLE[cycleKey];
+    if (cycle) {
+      let i = 0;
+      this.applyTexture(cycle[0]);
+      this.cycleTimer = this.scene.time.addEvent({
+        delay: motion === 'run' ? 130 : 200,
+        loop: true,
+        callback: () => {
+          if (!this.active) return;
+          i ^= 1;
+          this.applyTexture(cycle[i]);
+        },
+      });
+      return;
+    }
+
+    this.applyTexture(this.texFor(motion));
+
+    if (motion === 'idle' || motion === 'dance') {
+      this.idleTween = this.scene.tweens.add({
+        targets: this.sprite,
+        y: motion === 'dance' ? -8 : -4,
+        duration: motion === 'dance' ? 300 : 750,
         yoyo: true,
         repeat: -1,
         ease: 'Sine.easeInOut',
       });
-      return;
     }
-
-    if (motion === 'salute') {
-      this.phaseTween = this.scene.tweens.add({
-        targets: this.leftArm,
-        rotation: -2.5,
-        duration: 130,
-        ease: 'Back.easeOut',
-      });
-      return;
-    }
-
-    const p = MOTION_PARAMS[motion];
-    const phase = { v: -1 };
-    this.phaseTween = this.scene.tweens.add({
-      targets: phase,
-      v: 1,
-      duration: p.halfMs,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-      onUpdate: () => {
-        if (!this.active) return;
-        const v = phase.v;
-        this.leftLeg.rotation = v * p.leg;
-        this.rightLeg.rotation = -v * p.leg;
-        if (motion === 'dance') {
-          this.leftArm.rotation = 0.8 + v * p.arm;
-          this.rightArm.rotation = -0.8 + v * p.arm;
-          this.rig.angle = v * p.lean;
-        } else {
-          this.leftArm.rotation = -v * p.arm;
-          this.rightArm.rotation = v * p.arm;
-          this.rig.angle = p.lean;
-        }
-        this.rig.y = -(1 - v * v) * p.bob * this.style.scale;
-      },
-    });
   }
 
   /** 거수경례 후 원래 동작으로 복귀 */
@@ -412,34 +171,34 @@ export class Cadet extends Phaser.GameObjects.Container {
     const prev = this.motion ?? 'idle';
     this.setMotion('salute');
     this.scene.time.delayedCall(holdMs, () => {
-      if (this.active && this.motion === 'salute') {
-        this.setMotion(prev === 'salute' ? 'idle' : prev);
-      }
+      if (this.active && this.motion === 'salute') this.setMotion(prev === 'salute' ? 'idle' : prev);
     });
   }
 
-  /** 벽치기 등 한 방 펀치 연출 (idle 상태에서 사용) */
+  /** 벽치기 한 방 — 누운 채 주먹을 뻗는 포즈로 잠깐 전환 */
   punchOnce(dir: 'left' | 'right'): void {
     if (!this.active) return;
-    const arm = dir === 'left' ? this.leftArm : this.rightArm;
+    const prev = this.motion ?? 'lying';
+    this.applyTexture(this.texFor('lying_punch'));
     this.scene.tweens.add({
-      targets: arm,
-      rotation: dir === 'left' ? 1.7 : -1.7,
+      targets: this.sprite,
+      x: dir === 'left' ? -14 : 14,
       duration: 80,
       yoyo: true,
       ease: 'Cubic.easeOut',
     });
-    this.scene.tweens.add({
-      targets: this.rig,
-      x: (dir === 'left' ? -12 : 12) * this.style.scale,
-      duration: 80,
-      yoyo: true,
+    this.scene.time.delayedCall(220, () => {
+      if (this.active) this.applyTexture(this.texFor(prev));
     });
   }
 
   destroy(fromScene?: boolean): void {
-    if (!fromScene) this.phaseTween?.remove();
-    this.phaseTween = null;
+    if (!fromScene) {
+      this.cycleTimer?.remove();
+      this.idleTween?.remove();
+    }
+    this.cycleTimer = null;
+    this.idleTween = null;
     super.destroy(fromScene);
   }
 }

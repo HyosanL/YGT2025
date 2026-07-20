@@ -55,6 +55,15 @@ export abstract class BaseMainScene extends Phaser.Scene {
     // 목숨 하트 (HP 바 아래) — 부분 채움 + 반투명 빈 하트
     this.livesBar = new LivesBar(this, 26, 70, 38);
     this.livesBar.setLives(gameState.livesUnits);
+    // 우측 상단 아이콘 칩 배경 (플랫 + 굵은 외곽선 — 캐릭터 화풍과 통일)
+    const iconBg = this.add.graphics().setDepth(999);
+    for (const cx of [GAME_WIDTH - 56, GAME_WIDTH - 144]) {
+      iconBg.fillStyle(0xf4f2ec, 0.96);
+      iconBg.fillCircle(cx, 56, 34);
+      iconBg.lineStyle(3.5, 0x14141a, 1);
+      iconBg.strokeCircle(cx, 56, 34);
+    }
+
     // 우측 상단 🔊 = 소리 설정 (일시정지 메뉴를 열고 그 위에 볼륨 패널 — 게임은 안전하게 정지)
     const volBtn = this.add
       .text(GAME_WIDTH - 24, 24, '🔊', { fontFamily: FONT, fontSize: '44px' })

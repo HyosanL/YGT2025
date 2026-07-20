@@ -5,7 +5,7 @@ import { gameState } from '../core/GameState';
 import { questManager } from '../core/QuestManager';
 import { Cadet } from '../ui/Characters';
 import { LivesBar } from '../ui/LivesBar';
-import { drawBarracks, drawCloud, drawFlagpole, drawMountains } from '../ui/Scenery';
+import { addSceneBg } from '../ui/Scenery';
 import type { MainQuestId } from '../types';
 
 /**
@@ -31,22 +31,7 @@ export class DayIntroScene extends Phaser.Scene {
     audio.startBgm('field');
 
     // 아침 연병장 배경
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2c3e6b, 0x2c3e6b, COLORS.bg, COLORS.bg, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    drawCloud(this, 140, 140, 1.0, 0.35);
-    drawCloud(this, 560, 210, 0.7, 0.28);
-    const sunrise = this.add.graphics();
-    sunrise.fillStyle(0xffe9a8, 0.07);
-    sunrise.fillCircle(GAME_WIDTH / 2, 1080, 430);
-    sunrise.fillCircle(GAME_WIDTH / 2, 1080, 300);
-    drawMountains(this, 1010, 150, 0x22305a, 0.8);
-    drawBarracks(this, 60, 1010, 200, 110, 0x2a3660, 0xffe9a8, 0.5);
-    drawBarracks(this, 470, 1010, 180, 96, 0x243158, 0xffe9a8, 0.45);
-    drawFlagpole(this, 366, 1010, 140);
-    const ground = this.add.graphics();
-    ground.fillGradientStyle(0x2c3a66, 0x2c3a66, 0x1f2a4c, 0x1f2a4c, 1);
-    ground.fillRect(0, 1010, GAME_WIDTH, GAME_HEIGHT - 1010);
+    addSceneBg(this, 'bg_dayintro');
 
     // "N일차" 등장 연출
     const dayText = this.add

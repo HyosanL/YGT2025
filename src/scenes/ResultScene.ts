@@ -4,6 +4,7 @@ import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { submitScore } from '../core/Leaderboard';
 import { Button } from '../ui/Button';
+import { addSceneBg } from '../ui/Scenery';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { LivesBar } from '../ui/LivesBar';
 import { addVolumeButton } from '../ui/VolumePanel';
@@ -41,9 +42,7 @@ export class ResultScene extends Phaser.Scene {
       this.scene.start('DayIntro');
     };
 
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x2a1c4a, 0x2a1c4a, 0x0d0d16, 0x0d0d16, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    addSceneBg(this, 'bg_result_revive');
 
     this.add
       .text(GAME_WIDTH / 2, 470, data.reason, {
@@ -102,9 +101,7 @@ export class ResultScene extends Phaser.Scene {
       this.scene.start('DayIntro');
     };
 
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x1c4a3e, 0x1c4a3e, COLORS.bg, COLORS.bg, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    addSceneBg(this, 'bg_result_success');
 
     const badge = this.add
       .text(GAME_WIDTH / 2, 380, '✅', { fontFamily: FONT, fontSize: '110px' })
@@ -161,9 +158,7 @@ export class ResultScene extends Phaser.Scene {
     const isBest = gameState.gameOver();
     const playMs = Math.max(1, Math.round(gameState.totalPlayMs));
 
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x4a1c2a, 0x4a1c2a, 0x0d0d16, 0x0d0d16, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    addSceneBg(this, 'bg_result_gameover');
 
     this.add
       .text(GAME_WIDTH / 2, 280, '☠️', { fontFamily: FONT, fontSize: '110px' })

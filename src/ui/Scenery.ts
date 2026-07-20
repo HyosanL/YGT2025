@@ -467,3 +467,32 @@ export function addVignette(scene: Phaser.Scene, alpha = 0.3): void {
   g.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, alpha, 0, alpha);
   g.fillRect(GAME_WIDTH - e, e, e, GAME_HEIGHT - e * 2);
 }
+
+/**
+ * 생성된 배경 이미지를 화면 전체에 깔아준다 (cover 스케일 — 세로화면 꽉 채움).
+ * 절차 드로잉을 대체하는 씬 배경용.
+ */
+export function addSceneBg(
+  scene: Phaser.Scene,
+  key: string,
+  depth = -1000
+): Phaser.GameObjects.Image {
+  const img = scene.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, key).setDepth(depth);
+  const s = Math.max(GAME_WIDTH / img.width, GAME_HEIGHT / img.height);
+  img.setScale(s);
+  return img;
+}
+
+/** 소품 이미지 하나를 배치 (높이 지정, 바닥 정렬 origin 기본값). */
+export function addProp(
+  scene: Phaser.Scene,
+  key: string,
+  x: number,
+  baseY: number,
+  displayH: number,
+  originY = 1
+): Phaser.GameObjects.Image {
+  const img = scene.add.image(x, baseY, key).setOrigin(0.5, originY);
+  img.setScale(displayH / img.height);
+  return img;
+}

@@ -3,14 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q2_HALLWAY } from '../../config'
 import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet, speechBubble, type CadetStyle } from '../../ui/Characters';
-import {
-  drawCeilingLight,
-  drawDoor,
-  drawExtinguisher,
-  drawLightShaft,
-  drawWallClock,
-  drawWindowView,
-} from '../../ui/Scenery';
+import { addSceneBg } from '../../ui/Scenery';
 import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -80,42 +73,8 @@ export class HallwayScene extends BaseMainScene {
     this.responseTimeout = null;
     this.watcherVisible = false;
 
-    // 애니풍 생활관 복도 — 크림 벽 + 세이지 하부몰딩 + 광택 바닥
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0xf0ead9, 0xf0ead9, 0xe2dcc8, 0xe2dcc8, 1);
-    bg.fillRect(0, 0, GAME_WIDTH, 520);
-    // 하부 몰딩
-    bg.fillStyle(0x9aa583, 1);
-    bg.fillRect(0, 428, GAME_WIDTH, 92);
-    bg.fillStyle(0x7d8a6a, 1);
-    bg.fillRect(0, 428, GAME_WIDTH, 8);
-    // 광택 바닥 (원근)
-    bg.fillGradientStyle(0xcfc9b8, 0xcfc9b8, 0x9d978a, 0x9d978a, 1);
-    bg.fillTriangle(240, 520, 480, 520, GAME_WIDTH + 100, GAME_HEIGHT);
-    bg.fillTriangle(240, 520, -100, GAME_HEIGHT, GAME_WIDTH + 100, GAME_HEIGHT);
-    // 창문 빛 반사 줄
-    bg.fillStyle(0xffffff, 0.12);
-    bg.fillTriangle(300, 560, 360, 560, 240, GAME_HEIGHT);
-    bg.fillTriangle(430, 560, 490, 560, 580, GAME_HEIGHT);
-    // 원근 보조선 (걸레받이)
-    bg.lineStyle(4, 0x8a8474, 0.5);
-    bg.lineBetween(240, 520, -100, GAME_HEIGHT);
-    bg.lineBetween(480, 520, GAME_WIDTH + 100, GAME_HEIGHT);
-
-    // 창문 3개 + 바닥으로 떨어지는 빛
-    for (let i = 0; i < 3; i++) {
-      const wx = 70 + i * 220;
-      drawWindowView(this, wx, 220, 150, 190);
-      drawLightShaft(this, wx + 75, 415, 150, wx + 150, 920, 260, 0xfff2c4, 0.06);
-    }
-    drawCeilingLight(this, 250, 36, 220);
-    drawCeilingLight(this, 520, 36, 220);
-    drawWallClock(this, 360, 160, 24);
-    drawExtinguisher(this, 585, 585, 1);
-
-    // 좌/우 문 (장식)
-    drawDoor(this, 20, 330, 130, 260, 0x7a5a3c, '3소대');
-    drawDoor(this, GAME_WIDTH - 150, 330, 130, 260, 0x7a5a3c, '2소대');
+    // 생활관 복도 배경 (실제 사진 기반)
+    addSceneBg(this, 'bg_hallway');
 
     this.countText = this.add
       .text(GAME_WIDTH / 2, 90, '', {
@@ -222,7 +181,12 @@ export class HallwayScene extends BaseMainScene {
     this.visitorKind = this.pickKind();
     this.cycleState = 'approaching';
 
-    const v = new Cadet(this, GAME_WIDTH / 2, 480, this.visitorKind, false, NEUTRAL_STYLE);
+    // 좌/우 문에서 번갈아 나와 중앙으로 접근 (얼굴·근무복 동일, 견장 줄 수만 단서)
+    const side = this.count % 2 === 0 ? -1 : 1;
+    const v = new Cadet(this, GAME_WIDTH / 2 + side * 160, 470, this.visitorKind, false, {
+      ...NEUTRAL_STYLE,
+      visitorRank: RANK_OF[this.visitorKind] as 1 | 2 | 3,
+    });
     v.setScale(0.4).setAlpha(0.9).setDepth(5);
     v.setMotion('walk');
     this.visitor = v;
@@ -230,6 +194,7 @@ export class HallwayScene extends BaseMainScene {
 
     this.tweens.add({
       targets: v,
+      x: GAME_WIDTH / 2,
       y: 700,
       scale: 1,
       alpha: 1,
@@ -394,7 +359,7 @@ export class HallwayScene extends BaseMainScene {
   protected tick(delta: number): void {
     // 견장 배지가 방문자 머리 위를 따라다닌다
     if (this.badge && this.visitor) {
-      this.badge.setPosition(GAME_WIDTH / 2, this.visitor.y - this.visitor.scale * 230);
+      this.badge.setPosition(this.visitor.x, this.visitor.y - this.visitor.scale * 230);
     }
     if (this.cycleState === 'waiting') {
       this.responseRemainMs = Math.max(0, this.responseRemainMs - delta);

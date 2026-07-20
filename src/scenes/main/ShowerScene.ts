@@ -3,12 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q1_SHOWER } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
-import {
-  addVignette,
-  drawAreaSign,
-  drawCeilingLight,
-  drawSkyGradient,
-} from '../../ui/Scenery';
+import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { chance, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -54,48 +49,8 @@ export class ShowerScene extends BaseMainScene {
     this.songProgressMs = 0;
     this.songMs = Q1_SHOWER.songMs;
 
-    // 애니풍 샤워장 — 민트 타일 벽 + 젖은 바닥
-    const WALL_B = 800;
-    drawSkyGradient(this, 0, 0, GAME_WIDTH, 350, 0xd9f1f3, 0xc2e6ea);
-    const bg = this.add.graphics();
-    bg.fillStyle(0x4f93a8, 1);
-    bg.fillRect(0, 350, GAME_WIDTH, 26);
-    bg.fillGradientStyle(0xaddce2, 0xaddce2, 0x8fc3cf, 0x8fc3cf, 1);
-    bg.fillRect(0, 376, GAME_WIDTH, WALL_B - 376);
-    // 타일 줄눈
-    bg.lineStyle(2, 0xffffff, 0.28);
-    for (let x = 0; x <= GAME_WIDTH; x += 80) bg.lineBetween(x, 0, x, WALL_B);
-    for (let y = 60; y < WALL_B; y += 66) bg.lineBetween(0, y, GAME_WIDTH, y);
-    // 젖은 바닥
-    bg.fillGradientStyle(0x7fb2c0, 0x7fb2c0, 0x51798c, 0x51798c, 1);
-    bg.fillRect(0, WALL_B, GAME_WIDTH, GAME_HEIGHT - WALL_B);
-    bg.lineStyle(2, 0xffffff, 0.1);
-    for (let i = 0; i < 5; i++) bg.lineBetween(0, WALL_B + 40 + i * 95, GAME_WIDTH, WALL_B + 40 + i * 95);
-    // 물기 반사 + 배수구
-    bg.fillStyle(0xffffff, 0.08);
-    bg.fillEllipse(220, 960, 300, 40);
-    bg.fillEllipse(520, 1120, 260, 36);
-    bg.fillStyle(0x3c5b6b, 1);
-    bg.fillEllipse(360, 1040, 66, 22);
-    bg.lineStyle(2, 0x2c4553, 1);
-    bg.lineBetween(340, 1036, 380, 1036);
-    bg.lineBetween(336, 1042, 384, 1042);
-    bg.lineBetween(340, 1048, 380, 1048);
-
-    drawCeilingLight(this, GAME_WIDTH / 2, 26, 320);
-    drawAreaSign(this, 112, 220, '샤워장');
-
-    // 샤워기 (파이프 + 헤드 + 밸브)
-    const fixture = this.add.graphics();
-    fixture.fillStyle(0xc8ccd8, 1);
-    fixture.fillRect(144, 240, 12, 150);
-    fixture.fillRoundedRect(128, 384, 44, 14, 6);
-    fixture.fillStyle(0xb2b8c8, 1);
-    fixture.fillEllipse(150, 408, 44, 18);
-    fixture.fillStyle(0x8f96a8, 1);
-    fixture.fillEllipse(150, 412, 34, 10);
-    fixture.fillStyle(0xd8c060, 1);
-    fixture.fillCircle(150, 330, 9);
+    // 샤워장 배경 (생성 이미지)
+    addSceneBg(this, 'bg_shower');
     const water = this.add.particles(150, 420, '__WHITE', {
       speedY: { min: 300, max: 420 },
       speedX: { min: -20, max: 20 },
@@ -110,37 +65,6 @@ export class ShowerScene extends BaseMainScene {
     this.player = new Cadet(this, 210, 700, 'player');
     this.player.setFace('🎵');
     this.player.setMotion('dance');
-
-    // 문 (오른쪽) — 정문
-    const door = this.add.graphics();
-    const doorX = GAME_WIDTH - 170;
-    door.fillStyle(0x6e5236, 1);
-    door.fillRoundedRect(doorX - 8, 422, 166, 432, 8);
-    door.fillGradientStyle(0x8a6a48, 0x8a6a48, 0x6e5236, 0x6e5236, 1);
-    door.fillRoundedRect(doorX, 430, 150, 420, 6);
-    door.lineStyle(3, 0x5a4229, 0.8);
-    door.strokeRoundedRect(doorX + 22, 470, 106, 140, 5);
-    door.strokeRoundedRect(doorX + 22, 650, 106, 160, 5);
-    door.fillStyle(0xd8c060, 1);
-    door.fillCircle(doorX + 25, 650, 10);
-
-    // 옆 칸 샤워부스 — 두 번째 등장 지점 (파티션 + 커튼)
-    const stall = this.add.graphics();
-    stall.fillStyle(0x7fa8b8, 1);
-    stall.fillRoundedRect(CURTAIN_X - 94, 430, 18, 402, 5);
-    stall.fillRoundedRect(CURTAIN_X + 76, 430, 18, 402, 5);
-    stall.fillStyle(0xc8ccd8, 1);
-    stall.fillRect(CURTAIN_X - 88, 444, 176, 8);
-    stall.fillGradientStyle(0x4f88a8, 0x4f88a8, 0x3d6b8a, 0x3d6b8a, 0.95);
-    stall.fillRoundedRect(CURTAIN_X - 70, 452, 140, 388, { tl: 0, tr: 0, bl: 10, br: 10 });
-    stall.lineStyle(2, 0x2a4d66, 0.7);
-    for (let x = CURTAIN_X - 58; x < CURTAIN_X + 70; x += 16) {
-      stall.lineBetween(x, 456, x, 836);
-    }
-    stall.fillStyle(0xe6e9ee, 1);
-    for (let x = CURTAIN_X - 78; x <= CURTAIN_X + 78; x += 26) {
-      stall.fillCircle(x, 448, 5);
-    }
 
     // 수증기
     this.add.particles(0, 0, '__WHITE', {

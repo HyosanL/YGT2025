@@ -3,7 +3,7 @@ import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q3_MICROWAVE } from '../../confi
 import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
-import { addVignette, drawAreaSign, drawSkyGradient, drawWasher } from '../../ui/Scenery';
+import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { chance, pick, randFloat, randRange } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
@@ -52,91 +52,8 @@ export class MicrowaveScene extends BaseMainScene {
     this.cookProgressMs = 0;
     this.lightsLastSec = -1;
 
-    // 애니풍 심야 세탁실 + 취사구역
-    drawSkyGradient(this, 0, 0, GAME_WIDTH, 260, 0x2e3448, 0x272c40);
-    const bg = this.add.graphics();
-    // 상단 복도 (선배가 지나다니는 어두운 띠) — 문 실루엣 3개가 등장 지점
-    bg.fillGradientStyle(0x141824, 0x141824, 0x1c2130, 0x1c2130, 1);
-    bg.fillRect(0, 260, GAME_WIDTH, 160);
-    for (const dx of SENIOR_SPOTS) {
-      bg.fillStyle(0x242a3c, 1);
-      bg.fillRoundedRect(dx - 44, 272, 88, 142, 4);
-      bg.lineStyle(2, 0x323a52, 1);
-      bg.strokeRoundedRect(dx - 36, 280, 72, 126, 3);
-    }
-    // 비상구 표시등
-    bg.fillStyle(0x143324, 1);
-    bg.fillRoundedRect(322, 218, 76, 34, 4);
-    bg.fillStyle(0x4ecca3, 0.9);
-    bg.fillRoundedRect(328, 224, 64, 22, 3);
-    // 복도-실내 경계 단차 + 실내 벽
-    bg.fillStyle(0x101420, 1);
-    bg.fillRect(0, 414, GAME_WIDTH, 10);
-    bg.fillGradientStyle(0x353b52, 0x353b52, 0x2b3044, 0x2b3044, 1);
-    bg.fillRect(0, 424, GAME_WIDTH, 950 - 424);
-    bg.lineStyle(2, 0xffffff, 0.05);
-    for (let y = 470; y < 950; y += 75) bg.lineBetween(0, y, GAME_WIDTH, y);
-    // 바닥
-    bg.fillGradientStyle(0x4a4a5e, 0x4a4a5e, 0x3a3a4c, 0x3a3a4c, 1);
-    bg.fillRect(0, 950, GAME_WIDTH, GAME_HEIGHT - 950);
-    bg.lineStyle(2, 0xffffff, 0.06);
-    for (let x = 40; x < GAME_WIDTH; x += 120) bg.lineBetween(x, 950, x, GAME_HEIGHT);
-
-    // 세탁실 (왼쪽 알코브) — 세탁기 2대 + 세제 선반
-    const laundry = this.add.graphics();
-    laundry.fillStyle(0x1f2a3c, 1);
-    laundry.fillRoundedRect(40, 500, 270, 430, 14);
-    laundry.lineStyle(3, 0x3d5a7a, 1);
-    laundry.strokeRoundedRect(40, 500, 270, 430, 14);
-    laundry.fillStyle(0x2c3a50, 1);
-    laundry.fillRect(60, 640, 230, 8);
-    const bottles: Array<[number, number]> = [
-      [95, 0x4ecca3],
-      [135, 0xffb400],
-      [175, 0xe94560],
-      [215, 0x4a90d9],
-    ];
-    for (const [bx, bc] of bottles) {
-      laundry.fillStyle(bc, 0.9);
-      laundry.fillRoundedRect(bx, 602, 26, 38, 4);
-      laundry.fillStyle(0x1f2a3c, 1);
-      laundry.fillRect(bx + 7, 596, 12, 8);
-    }
-    drawWasher(this, 115, 920, 1);
-    drawWasher(this, 240, 920, 1);
-    this.add.text(175, 545, '🧺 세탁실 (은신처)', {
-      fontFamily: FONT,
-      fontSize: '26px',
-      color: COLORS.safeCss,
-    }).setOrigin(0.5);
-
-    // 취사구역 (오른쪽) — 카운터 + 전자레인지
-    const counter = this.add.graphics();
-    counter.fillStyle(0x6e5840, 1);
-    counter.fillRect(420, 700, 280, 10);
-    counter.fillStyle(0x5a4632, 1);
-    counter.fillRect(420, 710, 280, 26);
-    counter.fillStyle(0x3c3224, 1);
-    counter.fillRect(432, 736, 256, 120);
-    counter.lineStyle(2, 0x554838, 1);
-    counter.strokeRect(446, 748, 108, 96);
-    counter.strokeRect(566, 748, 108, 96);
-    // 전자레인지 본체
-    counter.fillStyle(0x3a3f4e, 1);
-    counter.fillRoundedRect(450, 580, 210, 120, 10);
-    counter.fillStyle(0x22252f, 1);
-    counter.fillRoundedRect(462, 592, 132, 96, 6);
-    counter.fillStyle(0xffb400, 0.28);
-    counter.fillRoundedRect(462, 592, 132, 96, 6);
-    counter.lineStyle(2, 0x555b70, 1);
-    counter.strokeRoundedRect(462, 592, 132, 96, 6);
-    // 컨트롤 패널 (디지털 표시 + 버튼)
-    counter.fillStyle(0x2b2f3c, 1);
-    counter.fillRoundedRect(602, 592, 48, 96, 4);
-    counter.fillStyle(0x4ecca3, 0.9);
-    counter.fillRect(608, 600, 36, 14);
-    counter.fillStyle(0x555b70, 1);
-    for (let i = 0; i < 3; i++) counter.fillCircle(626, 638 + i * 18, 6);
+    // 심야 세탁실+취사구역 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 문 안
+    addSceneBg(this, 'bg_micro');
     // 조리 중에만 켜지는 내부 조명 (창 안쪽 따뜻한 빛 + 주변 은은한 글로우)
     this.ovenLight = this.add.graphics().setVisible(false);
     this.ovenLight.fillStyle(0xffe9b0, 0.18);
@@ -144,7 +61,6 @@ export class MicrowaveScene extends BaseMainScene {
     this.ovenLight.fillStyle(0xffd98a, 0.6);
     this.ovenLight.fillRoundedRect(464, 594, 128, 92, 6);
     this.add.text(530, 640, '🍜', { fontFamily: FONT, fontSize: '48px' }).setOrigin(0.5);
-    drawAreaSign(this, 555, 538, '취사구역');
     addVignette(this, 0.3);
 
     // 조리 게이지
