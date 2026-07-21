@@ -4,7 +4,7 @@ import { audio } from '../../core/AudioManager';
 import { Button } from '../../ui/Button';
 import { Cadet } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
-import { chance, randFloat } from '../../utils/rng';
+
 import { BaseMainScene } from './BaseMainScene';
 
 type Zone = 'laundry' | 'micro';
@@ -15,25 +15,32 @@ type Zone = 'laundry' | 'micro';
  * 그래서 가까이 있을수록 몸이 아래로 길게 뻗어 화면 밖으로 나가고(= 상반신만 보임),
  * 멀리 있을수록 작아진다. 이 규칙으로 크기를 정하면 발이 바닥에 붙는다.
  */
-const HORIZON = 550;
 /**
- * 배경(bg_micro)을 **좌우반전**했다.
- * 전에는 복도가 내가 서 있는 쪽으로 뻗어 있어, 다가오는 훈육관이 내 등에 가려 안 보였다.
- * 이제 복도는 내 반대편으로 뻗고, 아래 x좌표는 전부 화면 중앙 기준으로 뒤집은 값이다
- * (x' = GAME_WIDTH − x).
+ * 배경(bg_micro)을 **좌우반전**했다 — 복도가 화면 왼쪽 위로 뻗어, 다가오는 훈육관이
+ * 오른쪽에 선 내 등에 가리지 않는다. 아래 좌표는 전부 반전된 배경 기준의 실측값이다.
  */
-/** 전자레인지 (배경 픽셀에서 실측한 밝은 몸체 영역의 중심) */
-const OVEN_X = GAME_WIDTH - 461;
-const OVEN_Y = 924;
-/** 세탁실 문 — 중심 x, 문턱(바닥) y, 문 높이 */
+/** 복도 소실점(먼 끝) 높이 — 여기 선 사람은 키가 0에 수렴한다 */
+const HORIZON = 470;
+/** 전자레인지 유리창(어두운 문)의 실측 사각 — 조리 불빛을 여기에 정확히 얹는다 */
+const OVEN_WIN = { x: 286, y: 860, w: 148, h: 148 } as const;
+const OVEN_X = OVEN_WIN.x + OVEN_WIN.w / 2;
+const OVEN_Y = OVEN_WIN.y + OVEN_WIN.h / 2;
+/** 세탁실 문 — 중심 x, 문턱(바닥) y, 문 높이 (반전 배경에서 오른쪽) */
 const DOOR_X = GAME_WIDTH - 113;
 const DOOR_FLOOR_Y = 1092;
 const DOOR_H = 724;
-/** 전자레인지 앞: 카메라 코앞이라 뒷모습 상반신만 화면에 들어온다 */
-const NEAR = { x: GAME_WIDTH - 618, y: 1162, scale: 3.4 } as const;
+/** 전자레인지 우측 앞: 카메라 코앞이라 뒷모습 상반신만 화면에 들어온다 */
+const NEAR = { x: 560, y: 1178, scale: 3.4 } as const;
 /** 세탁실 문 안: 문 높이의 약 80%를 채우는 크기로 쏙 들어간다 */
 const HIDE_SCALE = (DOOR_H * 0.8) / 300;
 const HIDE = { x: DOOR_X, y: DOOR_FLOOR_Y - 120 * HIDE_SCALE, scale: HIDE_SCALE } as const;
+
+/**
+ * 훈육관이 따라오는 복도 경로 — 소실점 쪽 먼 끝(작게)에서 근점(크게)까지의 두 발끝점.
+ * 배경 격자에서 실측했다. 이 두 점을 잇는 직선 위를 걸으므로 발이 바닥에서 뜨지 않는다.
+ */
+const DUTY_FAR = { x: 96, y: 512 } as const;
+const DUTY_NEAR = { x: 168, y: 782 } as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -83,11 +90,20 @@ export class MicrowaveScene extends BaseMainScene {
     // 심야 복도 배경 (실제 사진 기반) — 전자레인지는 복도, 세탁실은 왼쪽 문 안.
     // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 '세탁실' 문과 복도 끝을 함께 담는다.
     addSceneBg(this, 'bg_micro').x -= 80;
-    // 조리 중에만 켜지는 내부 조명 — 창 안쪽이 따뜻하게 밝아지는 것만으로 충분하다
-    // (주변 원형 글로우와 🍜 이모티콘은 과해서 걷어냈다)
+    // 조리 중에만 켜지는 내부 조명 — 전자레인지 **유리창 사각(OVEN_WIN)에 정확히** 얹는다.
+    // (예전엔 OVEN_X 오프셋으로 그려 창과 어긋났다)
     this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffd98a, 0.5);
-    this.ovenLight.fillRoundedRect(OVEN_X - 30, OVEN_Y - 80, 235, 165, 10);
+    this.ovenLight.fillStyle(0xffe08a, 0.55);
+    this.ovenLight.fillRoundedRect(OVEN_WIN.x, OVEN_WIN.y, OVEN_WIN.w, OVEN_WIN.h, 10);
+    // 창 가운데가 조금 더 밝게
+    this.ovenLight.fillStyle(0xfff0c0, 0.4);
+    this.ovenLight.fillRoundedRect(
+      OVEN_WIN.x + OVEN_WIN.w * 0.16,
+      OVEN_WIN.y + OVEN_WIN.h * 0.16,
+      OVEN_WIN.w * 0.68,
+      OVEN_WIN.h * 0.68,
+      8
+    );
     addVignette(this, 0.3);
 
     // 조리 게이지
@@ -132,7 +148,7 @@ export class MicrowaveScene extends BaseMainScene {
       .setVisible(false);
 
     // 전투복+전투모+훈육 완장의 당직훈육관
-    this.senior = new Cadet(this, 430, 700, 'duty');
+    this.senior = new Cadet(this, DUTY_FAR.x, 700, 'duty');
     this.senior.setScale(0.3).setVisible(false).setDepth(6);
 
     // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신만 보인다
@@ -169,17 +185,20 @@ export class MicrowaveScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        // 복도 저 끝에서 모습을 드러내 이쪽으로 걸어온다 — 멀수록 작고, 다가올수록 커진다
-        const startFeet = randFloat(672, 700);
-        const endFeet = chance(0.35) ? randFloat(980, 1060) : randFloat(850, 930);
+        // 복도(좌측 상단)를 **정확히 따라** 걸어 내려온다.
+        // DUTY_FAR→DUTY_NEAR 직선 위를 t로 움직이므로 발이 바닥에서 뜨지 않는다.
+        // 근점은 매번 조금씩 달라 조우가 단조롭지 않게 한다.
+        const tEnd = 0.82 + Math.random() * 0.18;
+        const nx = Phaser.Math.Linear(DUTY_FAR.x, DUTY_NEAR.x, tEnd);
+        const nFeet = Phaser.Math.Linear(DUTY_FAR.y, DUTY_NEAR.y, tEnd);
         this.senior.setVisible(true).setMotion('walk');
-        this.placeOnFloor(this.senior, randFloat(400, 470), startFeet);
+        this.placeOnFloor(this.senior, DUTY_FAR.x, DUTY_FAR.y);
         this.tweens.killTweensOf(this.senior);
         this.tweens.add({
           targets: this.senior,
-          x: randFloat(330, 430),
-          y: endFeet - 120 * this.scaleAt(endFeet),
-          scale: this.scaleAt(endFeet),
+          x: nx,
+          y: nFeet - 120 * this.scaleAt(nFeet),
+          scale: this.scaleAt(nFeet),
           duration: Q3_MICROWAVE.reactMs(this.day) * 1.6,
           ease: 'Sine.easeIn',
         });
@@ -219,7 +238,7 @@ export class MicrowaveScene extends BaseMainScene {
 
   /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점(HORIZON) 근처에 온다 */
   private scaleAt(feetY: number): number {
-    return Math.max(0.18, (feetY - HORIZON) / 300);
+    return Math.max(0.12, (feetY - HORIZON) / 340);
   }
 
   /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝) */
