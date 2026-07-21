@@ -358,6 +358,14 @@ export class HallwayScene extends BaseMainScene {
       onComplete: () => v.cadet.destroy(),
     });
     if (this.finished || this.cleared >= this.target) return;
+    // 스폰 예산(target+3)을 다 썼는데 목표 미달 — 더 올 사람이 없어 판이 영원히
+    // 멈추는 소프트락이 되므로, 실수 누적 실패로 그 자리에서 종결한다
+    if (this.spawned >= this.target + 3) {
+      this.time.delayedCall(600, () =>
+        this.fail('실수가 너무 잦았다... 복도에 소문이 파다하게 퍼졌다.')
+      );
+      return;
+    }
     this.time.delayedCall(Q2_HALLWAY.gapMs(this.day), () => this.spawnNext());
   }
 

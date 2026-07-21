@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { bgmTempo, COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, QUEST_META } from '../config';
+import { bgmTempo, COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, pace, QUEST_META } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
 import { questManager } from '../core/QuestManager';
@@ -52,8 +52,10 @@ export class DayIntroScene extends Phaser.Scene {
       ease: 'Back.easeOut',
     });
 
+    // 일차가 오를수록 판이 빨라진다는 걸 숫자로 체감시킨다
+    const speedLabel = day >= 2 ? ` · ⚡ 속도 x${pace(day).toFixed(2)}` : '';
     this.add
-      .text(GAME_WIDTH / 2, 350, 'HP 100 회복', {
+      .text(GAME_WIDTH / 2, 350, `HP 100 회복${speedLabel}`, {
         fontFamily: FONT,
         fontSize: '26px',
         color: COLORS.safeCss,
@@ -102,13 +104,13 @@ export class DayIntroScene extends Phaser.Scene {
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
-    this.time.delayedCall(1150, () => {
+    this.time.delayedCall(900, () => {
       if (this.started) return;
       goText.setText('GO!').setColor(COLORS.accentCss);
       audio.chime();
       this.tweens.add({ targets: goText, scale: 1.5, duration: 180, ease: 'Back.easeOut' });
     });
-    this.time.delayedCall(1650, () => this.startQuest(questId));
+    this.time.delayedCall(1300, () => this.startQuest(questId));
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 50, '탭하면 바로 시작', {

@@ -87,7 +87,7 @@ export class ResultScene extends Phaser.Scene {
 
     audio.chime();
     vibrate(HAPTIC.revive);
-    this.time.delayedCall(1800, advance);
+    this.time.delayedCall(1300, advance);
     this.input.once('pointerdown', advance);
   }
 
@@ -148,7 +148,7 @@ export class ResultScene extends Phaser.Scene {
     });
 
     // 리듬 유지 — 탭 없이 자동으로 다음 날로 (탭하면 즉시)
-    this.time.delayedCall(1200, advance);
+    this.time.delayedCall(850, advance);
     this.input.once('pointerdown', advance);
   }
 

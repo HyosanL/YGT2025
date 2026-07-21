@@ -118,7 +118,7 @@ export abstract class BaseMainScene extends Phaser.Scene {
         })
         .setOrigin(0.5, 0)
         .setDepth(1000);
-    } else {
+    } else if (this.allowsMini()) {
       this.scheduleMiniQuests();
     }
 
@@ -140,6 +140,14 @@ export abstract class BaseMainScene extends Phaser.Scene {
 
   /** 이 퀘스트가 HP를 쓰는가 — false면 HP 바를 감추고 갱신도 하지 않는다 */
   protected usesHp(): boolean {
+    return true;
+  }
+
+  /**
+   * 이 퀘스트에 미니 퀘스트가 난입할 수 있는가 —
+   * 밀리초 판정이 도는 리듬게임(벽치기)은 인터럽트가 억울한 미스를 만들어 끈다.
+   */
+  protected allowsMini(): boolean {
     return true;
   }
 

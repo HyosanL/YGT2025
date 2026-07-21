@@ -23,7 +23,7 @@ function computeGameHeight(): number {
 export const GAME_HEIGHT = computeGameHeight();
 
 export const HP_MAX = 100;
-/** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 도박 성공으로 채운다 */
+/** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 노미스 클리어로 채운다 */
 export const LIVES_MAX = 3;
 /** 하트 1칸의 내부 단위 수 (⅕ 단위 — 미니 퀘스트 성공 보상이 1단위) */
 export const LIFE_UNITS = 5;
@@ -116,7 +116,7 @@ export function pace(day: number): number {
  * 물리적으로 불가능해지는 것은 다르다.
  */
 export const REACT_FLOOR_MS = 400;
-/** 리듬/판정창의 절대 하한 (ms) */
+/** 리듬 판정창 전체 폭(±반경×2)의 절대 하한 (ms) — 모바일 터치 지연 감안 */
 export const HIT_FLOOR_MS = 320;
 
 /** 선배 등장 리듬 설계값 (BaseMainScene의 SeniorTempo와 동일한 모양) */
@@ -168,19 +168,19 @@ export const MINI = {
   /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
   failLifeUnits: 5,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
-  firstDelayMs: [1500, 3000] as const,
+  firstDelayMs: [1200, 2500] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */
-  secondDelayMs: [2500, 4500] as const,
+  secondDelayMs: [2000, 3500] as const,
 } as const;
 
 // ─────────────────────────────────────────────
 // Q1. 샤워장에서 몰래 노래 틀기
 // ─────────────────────────────────────────────
 export const Q1_SHOWER = {
-  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 판당 12~14초, 선배 조우 4~5회 */
-  songMs: 8000,
-  /** 샤워 제한 시간 — 조우가 잦아진 만큼 시뮬레이션 기준 여유 ~2초 확보 (운빨 사망 방지) */
-  showerTimeMs: (day: number): number => Math.round(lerp(14500, 16500, difficulty(day))),
+  /** 노래 총 재생 시간 (재생 중일 때만 진행됨) — 판당 10~12초, 선배 조우 3~4회 */
+  songMs: 7000,
+  /** 샤워 제한 시간 — 점유율 상한(0.45) 기준 필요시간 12.7초 + 여유 (운빨 사망 방지) */
+  showerTimeMs: (day: number): number => Math.round(lerp(13000, 15000, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 버튼을 누를 수 있는 반응 유예 시간
    *  (모바일 터치 반응 한계 고려 — 커튼 등장 보정 후에도 360ms 밑으로 내려가지 않게) */
   reactMs: (day: number): number => paced(760, day, REACT_FLOOR_MS),
@@ -200,17 +200,18 @@ export const Q1_SHOWER = {
 // 제한시간 안에 올바른 응대를 골라야 한다. 후배 인사만 카운트.
 // ─────────────────────────────────────────────
 export const Q2_HALLWAY = {
-  /** 제대로 응대해야 하는 인원 수 */
-  targetCount: (day: number): number => Math.min(10, 5 + Math.floor((day - 1) / 3)),
+  /** 제대로 응대해야 하는 인원 수 — 한 판을 짧게, 대신 템포로 조인다 */
+  targetCount: (day: number): number => Math.min(9, 4 + Math.floor((day - 1) / 3)),
   /**
    * 한 사람이 복도 저 끝에서 내 앞까지 걸어오는 시간.
    * 이 시간이 곧 견장을 읽고 판단할 시간이라 일차가 오를수록 짧아진다(지수 가속).
    */
-  approachMs: (day: number): number => paced(2400, day, 1150),
+  // 하한 1150은 후반 선배 경례 데드라인의 반응 예산 — 여기서 더 줄이면 인간 한계를 넘는다
+  approachMs: (day: number): number => paced(2100, day, 1150),
   /** 문이 열리고 복도로 나와 몸을 돌리기까지 (이 동안은 아직 다가오지 않는다) */
   stepOutMs: 420,
   /** 앞사람을 처리하고 다음 사람 문이 열리기까지의 텀 — 한 명씩 순서대로 상대한다 */
-  gapMs: (day: number): number => paced(420, day, 180),
+  gapMs: (day: number): number => paced(360, day, 150),
   /**
    * **선배 경례 데드라인** — 걸어오는 여정의 이 비율을 넘기기 전에 내가 먼저
    * 경례해야 한다(0=문 앞, 1=내 앞 도착). 늦으면 그 자리에서 잡힌다.
@@ -232,8 +233,8 @@ export const Q2_HALLWAY = {
 // Q3. 몰래 결식하고 전자레인지 돌리기
 // ─────────────────────────────────────────────
 export const Q3_MICROWAVE = {
-  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 11~16초, 선배 조우 3~5회 */
-  cookMs: (day: number): number => Math.round(lerp(5500, 7500, difficulty(day))),
+  /** 조리 완료까지 전자레인지 앞 체류 필요 시간 — 판당 9~13초, 선배 조우 3~4회 */
+  cookMs: (day: number): number => Math.round(lerp(4600, 6200, difficulty(day))),
   /** 선배는 예고 없이 등장한다. 등장 순간부터 세탁실로 피할 수 있는 반응 유예 시간 */
   reactMs: (day: number): number => paced(820, day, REACT_FLOOR_MS),
   /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
@@ -247,15 +248,15 @@ export const Q3_MICROWAVE = {
   /** 완전소등까지 제한시간 — 소등 전에 "삐-"까지 끝내야 한다.
    *  숨는 시간(선배 조우 기대값)을 감안해 조리 시간 대비 넉넉하되,
    *  세탁실 캠핑은 반드시 실패하는 수준으로 설정 */
-  lightsOutMs: (day: number): number => tight(lerp(13500, 20000, difficulty(day))),
+  lightsOutMs: (day: number): number => tight(lerp(11500, 16500, difficulty(day))),
 } as const;
 
 // ─────────────────────────────────────────────
 // Q4. 태권도장까지 가기 (탑다운 잠입 — 선배 시선은 CCTV처럼 회전한다)
 // ─────────────────────────────────────────────
 export const Q4_WALK = {
-  /** 도착까지 총 거리 (월드 px) */
-  distancePx: (day: number): number => Math.round(lerp(3700, 5100, difficulty(day))),
+  /** 도착까지 총 거리 (월드 px) — 판당 9~13초, 짧고 굵게 */
+  distancePx: (day: number): number => Math.round(lerp(2900, 4200, difficulty(day))),
   /**
    * 이동 속도 (px/s). 전체적으로 느릿하다는 피드백에 맞춰 올렸다.
    * 일차가 오를수록 판이 빨라지지만, 속도가 오르면 같은 거리를 더 짧게 노출되므로
@@ -305,13 +306,31 @@ export const Q4_WALK = {
 } as const;
 
 // ─────────────────────────────────────────────
-// Q5. 옆방 벽 치기 — 선택 도박: 치면 목숨 +1 or 즉사, 안 치면 그냥 하루가 간다
+// Q5. 옆방 벽 치기 — 리듬게임: 옆방 수다의 박자에 맞춰 벽을 쳐서 조용히 시킨다.
+// 👊 노트가 판정 링에 닿는 순간 탭. 박자가 어긋난 쿵 소리(미스)가 쌓이면
+// 소음이 복도까지 울려 순찰 선배에게 발각된다.
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 벽을 쳤을 때 벽 너머에 선배가 있을 확률 — 목숨 +1 도박의 리스크 */
-  seniorChance: (day: number): number => Math.min(0.55, harder(0.28 + day * 0.012)),
-  /** 결과 공개 전 정적 시간 범위 (ms) */
-  suspenseMsRange: [400, 1000] as const,
+  /** 박자 간격 (ms) — 일차가 오를수록 빨라진다 (~94 → ~150 BPM) */
+  beatMs: (day: number): number => paced(640, day, 400),
+  /** 노트 수 — 일차가 오를수록 늘어난다 (판당 6~10초) */
+  noteCount: (day: number): number =>
+    Math.min(14, 8 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY)),
+  /** PERFECT 판정 반경 (±ms) */
+  perfectMs: 90,
+  /** GOOD 판정 반경 (±ms) — 이 밖은 미스. 하한은 판정창 전체 폭 기준 HIT_FLOOR_MS */
+  goodMs: (day: number): number => paced(200, day, HIT_FLOOR_MS / 2),
+  /** 미스(놓침·헛타) 허용 — 이 횟수를 채우는 순간 발각 */
+  maxMiss: 3,
+  /** 반박(엇박) 노트가 따라붙을 확률 — 후반의 리듬 난이도 */
+  offbeatChance: (day: number): number =>
+    Math.min(0.5, 0.15 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.05),
+  /** 쉼표(비트 건너뛰기) 확률 — 단조로운 메트로놈이 되지 않게 리듬을 만든다 */
+  restChance: 0.22,
+  /** 노트가 화면 오른쪽에서 판정 링까지 흘러오는 시간 (ms) — 고정이라 읽기 쉽다 */
+  approachMs: 1400,
+  /** 노미스(풀콤보) 보상 — 목숨 내부 단위 (5 = 1칸) */
+  fullComboLifeUnits: 5,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -571,7 +590,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   wallpunch: {
     title: '옆방(1학년 방) 벽 치기',
     emoji: '💥',
-    tip: '치면 도박 — 무사하면 ❤️ 목숨 +1, 선배가 있었으면 끝장. 참고 자도 된다.',
+    tip: '👊가 링에 닿는 순간 화면 아무 데나 탭! 미스 3번이면 발각 — 노미스면 ❤️ +1',
   },
 };
 
