@@ -20,27 +20,33 @@ type Zone = 'laundry' | 'micro';
  * 오른쪽에 선 내 등에 가리지 않는다. 아래 좌표는 전부 반전된 배경 기준의 실측값이다.
  */
 /** 복도 소실점(먼 끝) 높이 — 여기 선 사람은 키가 0에 수렴한다 */
-const HORIZON = 470;
+const HORIZON = 390;
 /** 전자레인지 유리창(어두운 문)의 실측 사각 — 조리 불빛을 여기에 정확히 얹는다 */
-const OVEN_WIN = { x: 286, y: 860, w: 148, h: 148 } as const;
+const OVEN_WIN = { x: 262, y: 798, w: 196, h: 150 } as const;
 const OVEN_X = OVEN_WIN.x + OVEN_WIN.w / 2;
 const OVEN_Y = OVEN_WIN.y + OVEN_WIN.h / 2;
-/** 세탁실 문 — 중심 x, 문턱(바닥) y, 문 높이 (반전 배경에서 오른쪽) */
-const DOOR_X = GAME_WIDTH - 113;
-const DOOR_FLOOR_Y = 1092;
-const DOOR_H = 724;
+/**
+ * 세탁실 '열린 문' — 오른쪽 벽에 그려 넣는 어두운 입구.
+ * 만화 배경엔 세탁실 내부가 없어, 숨을 자리를 코드로 만들어 준다.
+ * 조리 중에도 보여 "여기로 숨는다"를 알려주고, 숨으면 이 안으로 쏙 들어간다.
+ */
+const DOORWAY = { x: 665, y: 600, w: 110, h: 430 } as const;
 /** 전자레인지 우측 앞: 카메라 코앞이라 뒷모습 상반신만 화면에 들어온다 */
-const NEAR = { x: 560, y: 1178, scale: 3.4 } as const;
-/** 세탁실 문 안: 문 높이의 약 80%를 채우는 크기로 쏙 들어간다 */
-const HIDE_SCALE = (DOOR_H * 0.8) / 300;
-const HIDE = { x: DOOR_X, y: DOOR_FLOOR_Y - 120 * HIDE_SCALE, scale: HIDE_SCALE } as const;
+const NEAR = { x: 534, y: 925, scale: 1.6 } as const;
+/** 세탁실 문 안: 어두운 입구 높이의 약 85%를 채우며 몸을 접어 넣는다 */
+const HIDE_SCALE = (DOORWAY.h * 0.85) / 300;
+const HIDE = {
+  x: DOORWAY.x,
+  y: DOORWAY.y + DOORWAY.h - 8 - 120 * HIDE_SCALE,
+  scale: HIDE_SCALE,
+} as const;
 
 /**
  * 훈육관이 따라오는 복도 경로 — 소실점 쪽 먼 끝(작게)에서 근점(크게)까지의 두 발끝점.
  * 배경 격자에서 실측했다. 이 두 점을 잇는 직선 위를 걸으므로 발이 바닥에서 뜨지 않는다.
  */
-const DUTY_FAR = { x: 96, y: 512 } as const;
-const DUTY_NEAR = { x: 168, y: 782 } as const;
+const DUTY_FAR = { x: 140, y: 540 } as const;
+const DUTY_NEAR = { x: 178, y: 710 } as const;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -93,17 +99,36 @@ export class MicrowaveScene extends BaseMainScene {
     // 조리 중에만 켜지는 내부 조명 — 전자레인지 **유리창 사각(OVEN_WIN)에 정확히** 얹는다.
     // (예전엔 OVEN_X 오프셋으로 그려 창과 어긋났다)
     this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffe08a, 0.55);
-    this.ovenLight.fillRoundedRect(OVEN_WIN.x, OVEN_WIN.y, OVEN_WIN.w, OVEN_WIN.h, 10);
-    // 창 가운데가 조금 더 밝게
-    this.ovenLight.fillStyle(0xfff0c0, 0.4);
+    // 유리창 사각(OVEN_WIN)을 꽉 채운다 — 창 전체가 따뜻하게 빛난다
+    this.ovenLight.fillStyle(0xffdf85, 0.62);
+    this.ovenLight.fillRoundedRect(OVEN_WIN.x, OVEN_WIN.y, OVEN_WIN.w, OVEN_WIN.h, 6);
+    // 가운데를 한 겹 더 밝게
+    this.ovenLight.fillStyle(0xfff4cf, 0.5);
     this.ovenLight.fillRoundedRect(
-      OVEN_WIN.x + OVEN_WIN.w * 0.16,
-      OVEN_WIN.y + OVEN_WIN.h * 0.16,
-      OVEN_WIN.w * 0.68,
-      OVEN_WIN.h * 0.68,
-      8
+      OVEN_WIN.x + OVEN_WIN.w * 0.12,
+      OVEN_WIN.y + OVEN_WIN.h * 0.12,
+      OVEN_WIN.w * 0.76,
+      OVEN_WIN.h * 0.76,
+      5
     );
+    // 세탁실 열린 문 — 오른쪽 벽의 어두운 입구 (숨을 자리). 문틀 + 캄캄한 안쪽.
+    const doorG = this.add.graphics().setDepth(4);
+    doorG.fillStyle(0x0d0f14, 0.96);
+    doorG.fillRect(DOORWAY.x - DOORWAY.w / 2, DOORWAY.y, DOORWAY.w, DOORWAY.h);
+    doorG.lineStyle(6, 0x14141a, 1);
+    doorG.strokeRect(DOORWAY.x - DOORWAY.w / 2, DOORWAY.y, DOORWAY.w, DOORWAY.h);
+    // 문 옆 작은 명패
+    this.add
+      .text(DOORWAY.x, DOORWAY.y - 22, '세탁실', {
+        fontFamily: FONT,
+        fontSize: '20px',
+        color: '#9aa6bd',
+        stroke: '#14141a',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(5);
+
     addVignette(this, 0.3);
 
     // 조리 게이지
@@ -238,7 +263,7 @@ export class MicrowaveScene extends BaseMainScene {
 
   /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점(HORIZON) 근처에 온다 */
   private scaleAt(feetY: number): number {
-    return Math.max(0.12, (feetY - HORIZON) / 340);
+    return Math.max(0.12, (feetY - HORIZON) / 360);
   }
 
   /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝) */
