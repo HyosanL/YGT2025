@@ -206,18 +206,19 @@ export const Q2_HALLWAY = {
    * 한 사람이 복도 저 끝에서 내 앞까지 걸어오는 시간.
    * 이 시간이 곧 견장을 읽고 판단할 시간이라 일차가 오를수록 짧아진다(지수 가속).
    */
-  // 하한 1150은 후반 선배 경례 데드라인의 반응 예산 — 여기서 더 줄이면 인간 한계를 넘는다
-  approachMs: (day: number): number => paced(2100, day, 1150),
+  // 하한 1100은 여정시간 ±15% 흔들림까지 감안한 후반 선배 데드라인 반응 예산의 마지노선
+  approachMs: (day: number): number => paced(1600, day, 1100),
   /** 문이 열리고 복도로 나와 몸을 돌리기까지 (이 동안은 아직 다가오지 않는다) */
-  stepOutMs: 420,
-  /** 앞사람을 처리하고 다음 사람 문이 열리기까지의 텀 — 한 명씩 순서대로 상대한다 */
-  gapMs: (day: number): number => paced(360, day, 150),
+  stepOutMs: 300,
+  /** 앞사람을 처리하고 다음 사람 문이 열리기까지의 텀 — 한 명씩 컨베이어처럼 */
+  gapMs: (day: number): number => paced(300, day, 130),
   /**
    * **선배 경례 데드라인** — 걸어오는 여정의 이 비율을 넘기기 전에 내가 먼저
    * 경례해야 한다(0=문 앞, 1=내 앞 도착). 늦으면 그 자리에서 잡힌다.
-   * 1일차 0.78(거의 다 와도 됨) → 후반 0.40(중간쯤에서 미리 알아봐야 함).
+   * 선은 멀찍이(복도 안쪽) 긋고 대신 접근을 빠르게 — 보자마자 판독하는 게임.
+   * 후반 하한 0.42는 접근 하한 1100ms·여정 -15% 흔들림 최악에도 예산 ~390ms를 지키는 선.
    */
-  saluteDeadline: (day: number): number => lerp(0.78, 0.4, difficulty(day)),
+  saluteDeadline: (day: number): number => lerp(0.64, 0.42, difficulty(day)),
   /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
   seniorShare: (day: number): number => Math.min(0.42, 0.18 + day * 0.014),
   /** 동기(2줄) 출현 비율 */
@@ -306,31 +307,35 @@ export const Q4_WALK = {
 } as const;
 
 // ─────────────────────────────────────────────
-// Q5. 옆방 벽 치기 — 리듬게임: 옆방 수다의 박자에 맞춰 벽을 쳐서 조용히 시킨다.
-// 👊 노트가 판정 링에 닿는 순간 탭. 박자가 어긋난 쿵 소리(미스)가 쌓이면
-// 소음이 복도까지 울려 순찰 선배에게 발각된다.
+// Q5. 옆방 벽 치기 — 샤워장 노래에 맞춘 리듬게임 (자동 시작).
+// 👊 노트가 벽의 판정 링(위/중간/아래)에 닿는 순간 그 높이를 탭.
+// 박자가 어긋난 쿵 소리(미스)가 쌓이면 소음이 복도까지 울려 발각된다.
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 박자 간격 (ms) — 일차가 오를수록 빨라진다 (~94 → ~150 BPM) */
-  beatMs: (day: number): number => paced(640, day, 400),
-  /** 노트 수 — 일차가 오를수록 늘어난다 (판당 6~10초) */
+  /** 박자 간격 (ms) — 샤워장 노래(칩튠 스텝 190ms)의 2스텝 = 380ms (~158 BPM) 고정 */
+  beatMs: 380,
+  /** 곡의 첫 박 오프셋 (ms) — 칩튠 스케줄러가 재생 시작 +100ms에 첫 스텝을 놓는다 */
+  songLeadMs: 100,
+  /** 노트 수 — 일차가 오를수록 늘어난다 (판당 5~9초) */
   noteCount: (day: number): number =>
-    Math.min(14, 8 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY)),
+    Math.min(18, 10 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 2),
   /** PERFECT 판정 반경 (±ms) */
   perfectMs: 90,
-  /** GOOD 판정 반경 (±ms) — 이 밖은 미스. 하한은 판정창 전체 폭 기준 HIT_FLOOR_MS */
-  goodMs: (day: number): number => paced(200, day, HIT_FLOOR_MS / 2),
-  /** 미스(놓침·헛타) 허용 — 이 횟수를 채우는 순간 발각 */
+  /** GOOD 판정 반경 (±ms) — 이 밖은 미스. 판정창 전체 폭 = HIT_FLOOR_MS */
+  goodMs: HIT_FLOOR_MS / 2,
+  /** 미스(놓침·헛타·자리 틀림) 허용 — 이 횟수를 채우는 순간 발각 */
   maxMiss: 3,
   /** 반박(엇박) 노트가 따라붙을 확률 — 후반의 리듬 난이도 */
   offbeatChance: (day: number): number =>
-    Math.min(0.5, 0.15 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.05),
+    Math.min(0.5, 0.12 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.06),
   /** 쉼표(비트 건너뛰기) 확률 — 단조로운 메트로놈이 되지 않게 리듬을 만든다 */
-  restChance: 0.22,
+  restChance: 0.25,
   /** 노트가 화면 오른쪽에서 판정 링까지 흘러오는 시간 (ms) — 고정이라 읽기 쉽다 */
-  approachMs: 1400,
+  approachMs: 1150,
   /** 노미스(풀콤보) 보상 — 목숨 내부 단위 (5 = 1칸) */
   fullComboLifeUnits: 5,
+  /** 벽 타격 지점(레인) 수 — 해금 직후 2개, 이틀 뒤부터 3개 (위/중간/아래) */
+  laneCount: (day: number): number => (day >= WALLPUNCH_UNLOCK_DAY + 2 ? 3 : 2),
 } as const;
 
 // ─────────────────────────────────────────────
@@ -590,7 +595,7 @@ export const QUEST_META: Record<MainQuestId, { title: string; emoji: string; tip
   wallpunch: {
     title: '옆방(1학년 방) 벽 치기',
     emoji: '💥',
-    tip: '👊가 링에 닿는 순간 화면 아무 데나 탭! 미스 3번이면 발각 — 노미스면 ❤️ +1',
+    tip: '노래 박자에 맞춰 👊가 링에 닿는 순간, 그 높이를 탭! 미스 3번=발각 · 노미스=❤️+1',
   },
 };
 

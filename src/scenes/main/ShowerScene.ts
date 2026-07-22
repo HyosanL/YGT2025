@@ -8,20 +8,22 @@ import { randFloat } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 /**
- * 배경(bg_shower)을 얹은 뒤의 실제 좌표.
+ * 배경(bg_shower, 원본 900×900) 위의 실측 좌표 — 전부 **원본 픽셀** 기준이고,
+ * create()에서 cover 스케일을 반영해 화면 좌표로 변환한다.
  * 사람 키는 발끝 y 하나로 정해진다 — 멀수록(위) 작고 가까울수록(아래) 크다.
- * 이 규칙으로만 배치하면 캐릭터가 바닥에서 뜨는 일이 없다.
  */
-const heightAt = (feetY: number): number => Math.max(90, feetY - 500);
+const SRC = {
+  cx: 450,
+  cy: 450,
+  /** 카메라 눈높이(원근 기준선) — heightAt의 0점 */
+  eyeY: 352,
+  /** 내가 샤워 중인 자리 (마지막 샤워칸 옆 열린 바닥, 발끝) */
+  me: { x: 390, feetY: 700 },
+  /** 선배가 밀고 들어와 멈추는 자리 (발끝) */
+  seniorIn: { x: 580, feetY: 705 },
+} as const;
 /** 선배는 언제나 화면 오른쪽 문에서 밀고 나온다 — 화면 밖 대기 위치 */
 const SENIOR_OFF_X = GAME_WIDTH + 190;
-/** 밀고 나와 멈추는 위치 (코앞) */
-const SENIOR_IN_X = 545;
-const SENIOR_FEET = 985;
-/** 내가 샤워 중인 자리 (샤워기 바로 아래) */
-const ME_X = 248;
-/** 발끝 위치 — 조작 버튼(하단 265px)을 밟지 않도록 위로 올렸다 */
-const ME_FEET = 940;
 /** 실루엣 크기 보정 — 원근 계산값 그대로면 화면을 너무 차지한다 */
 const ME_SHRINK = 0.78;
 
@@ -43,6 +45,8 @@ export class ShowerScene extends BaseMainScene {
   /** 김에 가려 실루엣만 보이는 나 (전신 캐릭터가 아니라 실루엣 이미지) */
   private me!: Phaser.GameObjects.Image;
   private senior!: Cadet;
+  /** 선배가 밀고 들어와 멈추는 x (배경 매핑값) */
+  private seniorInX = 545;
   private songFill!: Phaser.GameObjects.Graphics;
   private timeFill!: Phaser.GameObjects.Graphics;
   private noteTimer!: Phaser.Time.TimerEvent;
@@ -62,37 +66,49 @@ export class ShowerScene extends BaseMainScene {
     this.songProgressMs = 0;
     this.songMs = Q1_SHOWER.songMs;
 
-    // 샤워장 배경 (생성 이미지)
-    addSceneBg(this, 'bg_shower');
-    this.add.particles(ME_X - 12, 430, '__WHITE', {
+    // 샤워장 배경 — cover 스케일 후 원본 px 좌표를 화면 좌표로 매핑
+    const bg = addSceneBg(this, 'bg_shower');
+    const s = bg.scaleX;
+    const mx = (px: number): number => bg.x + (px - SRC.cx) * s;
+    const my = (py: number): number => bg.y + (py - SRC.cy) * s;
+    const heightAt = (feetY: number): number => Math.max(90, feetY - my(SRC.eyeY));
+
+    const meX = mx(SRC.me.x);
+    const meFeet = my(SRC.me.feetY);
+    const meH = heightAt(meFeet) * ME_SHRINK;
+
+    // 쏟아지는 물줄기 — 머리 위에서 발끝까지
+    this.add.particles(meX - 10, meFeet - meH - 30, '__WHITE', {
       speedY: { min: 300, max: 420 },
       speedX: { min: -20, max: 20 },
       scale: { start: 0.12, end: 0.05 },
       alpha: { start: 0.5, end: 0 },
-      lifespan: 900,
+      lifespan: 1100,
       quantity: 2,
       tint: 0x9ad4f5,
     });
 
     // 나 — 옷을 벗고 씻는 중이라 실루엣만 보인다.
-    // 몸을 가리는 수증기는 에셋 안에 뭉게구름으로 그려져 있다 (코드로 덧그리지 않는다).
-    const meH = heightAt(ME_FEET) * ME_SHRINK;
-    this.me = this.add.image(ME_X, ME_FEET, 'player_shower').setOrigin(0.5, 1).setDepth(6);
+    // 발끝을 실측한 바닥선에 붙이고, 접지 그림자를 깔아 공중에 뜨지 않게 한다.
+    this.add
+      .ellipse(meX, meFeet + 4, meH * 0.42, meH * 0.07, 0x1c4a52, 0.3)
+      .setDepth(5);
+    this.me = this.add.image(meX, meFeet, 'player_shower').setOrigin(0.5, 1).setDepth(6);
     // 두 실루엣의 원본 비율이 달라도 같은 배율을 써야 자세만 바뀌고 덩치는 그대로다
     this.me.setScale(meH / (this.me.height || meH));
     this.tweens.add({
       targets: this.me,
-      y: ME_FEET - 10,
+      y: meFeet - 10,
       duration: 320,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
 
-    // 샤워장 전체에 낀 옅은 김
+    // 샤워장 전체에 낀 옅은 김 — 인물이 서 있는 바닥 높이(배경 매핑)에서 피어오른다
     this.add.particles(0, 0, '__WHITE', {
       x: { min: 40, max: 690 },
-      y: 900,
+      y: { min: my(560), max: my(880) },
       speedY: { min: -18, max: -40 },
       speedX: { min: -8, max: 8 },
       scale: { start: 2.2, end: 3.8 },
@@ -104,8 +120,10 @@ export class ShowerScene extends BaseMainScene {
     addVignette(this, 0.2);
 
     // 선배는 오른쪽 문 밖에 대기하다 밀고 나온다 (크기는 발끝 y로 고정)
-    const seniorScale = heightAt(SENIOR_FEET) / 300;
-    this.senior = new Cadet(this, SENIOR_OFF_X, SENIOR_FEET - 120 * seniorScale, 'senior');
+    const seniorFeet = my(SRC.seniorIn.feetY);
+    const seniorScale = heightAt(seniorFeet) / 300;
+    this.seniorInX = mx(SRC.seniorIn.x);
+    this.senior = new Cadet(this, SENIOR_OFF_X, seniorFeet - 120 * seniorScale, 'senior');
     this.senior.setScale(seniorScale).setVisible(false).setDepth(8);
 
     // 노래 진행 바
@@ -164,14 +182,15 @@ export class ShowerScene extends BaseMainScene {
     this.showerTotalMs = Q1_SHOWER.showerTimeMs(this.day);
     this.showerRemainMs = this.showerTotalMs;
 
-    // 떠다니는 음표 연출
+    // 떠다니는 음표 연출 — 머리 위에서 피어오른다
+    const noteY = meFeet - meH - 20;
     this.noteTimer = this.time.addEvent({
       delay: 500,
       loop: true,
       callback: () => {
         if (this.holding || this.finished) return;
         const note = this.add
-          .text(ME_X + Math.random() * 120 - 60, 560, '♪', {
+          .text(meX + Math.random() * 120 - 60, noteY, '♪', {
             fontFamily: FONT,
             fontSize: '38px',
             color: '#ffd9e2',
@@ -179,7 +198,7 @@ export class ShowerScene extends BaseMainScene {
           .setOrigin(0.5);
         this.tweens.add({
           targets: note,
-          y: 460,
+          y: noteY - 100,
           alpha: 0,
           duration: 1200,
           onComplete: () => note.destroy(),
@@ -205,7 +224,7 @@ export class ShowerScene extends BaseMainScene {
         this.senior.setX(SENIOR_OFF_X).setVisible(true).setMotion('idle');
         this.tweens.add({
           targets: this.senior,
-          x: SENIOR_IN_X + randFloat(-18, 18),
+          x: this.seniorInX + randFloat(-18, 18),
           duration: 260,
           ease: 'Cubic.easeOut',
         });

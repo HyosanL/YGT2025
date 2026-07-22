@@ -2,11 +2,11 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH, Q5_WALLPUNCH } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
-import { Button, textChip } from '../../ui/Button';
+import { textChip } from '../../ui/Button';
 import { Cadet, speechBubble } from '../../ui/Characters';
 import { addSceneBg, addVignette } from '../../ui/Scenery';
 import { HAPTIC, vibrate } from '../../utils/haptics';
-import { chance, pick, randFloat } from '../../utils/rng';
+import { chance, pick, randFloat, randInt } from '../../utils/rng';
 import { BaseMainScene } from './BaseMainScene';
 
 /**
@@ -15,15 +15,16 @@ import { BaseMainScene } from './BaseMainScene';
  */
 const WALL_X = 150;
 
-/** 판정 링 위치 — 노트가 여기 닿는 순간이 '쿵' 타이밍 */
+/** 판정 링 x — 노트가 여기 닿는 순간이 '쿵' 타이밍 (벽면 위) */
 const RING_X = WALL_X + 60;
-const LANE_Y = 600;
 /** 노트가 태어나는 화면 오른쪽 바깥 */
 const SPAWN_X = GAME_WIDTH + 70;
 /** 카운트인 박자 수 — '3, 2, 1, 시작!' 뒤 첫 노트가 온다 */
 const COUNT_BEATS = 4;
+/** 인트로(옆방 수다 구경) — 이후 자동으로 리듬게임이 시작된다 */
+const INTRO_MS = 1100;
 
-/** 벽 너머 1학년들의 수다 (선택 단계 — 칠지 말지 고민하는 동안) */
+/** 벽 너머 1학년들의 수다 (인트로 동안) */
 const CHATTER_LINES = [
   'ㅋㅋㅋㅋㅋ',
   '아 진짜라니까?',
@@ -34,30 +35,36 @@ const CHATTER_LINES = [
   'ㄹㅇㅋㅋ',
 ];
 
-type PunchPhase = 'choose' | 'play' | 'done';
+type PunchPhase = 'intro' | 'play' | 'done';
 
 interface RhythmNote {
   /** 판정 링 도달 시각 (songTime 기준 ms) */
   t: number;
+  /** 벽의 어느 높이를 칠 노트인지 (laneYs 인덱스) */
+  lane: number;
+  /**
+   * 이른 쪽 판정 반경 (ms) — 기본 goodMs지만, 앞 노트와의 간격이 좁으면(엇박 190ms)
+   * 간격의 절반으로 줄인다. 안 그러면 창이 겹쳐 앞 노트를 친 직후의 연타가
+   * 뒤 노트를 리듬과 무관하게 훔쳐 먹는다.
+   */
+  earlyMs: number;
   obj: Phaser.GameObjects.Container | null;
   resolved: boolean;
 }
 
 /**
- * Q5. 옆방(1학년 방) 벽 치기 — 타이코풍 리듬게임.
- * 옆방이 시끄럽다. 박자에 맞춰 벽을 쳐서 조용히 시켜라.
- * - 👊 노트가 오른쪽에서 흘러와 벽의 판정 링에 닿는 순간 화면을 탭.
- * - 박자가 어긋난 쿵 소리(미스·헛타)가 3번 쌓이면 소음이 복도까지 울려
- *   순찰 선배에게 발각 — 즉사.
+ * Q5. 옆방(1학년 방) 벽 치기 — 샤워장 노래에 맞춘 리듬게임 (자동 시작).
+ * 옆방이 시끄럽다. 노래 박자에 맞춰 벽 여기저기를 두드려 제압하라.
+ * - 👊 노트가 오른쪽에서 흘러와 벽의 판정 링(위/중간/아래)에 닿는 순간,
+ *   **그 노트 높이의 화면**을 탭.
+ * - 놓치거나 엇박, 다른 높이를 치면 💢 — 3번 쌓이면 소음이 복도까지 울려
+ *   순찰 선배에게 발각.
  * - 노미스로 끝내면 옆방을 완전히 제압 — ❤️ 목숨 +1칸.
- * - 참고 자면 안전하지만 보상도 없다.
  */
 export class WallPunchScene extends BaseMainScene {
-  private phase: PunchPhase = 'choose';
+  private phase: PunchPhase = 'intro';
   private chatterEvent: Phaser.Time.TimerEvent | null = null;
 
-  private punchBtn!: Button;
-  private sleepBtn!: Button;
   private dim!: Phaser.GameObjects.Rectangle;
   private suspenseText!: Phaser.GameObjects.Text;
   /** 벽 치는 컷 — 누운 컷 위에 겹쳐 두고 알파만 켜서 타격 순간을 만든다 */
@@ -67,8 +74,7 @@ export class WallPunchScene extends BaseMainScene {
   /** 씬 pause에 흔들리지 않도록 delta 누적으로 굴리는 곡 시계 (ms) */
   private songTime = 0;
   private lastBeat = -1;
-  private beatMs = 640;
-  private goodMs = 200;
+  private goodMs: number = Q5_WALLPUNCH.goodMs;
   private notes: RhythmNote[] = [];
   private missCount = 0;
   private combo = 0;
@@ -78,19 +84,21 @@ export class WallPunchScene extends BaseMainScene {
   /** '아직!' 안내 팝업 스로틀 (songTime 기준) */
   private earlyPopupAt = -1000;
 
+  /** 벽 타격 지점(레인)의 y 좌표들 — 일차에 따라 2~3개 */
+  private laneYs: number[] = [];
+
   private subText!: Phaser.GameObjects.Text;
   private missText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
   private countText!: Phaser.GameObjects.Text;
-  private ring!: Phaser.GameObjects.Container;
-  private laneG!: Phaser.GameObjects.Graphics;
+  private rings: Phaser.GameObjects.Container[] = [];
   private tapLabel!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'wallpunch' });
   }
 
-  /** 옆방 수다와 벽 치는 쿵 소리가 이 판의 음악이다 — BGM은 끈다 */
+  /** 샤워장 노래가 이 판의 비트 — 별도 BGM은 끈다 */
   protected bgmTrack(): null {
     return null;
   }
@@ -101,26 +109,30 @@ export class WallPunchScene extends BaseMainScene {
   }
 
   create(): void {
-    this.phase = 'choose';
+    this.phase = 'intro';
     this.chatterEvent = null;
     this.songTime = 0;
     this.lastBeat = -1;
+    this.goodMs = Q5_WALLPUNCH.goodMs;
     this.notes = [];
     this.missCount = 0;
     this.combo = 0;
     this.endScheduled = false;
     this.lastResolvedT = null;
     this.earlyPopupAt = -1000;
+    this.rings = [];
 
     // 실제 호실 사진을 그대로 옮긴 야간 씬 — 인물이 그 방의 그 침대에 누워 있다.
-    // (별도의 벽 오브젝트를 그리지 않는다 — 벽은 사진 속 진짜 왼쪽 벽이다)
     addSceneBg(this, 'bg_wallpunch_idle');
     this.sceneHit = addSceneBg(this, 'bg_wallpunch_hit', -999).setAlpha(0);
     addVignette(this, 0.35);
 
+    // 일차에 따라 벽 타격 지점 2~3개 (위/중간/아래)
+    this.laneYs = Q5_WALLPUNCH.laneCount(gameState.day) >= 3 ? [430, 600, 770] : [500, 700];
+
     textChip(this, GAME_WIDTH / 2 + 60, 120, '옆방이 너무 시끄럽다...', { fontSize: 38, depth: 10 });
     this.subText = this.add
-      .text(GAME_WIDTH / 2 + 60, 200, '박자에 맞춰 벽을 쳐라 — 미스 3번이면 발각당한다!', {
+      .text(GAME_WIDTH / 2 + 60, 200, '노래 박자에 맞춰 벽을 두드려 제압하라! (미스 3번 = 발각)', {
         fontFamily: FONT,
         fontSize: '24px',
         color: COLORS.inkCss,
@@ -130,9 +142,9 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(11);
 
-    // 미스 슬롯 — 3칸이 다 차는 순간 발각 (시선이 머무는 레인 바로 아래)
+    // 미스 슬롯 — 3칸이 다 차는 순간 발각
     this.missText = this.add
-      .text(GAME_WIDTH / 2 + 60, 700, '', {
+      .text(GAME_WIDTH / 2 + 60, GAME_HEIGHT - 140, '', {
         fontFamily: FONT,
         fontSize: '34px',
         color: COLORS.textCss,
@@ -145,7 +157,7 @@ export class WallPunchScene extends BaseMainScene {
 
     // 카운트인 "3, 2, 1, 시작!"
     this.countText = this.add
-      .text(GAME_WIDTH / 2 + 60, 430, '', {
+      .text(GAME_WIDTH / 2 + 60, 320, '', {
         fontFamily: FONT,
         fontSize: '88px',
         color: COLORS.warnCss,
@@ -156,10 +168,11 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(45);
 
-    this.createLane();
+    this.createLanes();
 
+    const bottomLaneY = this.laneYs[this.laneYs.length - 1] ?? 700;
     this.comboText = this.add
-      .text(RING_X, LANE_Y + 150, '', {
+      .text(RING_X + 30, bottomLaneY + 116, '', {
         fontFamily: FONT,
         fontSize: '36px',
         color: COLORS.safeCss,
@@ -184,43 +197,32 @@ export class WallPunchScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(60);
 
-    this.punchBtn = new Button(this, GAME_WIDTH / 2 + 60, GAME_HEIGHT - 280, {
-      label: '👊 박자 도전 (노미스=❤️+1)',
-      width: 520,
-      height: 124,
-      color: COLORS.accent,
-      fontSize: 30,
-      onClick: () => this.startChallenge(),
-    });
-    this.sleepBtn = new Button(this, GAME_WIDTH / 2 + 60, GAME_HEIGHT - 140, {
-      label: '😪 참고 잔다 (안전)',
-      width: 420,
-      height: 104,
-      color: COLORS.panelLight,
-      fontSize: 32,
-      onClick: () => this.sleep(),
-    });
-
-    // 리듬 입력 — 노트가 링에 닿는 순간 화면 아무 데나 탭
+    // 리듬 입력 — 노트가 링에 닿는 순간, 그 노트 높이의 화면을 탭
     this.input.on('pointerdown', this.onTap, this);
 
     this.setupCommon();
     this.startNoisy();
+    // 구경할 틈만 잠깐 주고 자동으로 판이 시작된다 — 도박이 아니라 오늘 밤의 임무다
+    this.time.delayedCall(INTRO_MS, () => this.startChallenge());
   }
 
-  /** 판정 링 + 노트가 흐르는 레인 가이드 */
-  private createLane(): void {
+  /** 판정 링(레인별) + 노트가 흐르는 레인 가이드 */
+  private createLanes(): void {
     const g = this.add.graphics().setDepth(30);
-    g.lineStyle(4, 0xffffff, 0.35);
-    g.lineBetween(RING_X, LANE_Y, GAME_WIDTH, LANE_Y);
+    for (const y of this.laneYs) {
+      g.lineStyle(4, 0xffffff, 0.3);
+      g.lineBetween(RING_X, y, GAME_WIDTH, y);
 
-    this.ring = this.add.container(RING_X, LANE_Y).setDepth(31);
-    const outer = this.add.circle(0, 0, 56, 0x000000, 0).setStrokeStyle(7, COLORS.warn, 1);
-    const inner = this.add.circle(0, 0, 44, 0xffffff, 0.14).setStrokeStyle(3, 0x000000, 0.8);
-    this.ring.add([outer, inner]);
+      const ring = this.add.container(RING_X, y).setDepth(31);
+      const outer = this.add.circle(0, 0, 56, 0x000000, 0).setStrokeStyle(7, COLORS.warn, 1);
+      const inner = this.add.circle(0, 0, 44, 0xffffff, 0.14).setStrokeStyle(3, 0x000000, 0.8);
+      ring.add([outer, inner]);
+      this.rings.push(ring);
+    }
 
+    const midY = this.laneYs[Math.floor(this.laneYs.length / 2)] ?? 600;
     this.tapLabel = this.add
-      .text(RING_X, LANE_Y + 62, '👊가 닿는 순간!', {
+      .text(RING_X + 10, midY + 62, '👊가 닿는 순간, 그 높이를 탭!', {
         fontFamily: FONT,
         fontSize: '22px',
         color: COLORS.warnCss,
@@ -229,27 +231,19 @@ export class WallPunchScene extends BaseMainScene {
       })
       .setOrigin(0.5, 0)
       .setDepth(31);
-
-    // 레인은 도전을 시작해야 보인다
-    this.ring.setVisible(false);
-    this.tapLabel.setVisible(false);
-    g.setVisible(false);
-    this.laneG = g;
   }
 
-  // ── 옆방 수다 (선택 단계) ─────────────────────
+  // ── 옆방 수다 (인트로) ─────────────────────────
 
   private startNoisy(): void {
     if (this.finished) return;
-    this.punchBtn.setEnabled(true);
-    this.sleepBtn.setEnabled(true);
     audio.startChatter();
     this.spawnChatterBubble();
     this.chatterEvent = this.time.addEvent({
-      delay: 1100,
+      delay: 700,
       loop: true,
       callback: () => {
-        if (!this.finished && this.phase === 'choose') {
+        if (!this.finished && this.phase === 'intro') {
           audio.startChatter(); // 오디오 언락이 늦어도 self-heal
           this.spawnChatterBubble();
         }
@@ -274,67 +268,70 @@ export class WallPunchScene extends BaseMainScene {
     );
   }
 
-  // ── 선택: 참고 잔다 (안전) ────────────────────
-
-  private sleep(): void {
-    if (this.finished || this.phase !== 'choose') return;
-    this.phase = 'done';
-    this.punchBtn.setEnabled(false);
-    this.sleepBtn.setEnabled(false);
-    this.stopChatterBubbles();
-    audio.stopChatter();
-    speechBubble(this, 400, 640, '(시끄럽지만... 참자...)', 1100, 40);
-    this.time.delayedCall(1200, () => this.succeed('시끄러운 밤을 견뎌냈다. 내일은 조용하길...'));
-  }
-
   // ── 리듬게임 시작 ─────────────────────────────
 
   private startChallenge(): void {
-    if (this.finished || this.phase !== 'choose') return;
+    if (this.finished || this.phase !== 'intro') return;
     this.phase = 'play';
-    this.stopChatterBubbles(); // 수다 소리는 배경으로 계속 — 이 박자를 벽으로 끊는다
-    this.punchBtn.destroy();
-    this.sleepBtn.destroy();
+    this.stopChatterBubbles();
+    audio.stopChatter();
 
-    this.beatMs = Q5_WALLPUNCH.beatMs(this.day);
-    this.goodMs = Q5_WALLPUNCH.goodMs(this.day);
     this.notes = this.buildNotes();
     this.songTime = 0;
     this.lastBeat = -1;
 
-    this.subText.setText('👊가 링에 닿는 순간, 화면 아무 데나 탭!');
+    this.subText.setText('👊가 링에 닿는 순간, 그 높이의 화면을 탭!');
     this.missText.setVisible(true);
     this.updateMissText();
-    this.ring.setVisible(true);
-    this.tapLabel.setVisible(true);
-    this.laneG.setVisible(true);
+
+    // 샤워장에서 몰래 틀던 그 노래 — 이 비트에 노트가 실려 온다
+    audio.startSong();
   }
 
   /**
-   * 노트 배치 생성 — 온비트를 기본으로, 쉼표로 리듬을 만들고
-   * 일차가 오르면 반박 노트가 따라붙는다.
+   * 노트 배치 생성 — 노래의 박자 격자(beatMs) 위에 온비트를 깔고, 쉼표로 리듬을
+   * 만들고, 일차가 오르면 반박 노트가 따라붙는다. 반박은 같은 자리 연타(둥-둥)라
+   * 손이 따라갈 수 있다. 온비트마다 벽의 다른 높이가 걸린다.
    */
   private buildNotes(): RhythmNote[] {
     const count = Q5_WALLPUNCH.noteCount(this.day);
     const offbeatP = Q5_WALLPUNCH.offbeatChance(this.day);
-    const times: number[] = [];
+    const beatMs = Q5_WALLPUNCH.beatMs;
+    const lead = Q5_WALLPUNCH.songLeadMs;
+    const laneCount = this.laneYs.length;
+    const out: RhythmNote[] = [];
     let beat = COUNT_BEATS;
-    while (times.length < count) {
-      if (times.length > 0 && chance(Q5_WALLPUNCH.restChance)) {
+    while (out.length < count) {
+      if (out.length > 0 && chance(Q5_WALLPUNCH.restChance)) {
         beat += 1;
         continue;
       }
-      times.push(beat * this.beatMs);
-      if (times.length < count && chance(offbeatP)) {
-        times.push((beat + 0.5) * this.beatMs);
+      const lane = randInt(0, laneCount - 1);
+      out.push({ t: lead + beat * beatMs, lane, earlyMs: this.goodMs, obj: null, resolved: false });
+      if (out.length < count && chance(offbeatP)) {
+        out.push({
+          t: lead + (beat + 0.5) * beatMs,
+          lane,
+          earlyMs: this.goodMs,
+          obj: null,
+          resolved: false,
+        });
       }
       beat += 1;
     }
-    return times.slice(0, count).map((t) => ({ t, obj: null, resolved: false }));
+    const notes = out.slice(0, count);
+    // 이른 쪽 창을 앞 노트와의 간격 절반으로 클램프 (겹침 방지)
+    for (let i = 1; i < notes.length; i++) {
+      const cur = notes[i];
+      const prev = notes[i - 1];
+      if (cur && prev) cur.earlyMs = Math.min(cur.earlyMs, (cur.t - prev.t) / 2);
+    }
+    return notes;
   }
 
   private spawnNote(note: RhythmNote): void {
-    const c = this.add.container(SPAWN_X, LANE_Y).setDepth(40);
+    const y = this.laneYs[note.lane] ?? 600;
+    const c = this.add.container(SPAWN_X, y).setDepth(40);
     const body = this.add.circle(0, 0, 44, 0xffffff, 1).setStrokeStyle(5, 0x000000, 1);
     const fist = this.add
       .text(0, 0, '👊', { fontFamily: FONT, fontSize: '46px' })
@@ -351,79 +348,112 @@ export class WallPunchScene extends BaseMainScene {
       this.tweens.add({ targets: this.countText, scale: 1, duration: 140, ease: 'Back.easeOut' });
       if (beatIdx === COUNT_BEATS - 1) {
         audio.chime();
-        this.tweens.add({
-          targets: this.countText,
-          alpha: 0,
-          delay: 360,
-          duration: 240,
-        });
+        this.tweens.add({ targets: this.countText, alpha: 0, delay: 320, duration: 220 });
       } else {
         audio.tick();
       }
     } else if (this.notes.some((n) => !n.resolved)) {
       audio.tick();
     }
-    this.tweens.add({ targets: this.ring, scale: { from: 1.16, to: 1 }, duration: 130 });
+    for (const ring of this.rings) {
+      this.tweens.add({ targets: ring, scale: { from: 1.16, to: 1 }, duration: 130 });
+    }
   }
 
   // ── 판정 ─────────────────────────────────────
 
+  /** 탭한 y가 가장 가까운 레인 */
+  private nearestLane(y: number): number {
+    let best = 0;
+    let bestD = Infinity;
+    this.laneYs.forEach((ly, i) => {
+      const d = Math.abs(y - ly);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
   private onTap(
-    _pointer: Phaser.Input.Pointer,
+    pointer: Phaser.Input.Pointer,
     currentlyOver: Phaser.GameObjects.GameObject[]
   ): void {
     if (this.finished || this.phase !== 'play') return;
     // 일시정지/소리 버튼 등 UI 탭은 판정하지 않는다
     if (currentlyOver.length > 0) return;
 
-    // 아직 화면에 노트가 없으면(도전 직후 등) 헛타로 치지 않는다
-    const candidates = this.notes.filter((n) => !n.resolved && n.obj !== null);
-    if (candidates.length === 0) return;
+    // 아직 화면에 노트가 없으면(시작 직후 등) 헛타로 치지 않는다
+    const spawned = this.notes.filter((n) => !n.resolved && n.obj !== null);
+    if (spawned.length === 0) return;
 
     // 카운트인 동안의 성급한 탭 — 벌점 없이 타이밍만 알려준다
-    if (this.songTime < this.notes[0].t - this.goodMs) {
+    const first = this.notes[0];
+    if (first && this.songTime < first.t - this.goodMs) {
       if (this.songTime - this.earlyPopupAt > 350) {
         this.earlyPopupAt = this.songTime;
-        this.judgePopup('아직!', COLORS.textCss);
+        this.judgePopup('아직!', COLORS.textCss, this.laneYs[1] ?? 600);
       }
       return;
     }
 
+    const tapLane = this.nearestLane(pointer.y);
+
     // 판정창 안에 든 노트 중 **가장 이른** 것을 소비한다.
-    // '가장 가까운 노트' 매칭은 엇박 노트와 판정창이 겹칠 때 탭이 뒤 노트를
-    // 훔쳐가 앞 노트가 자동 미스되는 연쇄(탭 1번 = 미스 2개)를 만든다.
-    let best: RhythmNote | null = null;
+    // '가장 가까운 노트' 매칭은 엇박 노트와 창이 겹칠 때 탭이 뒤 노트를 훔쳐가
+    // 앞 노트가 자동 미스되는 연쇄(탭 1번 = 미스 2개)를 만들기 때문.
+    // 이른 쪽은 노트별 earlyMs(간격 절반 클램프)로 판정해 창 겹침 자체를 없앤다.
+    const inWindow = (n: RhythmNote): boolean =>
+      this.songTime <= n.t
+        ? n.t - this.songTime <= n.earlyMs
+        : this.songTime - n.t <= this.goodMs;
+    let inLane: RhythmNote | null = null;
+    let anyLane: RhythmNote | null = null;
     let nearestDt = Infinity;
-    for (const n of candidates) {
+    for (const n of spawned) {
       const dt = Math.abs(this.songTime - n.t);
-      if (dt <= this.goodMs && (best === null || n.t < best.t)) best = n;
+      if (inWindow(n)) {
+        if (n.lane === tapLane && (inLane === null || n.t < inLane.t)) inLane = n;
+        if (anyLane === null || n.t < anyLane.t) anyLane = n;
+      }
       if (dt < nearestDt) nearestDt = dt;
     }
-    if (best) {
-      this.hitNote(best, Math.abs(this.songTime - best.t) <= Q5_WALLPUNCH.perfectMs);
+    if (inLane) {
+      this.hitNote(inLane, Math.abs(this.songTime - inLane.t) <= Q5_WALLPUNCH.perfectMs);
+      return;
+    }
+    if (anyLane) {
+      // 타이밍은 맞았는데 벽의 다른 높이를 쳤다 — 그 노트를 소비하며 미스 1 (이중 과금 방지)
+      this.consumeWrongSpot(anyLane);
       return;
     }
 
-    // 방금 처리된(놓친) 노트를 향한 늦은 탭 — 내려오던 손가락까지 벌하진 않는다
-    if (this.lastResolvedT !== null && Math.abs(this.songTime - this.lastResolvedT) <= nearestDt) {
+    // 방금 처리된 노트를 향한 늦은 탭 — 내려오던 손가락까지 벌하진 않는다.
+    // 단 200ms 안쪽일 때만: 상한 없이 봐주면 노트 사이 아무 때나 두드려도 무벌점이 된다.
+    if (
+      this.lastResolvedT !== null &&
+      Math.abs(this.songTime - this.lastResolvedT) <= 200 &&
+      Math.abs(this.songTime - this.lastResolvedT) <= nearestDt
+    ) {
       return;
     }
 
     // 박자에서 한참 벗어난 헛방망이질 — 그 쿵 소리가 제일 수상하다
-    this.addMiss('엇박!!');
+    this.addMiss('엇박!!', tapLane);
   }
 
   private hitNote(note: RhythmNote, perfect: boolean): void {
     note.resolved = true;
     this.lastResolvedT = note.t;
     this.combo += 1;
-    // 첫 히트에 성공했으면 타이밍 안내는 소임을 다했다 — 치워서 콤보 시야를 비운다
+    // 첫 히트에 성공했으면 타이밍 안내는 소임을 다했다
     if (this.tapLabel.alpha > 0) {
       this.tweens.add({ targets: this.tapLabel, alpha: 0, duration: 250 });
     }
 
-    // 타격 컷 반짝 + 쿵
-    audio.thud();
+    // 타격 컷 반짝 + 실감나는 쿵 (perfect는 더 세게)
+    audio.thud(perfect);
     vibrate(HAPTIC.miniSuccess);
     this.sceneHit.setAlpha(1);
     this.time.delayedCall(100, () => {
@@ -443,7 +473,8 @@ export class WallPunchScene extends BaseMainScene {
       note.obj = null;
     }
 
-    this.judgePopup(perfect ? '완벽!' : '좋아!', perfect ? COLORS.safeCss : COLORS.warnCss);
+    const laneY = this.laneYs[note.lane] ?? 600;
+    this.judgePopup(perfect ? '완벽!' : '좋아!', perfect ? COLORS.safeCss : COLORS.warnCss, laneY);
     this.comboText.setText(this.combo >= 2 ? `${this.combo} 콤보!` : '');
     this.comboText.setScale(1.25);
     this.tweens.add({ targets: this.comboText, scale: 1, duration: 120 });
@@ -457,24 +488,42 @@ export class WallPunchScene extends BaseMainScene {
     if (obj) {
       this.tweens.add({
         targets: obj,
-        y: LANE_Y + 46,
+        y: (this.laneYs[note.lane] ?? 600) + 46,
         alpha: 0,
         duration: 260,
         onComplete: () => obj.destroy(),
       });
       note.obj = null;
     }
-    this.addMiss('놓쳤다!');
+    this.addMiss('놓쳤다!', note.lane);
   }
 
-  private addMiss(label: string): void {
+  /** 타이밍은 맞았지만 다른 높이를 친 경우 — 해당 노트를 소비하며 미스 1회만 */
+  private consumeWrongSpot(note: RhythmNote): void {
+    note.resolved = true;
+    this.lastResolvedT = note.t;
+    const obj = note.obj;
+    if (obj) {
+      this.tweens.add({
+        targets: obj,
+        alpha: 0,
+        scale: 0.7,
+        duration: 200,
+        onComplete: () => obj.destroy(),
+      });
+      note.obj = null;
+    }
+    this.addMiss('자리가 달라!', note.lane);
+  }
+
+  private addMiss(label: string, lane: number): void {
     if (this.finished || this.phase !== 'play') return;
     this.missCount += 1;
     this.combo = 0;
     this.comboText.setText('');
     audio.buzz();
     vibrate(HAPTIC.damage);
-    this.judgePopup(label, COLORS.accentCss);
+    this.judgePopup(label, COLORS.accentCss, this.laneYs[lane] ?? 600);
     this.cameras.main.shake(140, 0.006);
     this.updateMissText();
     if (this.missCount >= Q5_WALLPUNCH.maxMiss) {
@@ -485,7 +534,7 @@ export class WallPunchScene extends BaseMainScene {
       // 다음 실수 = 사망 — 은은한 비네트로는 부족하다, 대놓고 경고한다
       this.setDanger('in');
       const warn = this.add
-        .text(GAME_WIDTH / 2 + 60, 430, '💢 한 번만 더 실수하면 발각!!', {
+        .text(GAME_WIDTH / 2 + 60, GAME_HEIGHT - 240, '💢 한 번만 더 실수하면 발각!!', {
           fontFamily: FONT,
           fontSize: '38px',
           color: COLORS.accentCss,
@@ -509,14 +558,16 @@ export class WallPunchScene extends BaseMainScene {
 
   private updateMissText(): void {
     const max = Q5_WALLPUNCH.maxMiss;
-    this.missText.setText(`실수 ${'💢'.repeat(this.missCount)}${'⚪'.repeat(Math.max(0, max - this.missCount))}`);
+    this.missText.setText(
+      `실수 ${'💢'.repeat(this.missCount)}${'⚪'.repeat(Math.max(0, max - this.missCount))}`
+    );
   }
 
-  private judgePopup(label: string, color: string): void {
+  private judgePopup(label: string, color: string, laneY: number): void {
     const t = this.add
-      .text(RING_X, LANE_Y - 92, label, {
+      .text(RING_X, laneY - 78, label, {
         fontFamily: FONT,
-        fontSize: '42px',
+        fontSize: '40px',
         color,
         fontStyle: 'bold',
         stroke: '#000000',
@@ -526,7 +577,7 @@ export class WallPunchScene extends BaseMainScene {
       .setDepth(42);
     this.tweens.add({
       targets: t,
-      y: LANE_Y - 150,
+      y: laneY - 132,
       alpha: 0,
       duration: 420,
       ease: 'Cubic.easeOut',
@@ -540,6 +591,7 @@ export class WallPunchScene extends BaseMainScene {
   private busted(): void {
     this.phase = 'done';
     this.setDanger('off');
+    audio.stopSong();
     audio.stopChatter();
     for (const n of this.notes) {
       n.obj?.destroy();
@@ -568,6 +620,7 @@ export class WallPunchScene extends BaseMainScene {
     if (this.finished || this.phase !== 'play') return;
     this.phase = 'done';
     this.setDanger('off');
+    audio.stopSong();
     audio.stopChatter();
     speechBubble(this, 400, 640, '......조용해졌다.', 1400, 40);
 
@@ -617,10 +670,16 @@ export class WallPunchScene extends BaseMainScene {
 
   protected tick(delta: number): void {
     if (this.phase !== 'play') return;
-    // 씬 pause(미니퀘스트·일시정지) 동안 시계가 흐르지 않도록 delta 누적으로 굴린다
+    // 씬 pause(일시정지) 동안 시계가 흐르지 않도록 delta 누적으로 굴린다
     this.songTime += delta;
+    // 일시정지 복귀·오디오 언락 지연에도 노래가 게임 시계 위치로 따라오게 (매 프레임 안전)
+    audio.syncSong(this.songTime);
 
-    const beatIdx = Math.floor(this.songTime / this.beatMs);
+    // 박 격자는 노트/가청 비트와 같은 songLeadMs 오프셋 위에 있다 —
+    // 이걸 빼지 않으면 메트로놈·링 펄스가 노래보다 100ms 빨라 박치기 게임이 된다
+    const beatIdx = Math.floor(
+      (this.songTime - Q5_WALLPUNCH.songLeadMs) / Q5_WALLPUNCH.beatMs
+    );
     if (beatIdx !== this.lastBeat) {
       this.lastBeat = beatIdx;
       this.onBeat(beatIdx);

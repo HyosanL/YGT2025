@@ -45,8 +45,8 @@ const heightAt = (feetYPx: number): number => Math.max(40, (feetYPx - VANISH_Y) 
 const DOOR_DEPTHS = [0.58, 0.42, 0.28, 0.18] as const;
 /** 내 앞에 서는 지점 (조작 버튼 위) */
 const ARRIVE_K = 0.7;
-/** 후배가 경례를 올리는 시점 (여정 비율) — 내가 받아줄 여유를 남긴다 */
-const JUNIOR_SALUTE_U = 0.5;
+/** 후배가 경례를 올리는 시점 (여정 비율) — 문에서 나오자마자 절도 있게 올린다 */
+const JUNIOR_SALUTE_U = 0.28;
 
 interface Visitor {
   cadet: Cadet;
@@ -87,6 +87,9 @@ export class HallwayScene extends BaseMainScene {
 
   private countText!: TextChip;
   private judgeText!: Phaser.GameObjects.Text;
+  private comboText!: Phaser.GameObjects.Text;
+  /** 연속 정응대 콤보 — 리듬을 만드는 보상 */
+  private combo = 0;
   /** 선배 경례 데드라인 표시선 */
   private deadlineG!: Phaser.GameObjects.Graphics;
 
@@ -104,6 +107,7 @@ export class HallwayScene extends BaseMainScene {
     this.elapsedMs = 0;
     this.cleared = 0;
     this.spawned = 0;
+    this.combo = 0;
 
     addSceneBg(this, 'bg_hallway');
 
@@ -121,6 +125,18 @@ export class HallwayScene extends BaseMainScene {
       .setOrigin(0.5)
       .setDepth(30)
       .setAlpha(0);
+
+    this.comboText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 262, '', {
+        fontFamily: FONT,
+        fontSize: '32px',
+        color: COLORS.warnCss,
+        fontStyle: 'bold',
+        stroke: '#000000',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(30);
 
     new Button(this, GAME_WIDTH / 2 - 165, GAME_HEIGHT - 130, {
       label: '🙇 인사',
@@ -233,9 +249,8 @@ export class HallwayScene extends BaseMainScene {
   }
 
   /**
-   * 문이 **방 안쪽으로** 열렸다 닫힌다.
-   * 복도 쪽으로 젖혀지면 사람이 나오는 길을 막는 꼴이라, 경첩(복도 안쪽 모서리)에
-   * 붙여 놓고 어두운 실내가 그 자리에서 벌어졌다가 다시 닫히게 그린다.
+   * 진짜 복도 문처럼 열렸다 닫힌다 — 문틀 안에서 **나무색 문짝이 방 안쪽으로
+   * 젖혀지며** 어두운 실내가 드러난다. (예전엔 검은 박스만 벌어져 문 같지 않았다)
    */
   private flashDoor(k: number, side: -1 | 1): void {
     const feet = floorY(k);
@@ -245,17 +260,43 @@ export class HallwayScene extends BaseMainScene {
     // 경첩은 복도 안쪽(소실점 쪽) 모서리 — 문짝이 방 안으로 젖혀지며 그쪽부터 열린다
     const hingeX = x + (side === -1 ? w / 2 : -w / 2);
     const dir = side === -1 ? -1 : 1; // 열리는 방향(경첩에서 바깥쪽 모서리로)
+    const doorLeft = dir === -1 ? hingeX - w : hingeX;
     const g = this.add.graphics().setDepth(4);
     const draw = (open: number): void => {
       g.clear();
       if (open <= 0.01) return;
+      // 문틀 + 열린 만큼 드러나는 불 꺼진 방 안
       const ow = w * open;
-      const left = dir === -1 ? hingeX - ow : hingeX;
-      // 열린 틈 = 불 꺼진 방 안
-      g.fillStyle(0x1a1510, 0.9);
-      g.fillRect(left, feet - h, ow, h);
-      g.lineStyle(3, 0x14141a, 1);
-      g.strokeRect(left, feet - h, ow, h);
+      const gapLeft = dir === -1 ? hingeX - ow : hingeX;
+      g.fillStyle(0x1a1510, 0.92);
+      g.fillRect(gapLeft, feet - h, ow, h);
+      g.lineStyle(Math.max(2, h * 0.012), 0x6e5b41, 1);
+      g.strokeRect(doorLeft, feet - h, w, h);
+      // 문짝 — 원근으로 폭이 줄어들며 젖혀진다 (바깥 모서리가 살짝 낮아져 회전감)
+      const lw = w * (1 - open);
+      if (lw > 2) {
+        const lx = dir === -1 ? hingeX - lw : hingeX;
+        const outerX = dir === -1 ? lx : lx + lw;
+        const innerX = dir === -1 ? lx + lw : lx;
+        const sink = h * 0.06 * open; // 열릴수록 바깥 모서리가 원근으로 내려앉는다
+        const pts = [
+          { x: innerX, y: feet - h },
+          { x: outerX, y: feet - h + sink },
+          { x: outerX, y: feet - sink * 0.4 },
+          { x: innerX, y: feet },
+        ];
+        g.fillStyle(0xcdb287, 1); // 복도 문짝의 나무색
+        g.fillPoints(pts, true);
+        g.lineStyle(Math.max(2, h * 0.01), 0x3c2f22, 1);
+        g.strokePoints(pts, true);
+        // 손잡이 — 열리는 쪽 모서리 근처
+        g.fillStyle(0x8f8578, 1);
+        g.fillCircle(
+          outerX + (innerX > outerX ? 1 : -1) * lw * 0.12,
+          feet - h * 0.48,
+          Math.max(2.5, h * 0.016)
+        );
+      }
     };
     const state = { open: 0 };
     this.tweens.chain({
@@ -302,6 +343,7 @@ export class HallwayScene extends BaseMainScene {
     // (선배는 반대로 내가 먼저 해야 하므로 이 규칙에서 제외)
     if (v.kind === 'junior' && !v.saluted) {
       v.resolved = true;
+      this.resetCombo();
       this.flashJudge('너무 빨라!', COLORS.warnCss);
       speechBubble(this, v.cadet.x, v.cadet.y - 170, '(어...?)', 800);
       this.loseHeart('후배가 경례하기도 전에 먼저 받아버렸다... 쪽팔림');
@@ -318,6 +360,7 @@ export class HallwayScene extends BaseMainScene {
         this.failCaught(v.cadet, '3학년 선배를 고개 까딱으로 받아버렸다...', '너 지금 뭐 했냐?');
         return;
       }
+      this.resetCombo();
       this.flashJudge('실수!', COLORS.accentCss);
       speechBubble(this, v.cadet.x, v.cadet.y - 170, '풉 ㅋㅋ 왜 경례함?', 800);
       this.loseHeart(
@@ -339,12 +382,26 @@ export class HallwayScene extends BaseMainScene {
     }
     audio.chime();
     this.cleared += 1;
+    this.bumpCombo();
     this.updateCount();
     this.retire(v);
 
     if (this.cleared >= this.target) {
       this.succeed('복도를 무사히 통과했다!');
     }
+  }
+
+  /** 연속 정응대 — 콤보가 쌓일수록 판이 리드미컬해진다 */
+  private bumpCombo(): void {
+    this.combo += 1;
+    if (this.combo < 2) return;
+    this.comboText.setText(`🔥 ${this.combo} 콤보!`).setScale(1.25);
+    this.tweens.add({ targets: this.comboText, scale: 1, duration: 130 });
+  }
+
+  private resetCombo(): void {
+    this.combo = 0;
+    this.comboText.setText('');
   }
 
   /** 처리가 끝난 사람은 나를 지나쳐 화면 밖으로 걸어 나간다 */
@@ -425,6 +482,7 @@ export class HallwayScene extends BaseMainScene {
     // 후배·동기는 내 앞에 다 와서까지 응대를 안 하면 어색해진다
     if (v.kind !== 'senior' && u >= 1) {
       v.resolved = true;
+      this.resetCombo();
       this.flashJudge('놓쳤다!', COLORS.accentCss);
       this.loseHeart('제때 응대하지 못했다... 어색해졌다');
       this.retire(v);

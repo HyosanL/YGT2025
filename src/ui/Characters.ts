@@ -101,9 +101,65 @@ const CYCLE: Record<string, [string, string]> = {
 
 /** 눕는 포즈 — 그림자/바운스를 끈다 */
 const LYING = new Set<CadetMotion>(['lying', 'lying_punch']);
-/** 똑바로 선 키를 그대로 유지해야 하는 자세 — 배율을 선 자세에 고정한다.
- *  (웅크리기·탈진·숨기처럼 실제로 낮아지는 자세는 여기서 뺀다) */
-const UPRIGHT = new Set<CadetMotion>(['idle', 'walk', 'run', 'salute', 'dance', 'cheer', 'point', 'charge']);
+
+interface ContentBounds {
+  /** 불투명 내용의 세로 픽셀 수 */
+  h: number;
+  /** 캔버스 하단의 투명 여백 (발끝을 바닥선에 붙일 때 보정) */
+  padBottom: number;
+}
+
+/**
+ * 텍스처의 실제 그림 내용 경계 (알파 스캔, 전역 캐시).
+ *
+ * 에셋 캔버스는 512px로 통일돼 있지만 **그림 속 인물 크기(줌)는 컷 세트마다 다르다** —
+ * 캔버스 높이로만 배율을 정하면 걷기↔구보 전환 때 덩치가 눈에 띄게 커졌다 작아졌다 한다.
+ * 그래서 순환 애니메이션은 내용 높이를 기준으로 선 자세와 같은 크기가 되도록 보정한다.
+ */
+const boundsCache = new Map<string, ContentBounds>();
+
+function contentBounds(scene: Phaser.Scene, key: string): ContentBounds {
+  const cached = boundsCache.get(key);
+  if (cached) return cached;
+  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+  const w = src.width || 1;
+  const h = src.height || 1;
+  let out: ContentBounds = { h, padBottom: 0 };
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    if (cx) {
+      cx.drawImage(src as CanvasImageSource, 0, 0);
+      const a = cx.getImageData(0, 0, w, h).data;
+      const rowHasInk = (y: number): boolean => {
+        const off = y * w * 4 + 3;
+        for (let x = 0; x < w; x++) if ((a[off + x * 4] ?? 0) > 16) return true;
+        return false;
+      };
+      let top = -1;
+      let bottom = -1;
+      for (let y = 0; y < h; y++) {
+        if (rowHasInk(y)) {
+          top = y;
+          break;
+        }
+      }
+      for (let y = h - 1; y >= 0; y--) {
+        if (rowHasInk(y)) {
+          bottom = y;
+          break;
+        }
+      }
+      if (top >= 0 && bottom >= top) out = { h: bottom - top + 1, padBottom: h - 1 - bottom };
+    }
+  } catch {
+    // 캔버스 접근 실패(CORS 등) 시 캔버스 크기 기준으로 폴백
+  }
+  boundsCache.set(key, out);
+  return out;
+}
 
 export class Cadet extends Phaser.GameObjects.Container {
   private sprite: Phaser.GameObjects.Image;
@@ -115,8 +171,10 @@ export class Cadet extends Phaser.GameObjects.Container {
   private motion: CadetMotion | null = null;
   private cycleTimer: Phaser.Time.TimerEvent | null = null;
   private idleTween: Phaser.Tweens.Tween | null = null;
-  /** 선 자세 기준 높이 캐시 (setBack/dobok 전환 시 무효화) */
-  private baseH: number | null = null;
+  /** 코드로 그린 견장 — 기본(걷기/대기) 컷용. 줄 수는 반드시 코드가 보증한다 */
+  private rankG: Phaser.GameObjects.Graphics | null = null;
+  /** 경례 컷(junior_salute 차용)용 견장 — 컷마다 어깨 위치가 달라 따로 그린다 */
+  private rankSaluteG: Phaser.GameObjects.Graphics | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -159,12 +217,29 @@ export class Cadet extends Phaser.GameObjects.Container {
    *
    * 견장 줄 수는 복도 판별 게임의 **유일한 단서**인데, 생성 모델은 "줄 3개"를 요구해도
    * 2개나 4개를 그리기 일쑤였다. 그래서 방문자는 무늬 없는 한 장(`visitor_base`)만 쓰고
-   * 계급 줄은 여기서 정확히 rank개 찍는다 — 개수가 틀릴 수 없고, 크기도 마음대로 키운다.
-   *
-   * 좌표는 원본 스프라이트에서 실측한 어깨 위치의 '비율'이라 어떤 배율에서도 따라온다.
+   * 계급 줄은 여기서 정확히 rank개 찍는다 — **어떤 컷으로 갈아입어도 개수가 틀릴 수 없다**.
+   * (경례 컷은 junior_salute를 차용하므로 그 컷의 어깨 좌표로 견장을 따로 그려 덮는다)
    */
   private drawRankBoards(rank: 1 | 2 | 3): void {
-    const src = this.sprite.texture.getSourceImage() as { width?: number; height?: number };
+    this.rankG = this.buildRankBoards(rank, this.texFor('idle'), [0.2, 0.8], 0.222, 0.135);
+    this.add(this.rankG);
+  }
+
+  /**
+   * 특정 텍스처 기준의 견장 그래픽 생성.
+   * 좌표는 해당 컷에서 실측한 어깨 위치의 '비율'이라 어떤 배율에서도 따라온다.
+   */
+  private buildRankBoards(
+    rank: 1 | 2 | 3,
+    texKey: string,
+    shoulderFxs: [number, number],
+    shoulderFy: number,
+    boardWFactor: number
+  ): Phaser.GameObjects.Graphics {
+    const src = this.scene.textures.get(texKey).getSourceImage() as {
+      width?: number;
+      height?: number;
+    };
     const texW = src.width || 1;
     const texH = src.height || 1;
     const dispH = BASE_H;
@@ -174,36 +249,40 @@ export class Cadet extends Phaser.GameObjects.Container {
     const ly = (fy: number): number => FOOT_Y - (1 - fy) * dispH;
 
     const g = this.scene.add.graphics();
-    const boardW = 0.135 * dispW;
+    const boardW = boardWFactor * dispW;
     const boardH = 0.055 * dispH;
-    for (const fx of [0.2, 0.8]) {
+    for (const fx of shoulderFxs) {
       const cx = lx(fx);
-      const cy = ly(0.222);
+      const cy = ly(shoulderFy);
       // 남색 견장판 + 굵은 검정 외곽선 (배경에서 확실히 떨어져 보이게)
       g.fillStyle(0x1b2540, 1);
       g.fillRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
       g.lineStyle(Math.max(2, boardH * 0.16), 0x14141a, 1);
       g.strokeRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
-      // 금색 줄 rank개 — 판 안쪽에 균등 배치
-      const barH = boardH * 0.19;
-      const gap = boardH * 0.12;
-      const total = rank * barH + (rank - 1) * gap;
+      // 금색 **세로줄** rank개 — 실제 견장처럼 세로 방향으로 긋고 가로로 나란히 배치
+      const barW = boardW * 0.15;
+      const gap = boardW * 0.11;
+      const total = rank * barW + (rank - 1) * gap;
       g.fillStyle(0xffc93c, 1);
       for (let i = 0; i < rank; i++) {
         g.fillRect(
-          cx - boardW * 0.34,
-          cy - total / 2 + i * (barH + gap),
-          boardW * 0.68,
-          barH
+          cx - total / 2 + i * (barW + gap),
+          cy - boardH * 0.32,
+          barW,
+          boardH * 0.64
         );
       }
     }
-    this.add(g);
+    return g;
   }
 
   private texFor(motion: CadetMotion): string {
     if (this.visitorRank) {
-      if (motion === 'salute') return 'visitor_salute';
+      // visitor_salute는 경례 팔꿈치가 캔버스 밖으로 잘린 에셋이라 팔이 온전한
+      // junior_salute를 쓴다 — 경례를 올린 시점엔 이미 후배임이 드러난 뒤라 무방하다
+      if (motion === 'salute') {
+        return this.scene.textures.exists('junior_salute') ? 'junior_salute' : 'visitor_salute';
+      }
       if (motion === 'walk' || motion === 'run') return 'visitor_walk_a';
       return 'visitor_base';
     }
@@ -221,7 +300,6 @@ export class Cadet extends Phaser.GameObjects.Container {
   setBack(back: boolean): this {
     if (this.back === back) return this;
     this.back = back;
-    this.baseH = null; // 앞/뒤 에셋은 키가 다를 수 있다 — 기준 높이 재측정
     const motion = this.motion ?? 'idle';
     this.motion = null;
     this.setMotion(motion);
@@ -238,34 +316,30 @@ export class Cadet extends Phaser.GameObjects.Container {
   /**
    * 텍스처 교체 + 크기 정규화.
    *
-   * 에셋은 투명 여백을 트림해 두어 파일 높이 = 인물의 실제 세로 길이다. 그래서 프레임마다
-   * 높이로 스케일을 따로 계산하면, 무릎을 굽힌 구보 프레임처럼 세로가 짧은 포즈가 도리어
-   * 확대되어 걷는 내내 덩치가 커졌다 작아졌다 한다.
-   * 순환 애니메이션은 `refH`(첫 프레임 높이)를 넘겨 **두 프레임이 같은 배율**을 쓰게 한다.
+   * 기본은 캔버스 높이 기준(모든 캔버스 512px로 동일)이라 어떤 포즈든 배율이 같다.
+   * 순환 애니메이션(걷기/구보)은 `anchorKey`(이 캐릭터의 선 자세)를 넘긴다 —
+   * 컷 세트마다 그림 속 인물 줌이 달라도 **내용 높이**를 선 자세에 맞춰 보정하므로
+   * 걷기↔구보 전환 때 덩치가 커졌다 작아졌다 하지 않는다. 캔버스 하단 투명 여백만큼
+   * 스프라이트를 내려 발끝(내용 밑변)이 바닥선에 정확히 붙는다.
    */
-  private applyTexture(key: string, refH?: number): void {
+  private applyTexture(key: string, anchorKey?: string): void {
     if (!this.scene.textures.exists(key)) return;
     this.sprite.setTexture(key);
+    if (anchorKey && this.scene.textures.exists(anchorKey)) {
+      const anchor = contentBounds(this.scene, anchorKey);
+      const anchorSrc = this.scene.textures.get(anchorKey).getSourceImage() as { height?: number };
+      const own = contentBounds(this.scene, key);
+      // 목표: 이 컷의 내용 높이 = 선 자세의 내용 높이가 화면에서 차지하는 높이
+      const anchorDispH = (anchor.h / (anchorSrc.height || BASE_H)) * BASE_H;
+      const scale = anchorDispH / Math.max(1, own.h);
+      this.sprite.setScale(scale);
+      this.sprite.setY(FOOT_Y + own.padBottom * scale);
+      return;
+    }
     const src = this.sprite.texture.getSourceImage() as { height?: number };
-    const th = refH || src.height || this.sprite.height || BASE_H;
+    const th = src.height || this.sprite.height || BASE_H;
     this.sprite.setScale(BASE_H / th);
-  }
-
-  /** 트림된 원본 텍스처의 세로 픽셀 수 (스케일 기준값) */
-  private texHeight(key: string): number {
-    const src = this.scene.textures.get(key).getSourceImage() as { height?: number };
-    return src.height || BASE_H;
-  }
-
-  /**
-   * 이 캐릭터의 모든 자세가 공유하는 기준 높이 = 똑바로 선 자세(idle)의 픽셀 높이.
-   * 모든 컷이 같은 카메라 거리에서 그려졌으므로, 서 있는 키 하나로 배율을 고정해야
-   * 구보(무릎 굽힘)·경례처럼 세로가 짧은 포즈가 확대되지 않는다.
-   * 반대로 웅크리기·탈진처럼 정말 낮은 자세는 낮은 대로 보이는 게 맞다.
-   */
-  private standH(): number {
-    if (this.baseH === null) this.baseH = this.texHeight(this.texFor('idle'));
-    return this.baseH;
+    this.sprite.setY(FOOT_Y);
   }
 
   setFace(_emoji: string): void {
@@ -283,36 +357,55 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     this.shadow.setVisible(!LYING.has(motion));
 
+    // 경례 컷(junior_salute 차용)은 어깨 위치가 달라 전용 견장으로 갈아 끼운다 —
+    // 어느 컷에서든 줄 수는 코드가 그린 견장이 보증한다 (에셋에 박힌 견장은 못 믿는다)
+    if (this.visitorRank) {
+      const saluting = motion === 'salute';
+      this.rankG?.setVisible(!saluting);
+      if (saluting && !this.rankSaluteG && this.scene.textures.exists('junior_salute')) {
+        this.rankSaluteG = this.buildRankBoards(
+          this.visitorRank,
+          'junior_salute',
+          [0.305, 0.815],
+          0.22,
+          0.19
+        );
+        this.add(this.rankSaluteG);
+      }
+      this.rankSaluteG?.setVisible(saluting);
+    }
+
     const cycleKey = this.visitorRank
       ? `visitor.${motion}`
       : this.dobok && (motion === 'run' || motion === 'walk')
         ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
         : `${this.kind}.${motion}`;
     const cycle = CYCLE[cycleKey];
-    // 걷기·구보처럼 '서서 이동하는' 자세는 선 키(standH)를 공통 배율로 쓴다
-    const uprightH = UPRIGHT.has(motion) ? this.standH() : undefined;
+    // 걷기·구보 순환은 이 캐릭터의 '선 자세'를 내용 높이 기준점으로 쓴다
+    const anchorKey = this.texFor('idle');
 
     if (cycle && this.scene.textures.exists(cycle[0]) && this.scene.textures.exists(cycle[1])) {
       let i = 0;
-      this.applyTexture(cycle[0], uprightH);
+      this.applyTexture(cycle[0], anchorKey);
       this.cycleTimer = this.scene.time.addEvent({
         delay: motion === 'run' ? 110 : 300,
         loop: true,
         callback: () => {
           if (!this.active) return;
           i ^= 1;
-          this.applyTexture(cycle[i], uprightH);
+          this.applyTexture(cycle[i], anchorKey);
         },
       });
       return;
     }
 
-    this.applyTexture(this.texFor(motion), uprightH);
+    this.applyTexture(this.texFor(motion));
 
     if (motion === 'idle' || motion === 'dance') {
+      const baseY = this.sprite.y;
       this.idleTween = this.scene.tweens.add({
         targets: this.sprite,
-        y: FOOT_Y + (motion === 'dance' ? -8 : -4),
+        y: baseY + (motion === 'dance' ? -8 : -4),
         duration: motion === 'dance' ? 300 : 750,
         yoyo: true,
         repeat: -1,

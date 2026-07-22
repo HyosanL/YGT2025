@@ -437,20 +437,30 @@ class AudioManagerImpl {
     this.tone('sine', 1318, this.now + 0.1, 0.25, 0.4);
   }
 
-  /** 벽치기 "쿵" */
-  thud(): void {
+  /**
+   * 벽치기 "쿵" — 실제 주먹으로 벽을 칠 때의 3요소를 겹친다:
+   * ① 딱(손마디가 닿는 짧은 중고역 노크) ② 쿵(벽이 울리는 저역, 피치가 뚝 떨어짐)
+   * ③ 웅(콘크리트 방의 낮은 잔향). perfect 판정은 살짝 더 세게 때린다.
+   */
+  thud(strong = false): void {
     if (!this.ready) return;
-    this.tone('sine', 90, this.now, 0.25, 0.9, 40);
-    this.noiseBurst(this.now, 0.1, 0.5, 200);
+    const t = this.now;
+    const k = strong ? 1.2 : 1;
+    this.noiseBurst(t, 0.035, 0.9 * k, 1600);
+    this.tone('sine', 165, t, 0.3, 1.35 * k, 38);
+    this.tone('triangle', 98, t + 0.012, 0.22, 0.8 * k, 46);
+    this.noiseBurst(t + 0.03, 0.22, 0.55 * k, 220);
   }
 
-  /** 벽치기 "쾅! 쾅! 쾅!" — 묵직한 3연타 */
+  /** 벽치기 "쾅! 쾅! 쾅!" — 묵직한 실제감 3연타 */
   wallBang(): void {
     if (!this.ready) return;
     for (let i = 0; i < 3; i++) {
       const t = this.now + i * 0.17;
-      this.tone('sine', 85, t, 0.24, 1.0, 36);
-      this.noiseBurst(t, 0.1, 0.65, 260);
+      this.noiseBurst(t, 0.035, 0.95, 1500);
+      this.tone('sine', 155, t, 0.3, 1.4, 36);
+      this.tone('triangle', 92, t + 0.012, 0.22, 0.8, 44);
+      this.noiseBurst(t + 0.03, 0.2, 0.6, 230);
     }
   }
 
@@ -552,9 +562,44 @@ class AudioManagerImpl {
     if (this.songMode === 'chip') {
       if (playing) {
         this.songNextTime = Math.max(this.songNextTime, this.now + 0.06);
+      } else {
+        // 일시정지: 룩어헤드로 이미 예약돼 무음으로 소진될 스텝을 되감는다 —
+        // 재개 시 그 지점부터 다시 연주되어 게임 시계와의 어긋남이 누적되지 않는다
+        const pending = Math.round(
+          (this.songNextTime - this.now) / AudioManagerImpl.STEP_SEC
+        );
+        if (pending > 0) {
+          this.songStep = Math.max(0, this.songStep - pending);
+          this.songNextTime -= pending * AudioManagerImpl.STEP_SEC;
+        }
       }
     } else {
       this.ensureSongState();
+    }
+  }
+
+  /**
+   * 곡 위치를 게임 시계(경과 ms)에 맞춘다 — 매 프레임 불러도 안전.
+   * 오디오 언락이 늦어 노래가 뒤늦게 시작되는 경우, 0초부터가 아니라
+   * 게임이 진행된 위치부터 흘러나오게 해 리듬 노트와 어긋나지 않게 한다.
+   */
+  syncSong(elapsedMs: number): void {
+    this.setSongPlaying(true);
+    if (!this.ready) return;
+    if (this.songMode === 'buffer') {
+      // 아직 소스를 못 만들었으면(언락 지연) 현재 게임 위치에서 시작하도록 오프셋 선반영
+      if (!this.songSource) {
+        this.songOffsetSec = Math.max(0, elapsedMs / 1000);
+        this.ensureSongState();
+      }
+      return;
+    }
+    // 칩튠: 첫 스텝도 못 나간 채 게임 시계만 앞서 있으면 스텝을 앞으로 감는다
+    if (this.songStep === 0 && elapsedMs > 400) {
+      this.songStep = Math.floor(
+        Math.max(0, elapsedMs / 1000 - 0.1) / AudioManagerImpl.STEP_SEC
+      );
+      this.songNextTime = this.now + 0.05;
     }
   }
 
