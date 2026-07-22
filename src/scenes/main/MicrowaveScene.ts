@@ -235,8 +235,9 @@ export class MicrowaveScene extends BaseMainScene {
         this.reacted = false;
         // **앞모습**으로 좌측 위(far, 작음)에서 우측 아래(near, 큼)로 대각선으로 다가온다.
         // 걷는 내내 원근 배율을 다시 계산하므로 발이 바닥에서 뜨지 않는다.
+        // 유저 지시: 조금 더 빠른 속도로 다가온다 (접근 시간 단축)
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
-        const crossMs = Math.max(1500, reactMs * 2.0);
+        const crossMs = Math.max(1150, reactMs * 1.6);
         this.senior.setBack(false).setVisible(true).setAlpha(1).setMotion('walk');
         this.tweens.killTweensOf(this.senior);
         this.dutyTween?.remove();

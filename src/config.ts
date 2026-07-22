@@ -222,7 +222,8 @@ export const Q2_HALLWAY = {
    * 이 시간이 곧 견장을 읽고 판단할 시간이라 일차가 오를수록 짧아진다(지수 가속).
    */
   // 하한 1100은 여정시간 ±15% 흔들림까지 감안한 후반 선배 데드라인 반응 예산의 마지노선
-  approachMs: (day: number): number => paced(1600, day, 1100),
+  // 유저 지시: 상대가 걸어오는 속도 10% 하향 = 접근 시간 ≈11% 증가(더 여유롭게 판독).
+  approachMs: (day: number): number => Math.round(paced(1600, day, 1100) * 1.11),
   /** 문이 열리고 복도로 나와 몸을 돌리기까지 (이 동안은 아직 다가오지 않는다) */
   stepOutMs: 300,
   /** 앞사람을 처리하고 다음 사람 문이 열리기까지의 텀 — 한 명씩 컨베이어처럼 */
@@ -255,13 +256,13 @@ export const Q3_MICROWAVE = {
   reactMs: (day: number): number => paced(820, day, REACT_FLOOR_MS),
   /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
   tempo: (day: number): SeniorTempoSpec => ({
-    baseGapMs: paced(1800, day, 850),
-    // 훈육관이 복도를 좌→우로 가로지르는 시간(≈1.6s)을 담도록 체류를 늘렸다 —
-    // 짧으면 순찰이 중간에 잘려 우 끝까지 못 가고 사라진다.
-    baseStayMs: Math.round(1900 * Math.min(1.35, Math.pow(pace(day), 0.3))),
-    minRecoveryMs: Math.max(700, paced(1150, day, 700)),
+    // 유저 지시: 조금 더 자주 온다 — 간격·최소회복 단축 + 점유율 상한 소폭 상향.
+    baseGapMs: paced(1500, day, 720),
+    // 훈육관이 대각선으로 다가왔다 물러나는 시간을 담도록 체류 유지(짧으면 순찰이 잘린다).
+    baseStayMs: Math.round(1550 * Math.min(1.35, Math.pow(pace(day), 0.3))),
+    minRecoveryMs: Math.max(600, paced(950, day, 600)),
     // 조리는 전자레인지 앞에 있어야만 진행된다 — 점유율 상한이 곧 클리어 보장선
-    maxPresenceRatio: 0.42,
+    maxPresenceRatio: 0.46,
   }),
   /** 완전소등까지 제한시간 — 소등 전에 "삐-"까지 끝내야 한다.
    *  숨는 시간(선배 조우 기대값)을 감안해 조리 시간 대비 넉넉하되,
@@ -283,14 +284,13 @@ export const Q4_WALK = {
   walkSpeed: (day: number): number => 300 * Math.min(1.35, Math.pow(pace(day), 0.3)),
   runSpeed: (day: number): number => 660 * Math.min(1.35, Math.pow(pace(day), 0.3)),
   /**
-   * 구보 HP 소모 (초당) — **알고리즘 대입**. 전 구간을 내리 뛰면 도착 시 HP가 약 12만
-   * 남도록 역산한다("뛰면 절묘하게 남음"). 거리·구보속도가 일차마다 달라도 자동 보정된다.
-   *   runHp = (HP_MAX − 잔여목표12) × 구보속도 ÷ 총거리
-   *   → 전 구간 구보 시간(거리/속도) 동안 정확히 (HP_MAX − 12)만큼 소모 → 도착 시 ≈12 잔존.
-   * 소비한 HP는 구보한 거리 비율에 선형 비례하므로, 필요한 만큼만 뛰면 그만큼 남는다.
+   * 구보 HP 소모 (초당) — **알고리즘 대입 × 2배**(유저 지시로 구보 소모를 2배로 강화).
+   * 기준식은 (HP_MAX−12)×구보속도÷총거리 = 전 구간 구보 시 도착 HP≈12가 되는 값인데,
+   * 여기에 ×2를 걸어 **전 구간을 내리 뛰면 절반쯤에서 이미 탈진**한다(구보가 진짜 귀한
+   * 자원). 소비 HP는 구보 거리에 선형 비례하므로 사각지대에서 걸어 회복하며 관리해야 한다.
    */
   runHpPerSec: (day: number): number =>
-    ((HP_MAX - 12) * Q4_WALK.runSpeed(day)) / Q4_WALK.distancePx(day),
+    (2 * (HP_MAX - 12) * Q4_WALK.runSpeed(day)) / Q4_WALK.distancePx(day),
   /**
    * 걷는 동안 HP 회복 (초당).
    * 지속 가능한 구보 비율 = regen / (run + regen) = 5/19 ≈ 26%.
@@ -340,7 +340,8 @@ export const Q5_WALLPUNCH = {
    * 노래 배속 — 첫판부터 살짝 빠르게, 일차가 오를수록 더 빨라진다 (게임 전반의
    * "갈수록 빨라진다" 원칙). 칩튠 스텝과 판정 격자가 같은 배율을 쓰므로 싱크가 유지된다.
    */
-  songRate: (day: number): number => Math.min(1.6, 1.12 + (day - 1) * 0.045),
+  // 유저 지시: 난이도 7% 하향 — 배속을 7% 낮춰 노트/판정 격자가 그만큼 느긋해진다.
+  songRate: (day: number): number => Math.min(1.49, (1.12 + (day - 1) * 0.045) * 0.93),
   /** 박자 간격 (ms) — 노래 원속 기준 2스텝(380ms)을 배속으로 나눈 값 */
   beatMs: (day: number): number => Math.round(380 / Q5_WALLPUNCH.songRate(day)),
   /** 곡의 첫 박 오프셋 (ms) — 칩튠 스케줄러가 재생 시작 +100ms에 첫 스텝을 놓는다 */
@@ -369,8 +370,8 @@ export const Q5_WALLPUNCH = {
 // M1. 카톡 답장하기 (타자)
 // ─────────────────────────────────────────────
 export const M1_KAKAO = {
-  /** 제한 시간 (고정 11초 — 시간이 이 게임의 전부) */
-  timeMs: tight(11000),
+  /** 제한 시간 (고정 12.65초 — 타자 난이도 15% 하향, 시간이 이 게임의 전부) */
+  timeMs: tight(12650),
   /** 붉은 펄스 시작 임계 (남은 ms) */
   panicMs: 4000,
   /** 일차별 문장 티어 — 일차가 오를수록 더 긴 답장을 요구한다 (3일마다 한 단계) */
