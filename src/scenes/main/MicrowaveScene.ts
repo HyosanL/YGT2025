@@ -74,6 +74,10 @@ export class MicrowaveScene extends BaseMainScene {
   private dutyFarPt = { x: 0, feetY: 0 };
   private dutyNearPt = { x: 0, feetY: 0 };
   private dutyTween: Phaser.Tweens.Tween | null = null;
+  /** 접근 진행도 (0=소실점 쪽, 1=근점) — 등장·퇴장 트윈이 공유한다 */
+  private dutyT = { t: 0 };
+  /** 원거리 블러 (WebGL에서만) — 멀수록 흐릿하다 */
+  private dutyBlur: { strength: number } | null = null;
 
   constructor() {
     super({ key: 'microwave' });
@@ -184,6 +188,17 @@ export class MicrowaveScene extends BaseMainScene {
     this.senior = new Cadet(this, this.dutyFarPt.x, 0, 'duty');
     this.senior.setDepth(6).setVisible(false);
     this.placeOnFloor(this.senior, this.dutyFarPt.x, this.dutyFarPt.feetY);
+    // 멀리 있을 때는 살짝 흐릿하게 (WebGL 전용 — 미지원 환경은 알파만)
+    try {
+      const fx = (
+        this.senior as unknown as {
+          postFX?: { addBlur: (...args: number[]) => { strength: number } };
+        }
+      ).postFX;
+      this.dutyBlur = fx?.addBlur ? fx.addBlur(0, 2, 2, 0) : null;
+    } catch {
+      this.dutyBlur = null;
+    }
 
     // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신 위주로 보인다
     this.player = new Cadet(this, this.nearPos.x, this.nearPos.y, 'player', false, { back: true });
@@ -219,25 +234,21 @@ export class MicrowaveScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        // **복도 소실점**에서 점처럼 나타나 복도를 따라 정확히 걸어 내려온다.
+        // 복도의 보이는 가장 먼 지점에서 점처럼 나타나 복도를 따라 걸어 내려온다.
         // 경로 위 매 지점에서 원근 배율을 다시 계산하므로 발이 바닥에서 뜨지 않는다.
         // 근점은 매번 조금씩 달라 조우가 단조롭지 않게 한다.
         const tEnd = 0.82 + Math.random() * 0.18;
         this.senior.setVisible(true).setMotion('walk');
-        this.placeOnFloor(this.senior, this.dutyFarPt.x, this.dutyFarPt.feetY);
         this.tweens.killTweensOf(this.senior);
         this.dutyTween?.remove();
-        const prog = { t: 0 };
+        this.dutyT.t = 0;
+        this.placeDuty();
         this.dutyTween = this.tweens.add({
-          targets: prog,
+          targets: this.dutyT,
           t: tEnd,
           duration: Q3_MICROWAVE.reactMs(this.day) * 2.6,
           ease: 'Cubic.easeIn',
-          onUpdate: () => {
-            const fx = Phaser.Math.Linear(this.dutyFarPt.x, this.dutyNearPt.x, prog.t);
-            const fy = Phaser.Math.Linear(this.dutyFarPt.feetY, this.dutyNearPt.feetY, prog.t);
-            this.placeOnFloor(this.senior, fx, fy);
-          },
+          onUpdate: () => this.placeDuty(),
         });
         // 다가오는 전투화 발소리 — 가까워질수록 커진다.
         // 화면을 안 보고 있어도 '오고 있다'가 귀로 먼저 들어온다.
@@ -266,11 +277,33 @@ export class MicrowaveScene extends BaseMainScene {
       },
       onLeave: () => {
         this.seniorState = 'away';
-        this.stopDutyApproach();
-        this.tweens.killTweensOf(this.senior);
-        this.senior.setVisible(false);
+        // 오다가 증발하지 않는다 — 몸을 돌려 복도 저편으로 걸어 되돌아간 뒤 사라진다
+        this.stepTimer?.remove();
+        this.stepTimer = null;
+        this.dutyTween?.remove();
+        this.dutyTween = this.tweens.add({
+          targets: this.dutyT,
+          t: 0,
+          duration: Math.max(500, 900 * this.dutyT.t),
+          ease: 'Sine.easeIn',
+          onUpdate: () => this.placeDuty(),
+          onComplete: () => {
+            this.dutyTween = null;
+            this.senior.setVisible(false);
+          },
+        });
       },
     });
+  }
+
+  /** 접근 진행도(dutyT.t)에 맞춰 위치·원근 배율·원거리 블러를 갱신 */
+  private placeDuty(): void {
+    const t = this.dutyT.t;
+    const fx = Phaser.Math.Linear(this.dutyFarPt.x, this.dutyNearPt.x, t);
+    const fy = Phaser.Math.Linear(this.dutyFarPt.feetY, this.dutyNearPt.feetY, t);
+    this.placeOnFloor(this.senior, fx, fy);
+    if (this.dutyBlur) this.dutyBlur.strength = Math.max(0, 1.7 * (1 - t) - 0.15);
+    this.senior.setAlpha(0.8 + 0.2 * t);
   }
 
   /**

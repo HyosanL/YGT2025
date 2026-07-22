@@ -15,8 +15,17 @@ export const GAME_WIDTH = 720;
 function computeGameHeight(): number {
   if (typeof window === 'undefined') return 1280;
   const app = document.getElementById('app');
-  const w = (app?.clientWidth || window.innerWidth) ?? GAME_WIDTH;
-  const h = (app?.clientHeight || window.innerHeight) ?? 1280;
+  // iOS PWA 부팅 직후엔 요소 치수가 설익을 수 있다(0/축소값) — 여러 소스에서
+  // 폭은 최소·높이는 최대를 취해 비율을 되도록 크게 잡는다. 비율이 실제보다 크면
+  // 위아래만 살짝 레터박스되고 가로는 꽉 차므로(FIT) '화면이 작아지는' 쪽보다 안전하다.
+  const widths = [app?.clientWidth, window.innerWidth, window.visualViewport?.width].filter(
+    (v): v is number => typeof v === 'number' && v > 0
+  );
+  const heights = [app?.clientHeight, window.innerHeight, window.visualViewport?.height].filter(
+    (v): v is number => typeof v === 'number' && v > 0
+  );
+  const w = widths.length > 0 ? Math.min(...widths) : GAME_WIDTH;
+  const h = heights.length > 0 ? Math.max(...heights) : 1280;
   const byAspect = Math.round((GAME_WIDTH * h) / Math.max(1, w));
   return Math.max(1280, Math.min(1600, byAspect));
 }
@@ -154,8 +163,8 @@ export function bgmTempo(day: number): number {
 // ─────────────────────────────────────────────
 // 메인 퀘스트 배정
 // ─────────────────────────────────────────────
-/** 벽치기(Q5)가 일반 풀에 편입되는 일차 — 이후 다른 메인 퀘스트와 동일 확률 */
-export const WALLPUNCH_UNLOCK_DAY = 5;
+/** 벽치기(Q5) 편입 일차 — 첫판부터 다른 메인 퀘스트와 동일 확률로 나온다 */
+export const WALLPUNCH_UNLOCK_DAY = 1;
 
 // ─────────────────────────────────────────────
 // 미니 퀘스트 발생 규칙
@@ -312,13 +321,17 @@ export const Q4_WALK = {
 // 박자가 어긋난 쿵 소리(미스)가 쌓이면 소음이 복도까지 울려 발각된다.
 // ─────────────────────────────────────────────
 export const Q5_WALLPUNCH = {
-  /** 박자 간격 (ms) — 샤워장 노래(칩튠 스텝 190ms)의 2스텝 = 380ms (~158 BPM) 고정 */
-  beatMs: 380,
+  /**
+   * 노래 배속 — 첫판부터 살짝 빠르게, 일차가 오를수록 더 빨라진다 (게임 전반의
+   * "갈수록 빨라진다" 원칙). 칩튠 스텝과 판정 격자가 같은 배율을 쓰므로 싱크가 유지된다.
+   */
+  songRate: (day: number): number => Math.min(1.6, 1.12 + (day - 1) * 0.045),
+  /** 박자 간격 (ms) — 노래 원속 기준 2스텝(380ms)을 배속으로 나눈 값 */
+  beatMs: (day: number): number => Math.round(380 / Q5_WALLPUNCH.songRate(day)),
   /** 곡의 첫 박 오프셋 (ms) — 칩튠 스케줄러가 재생 시작 +100ms에 첫 스텝을 놓는다 */
   songLeadMs: 100,
-  /** 노트 수 — 일차가 오를수록 늘어난다 (판당 5~9초) */
-  noteCount: (day: number): number =>
-    Math.min(18, 10 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 2),
+  /** 노트 수 — 같은 시간에 더 많이 두드리게, 일차가 오를수록 더 (판당 4~7초) */
+  noteCount: (day: number): number => Math.min(22, 12 + (day - 1) * 2),
   /** PERFECT 판정 반경 (±ms) */
   perfectMs: 90,
   /** GOOD 판정 반경 (±ms) — 이 밖은 미스. 판정창 전체 폭 = HIT_FLOOR_MS */
@@ -326,16 +339,15 @@ export const Q5_WALLPUNCH = {
   /** 미스(놓침·헛타·자리 틀림) 허용 — 이 횟수를 채우는 순간 발각 */
   maxMiss: 3,
   /** 반박(엇박) 노트가 따라붙을 확률 — 후반의 리듬 난이도 */
-  offbeatChance: (day: number): number =>
-    Math.min(0.5, 0.12 + Math.max(0, day - WALLPUNCH_UNLOCK_DAY) * 0.06),
+  offbeatChance: (day: number): number => Math.min(0.55, 0.15 + (day - 1) * 0.05),
   /** 쉼표(비트 건너뛰기) 확률 — 단조로운 메트로놈이 되지 않게 리듬을 만든다 */
-  restChance: 0.25,
+  restChance: 0.18,
   /** 노트가 화면 오른쪽에서 판정 링까지 흘러오는 시간 (ms) — 고정이라 읽기 쉽다 */
   approachMs: 1150,
   /** 노미스(풀콤보) 보상 — 목숨 내부 단위 (5 = 1칸) */
   fullComboLifeUnits: 5,
-  /** 벽 타격 지점(레인) 수 — 해금 직후 2개, 이틀 뒤부터 3개 (위/중간/아래) */
-  laneCount: (day: number): number => (day >= WALLPUNCH_UNLOCK_DAY + 2 ? 3 : 2),
+  /** 벽 타격 지점(레인) 수 — 1~2일차 2개, 3일차부터 3개 (위/중간/아래) */
+  laneCount: (day: number): number => (day >= 3 ? 3 : 2),
 } as const;
 
 // ─────────────────────────────────────────────

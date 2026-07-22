@@ -81,6 +81,29 @@ const DOBOK_BACK: Partial<Record<CadetMotion, string>> = {
 const BACK: Partial<Record<CadetMotion, string>> = {
   idle: 'player_back_idle', walk: 'player_back_idle', run: 'player_back_idle',
 };
+/**
+ * 4프레임 러닝 사이클 (재렌더 에셋) — 파일이 전부 로드된 세트만 쓰고,
+ * 없으면 아래 2프레임 순환으로 폴백한다. 접지→공중→반대접지→공중 표준 사이클.
+ */
+const CYCLE4: Record<string, string[]> = {
+  'player.run': ['player_run_f1', 'player_run_f2', 'player_run_f3', 'player_run_f4'],
+  'senior.run': ['senior_run_f1', 'senior_run_f2', 'senior_run_f3', 'senior_run_f4'],
+  'dobok.run': [
+    'player_dobok_run_f1',
+    'player_dobok_run_f2',
+    'player_dobok_run_f3',
+    'player_dobok_run_f4',
+  ],
+  'dobok_back.run': [
+    'player_dobok_run_back_f1',
+    'player_dobok_run_back_f2',
+    'player_dobok_run_back_f3',
+    'player_dobok_run_back_f4',
+  ],
+  'duty.run': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
+  'duty.charge': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
+};
+
 /** 2프레임 순환 (걷기/구보 애니메이션) */
 const CYCLE: Record<string, [string, string]> = {
   'player.walk': ['player_walk_a', 'player_walk_b'],
@@ -107,6 +130,8 @@ interface ContentBounds {
   h: number;
   /** 캔버스 하단의 투명 여백 (발끝을 바닥선에 붙일 때 보정) */
   padBottom: number;
+  /** 내용 가로 중심이 캔버스 중심에서 벗어난 양(px) — 프레임 간 좌우 뒤뚱거림 보정 */
+  dx: number;
 }
 
 /**
@@ -124,7 +149,7 @@ function contentBounds(scene: Phaser.Scene, key: string): ContentBounds {
   const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   const w = src.width || 1;
   const h = src.height || 1;
-  let out: ContentBounds = { h, padBottom: 0 };
+  let out: ContentBounds = { h, padBottom: 0, dx: 0 };
   try {
     const cv = document.createElement('canvas');
     cv.width = w;
@@ -133,26 +158,28 @@ function contentBounds(scene: Phaser.Scene, key: string): ContentBounds {
     if (cx) {
       cx.drawImage(src as CanvasImageSource, 0, 0);
       const a = cx.getImageData(0, 0, w, h).data;
-      const rowHasInk = (y: number): boolean => {
-        const off = y * w * 4 + 3;
-        for (let x = 0; x < w; x++) if ((a[off + x * 4] ?? 0) > 16) return true;
-        return false;
-      };
       let top = -1;
       let bottom = -1;
+      let left = w;
+      let right = -1;
       for (let y = 0; y < h; y++) {
-        if (rowHasInk(y)) {
-          top = y;
-          break;
+        const off = y * w * 4 + 3;
+        for (let x = 0; x < w; x++) {
+          if ((a[off + x * 4] ?? 0) > 16) {
+            if (top < 0) top = y;
+            bottom = y;
+            if (x < left) left = x;
+            if (x > right) right = x;
+          }
         }
       }
-      for (let y = h - 1; y >= 0; y--) {
-        if (rowHasInk(y)) {
-          bottom = y;
-          break;
-        }
+      if (top >= 0 && bottom >= top && right >= left) {
+        out = {
+          h: bottom - top + 1,
+          padBottom: h - 1 - bottom,
+          dx: (left + right + 1) / 2 - w / 2,
+        };
       }
-      if (top >= 0 && bottom >= top) out = { h: bottom - top + 1, padBottom: h - 1 - bottom };
     }
   } catch {
     // 캔버스 접근 실패(CORS 등) 시 캔버스 크기 기준으로 폴백
@@ -333,13 +360,15 @@ export class Cadet extends Phaser.GameObjects.Container {
       const anchorDispH = (anchor.h / (anchorSrc.height || BASE_H)) * BASE_H;
       const scale = anchorDispH / Math.max(1, own.h);
       this.sprite.setScale(scale);
-      this.sprite.setY(FOOT_Y + own.padBottom * scale);
+      // 내용의 가로 중심을 컨테이너 중심에 정렬 — 프레임마다 그림이 캔버스 안에서
+      // 좌우로 치우쳐 있으면 걸을 때 몸이 좌우로 뒤뚱거린다
+      this.sprite.setPosition(-own.dx * scale, FOOT_Y + own.padBottom * scale);
       return;
     }
     const src = this.sprite.texture.getSourceImage() as { height?: number };
     const th = src.height || this.sprite.height || BASE_H;
     this.sprite.setScale(BASE_H / th);
-    this.sprite.setY(FOOT_Y);
+    this.sprite.setPosition(0, FOOT_Y);
   }
 
   setFace(_emoji: string): void {
@@ -380,20 +409,25 @@ export class Cadet extends Phaser.GameObjects.Container {
       : this.dobok && (motion === 'run' || motion === 'walk')
         ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
         : `${this.kind}.${motion}`;
-    const cycle = CYCLE[cycleKey];
+    // 4프레임 재렌더 세트가 전부 로드돼 있으면 우선 사용, 아니면 2프레임 폴백
+    const four = CYCLE4[cycleKey];
+    const cycle: string[] | undefined =
+      four && four.every((k) => this.scene.textures.exists(k)) ? four : CYCLE[cycleKey];
     // 걷기·구보 순환은 이 캐릭터의 '선 자세'를 내용 높이 기준점으로 쓴다
     const anchorKey = this.texFor('idle');
 
-    if (cycle && this.scene.textures.exists(cycle[0]) && this.scene.textures.exists(cycle[1])) {
+    if (cycle && cycle.every((k) => this.scene.textures.exists(k))) {
       let i = 0;
-      this.applyTexture(cycle[0], anchorKey);
+      this.applyTexture(cycle[0] ?? '', anchorKey);
+      // 한 사이클(왕복)의 체감 속도를 프레임 수와 무관하게 유지
+      const delay = (motion === 'run' ? 220 : 600) / cycle.length;
       this.cycleTimer = this.scene.time.addEvent({
-        delay: motion === 'run' ? 110 : 300,
+        delay,
         loop: true,
         callback: () => {
           if (!this.active) return;
-          i ^= 1;
-          this.applyTexture(cycle[i], anchorKey);
+          i = (i + 1) % cycle.length;
+          this.applyTexture(cycle[i] ?? '', anchorKey);
         },
       });
       return;

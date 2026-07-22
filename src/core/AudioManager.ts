@@ -70,6 +70,8 @@ class AudioManagerImpl {
   private songTimer: number | null = null; // 칩튠 폴백 스케줄러
   private songNextTime = 0;
   private songStep = 0;
+  /** 노래 재생 배속 (1 = 원속) — 칩튠 스텝 길이와 버퍼 playbackRate에 공통 적용 */
+  private songRate = 1;
   private songPlaying = false;
   private songMode: 'buffer' | 'chip' = 'chip';
   private songData: ArrayBuffer | null = null;
@@ -483,6 +485,17 @@ class AudioManagerImpl {
     this.tone('sawtooth', 160, this.now, 0.25, 0.35, 110);
   }
 
+  /** 벽을 잘못 친 "뿡" — 민망한 방귀 소리 (벽치기 미스 전용) */
+  fart(): void {
+    if (!this.ready) return;
+    const t = this.now;
+    // 낮은 사각파+톱니가 부르르 떨리며 축 처진다
+    this.tone('sawtooth', 130, t, 0.3, 0.85, 48);
+    this.tone('square', 92, t + 0.02, 0.24, 0.5, 40);
+    this.tone('sawtooth', 110, t + 0.09, 0.16, 0.4, 55);
+    this.noiseBurst(t, 0.2, 0.3, 320);
+  }
+
   /** 성공 팡파레 */
   fanfare(): void {
     if (!this.ready) return;
@@ -537,10 +550,12 @@ class AudioManagerImpl {
   ];
   private static readonly STEP_SEC = 0.19;
 
-  startSong(): void {
+  /** rate = 재생 배속 (벽치기 리듬판 — 일차가 오를수록 빨라진다) */
+  startSong(rate = 1): void {
     this.stopSong();
     this.songPlaying = true;
     this.songOffsetSec = 0;
+    this.songRate = Math.max(0.5, Math.min(2, rate));
     // 시작 시점에 모드 고정 — 판 중간에 음원이 뒤바뀌는 어색함 방지
     this.songMode = this.songBuffer ? 'buffer' : 'chip';
     if (this.songMode === 'chip') {
@@ -550,6 +565,11 @@ class AudioManagerImpl {
     } else {
       this.ensureSongState();
     }
+  }
+
+  /** 현재 배속 기준 칩튠 한 스텝의 길이 (초) */
+  private get songStepSec(): number {
+    return AudioManagerImpl.STEP_SEC / this.songRate;
   }
 
   setSongPlaying(playing: boolean): void {
@@ -565,12 +585,10 @@ class AudioManagerImpl {
       } else {
         // 일시정지: 룩어헤드로 이미 예약돼 무음으로 소진될 스텝을 되감는다 —
         // 재개 시 그 지점부터 다시 연주되어 게임 시계와의 어긋남이 누적되지 않는다
-        const pending = Math.round(
-          (this.songNextTime - this.now) / AudioManagerImpl.STEP_SEC
-        );
+        const pending = Math.round((this.songNextTime - this.now) / this.songStepSec);
         if (pending > 0) {
           this.songStep = Math.max(0, this.songStep - pending);
-          this.songNextTime -= pending * AudioManagerImpl.STEP_SEC;
+          this.songNextTime -= pending * this.songStepSec;
         }
       }
     } else {
@@ -596,9 +614,7 @@ class AudioManagerImpl {
     }
     // 칩튠: 첫 스텝도 못 나간 채 게임 시계만 앞서 있으면 스텝을 앞으로 감는다
     if (this.songStep === 0 && elapsedMs > 400) {
-      this.songStep = Math.floor(
-        Math.max(0, elapsedMs / 1000 - 0.1) / AudioManagerImpl.STEP_SEC
-      );
+      this.songStep = Math.floor(Math.max(0, elapsedMs / 1000 - 0.1) / this.songStepSec);
       this.songNextTime = this.now + 0.05;
     }
   }
@@ -611,6 +627,7 @@ class AudioManagerImpl {
       const src = this.ctx.createBufferSource();
       src.buffer = this.songBuffer;
       src.loop = true;
+      src.playbackRate.value = this.songRate; // 벽치기 배속판 대응
       const gain = this.ctx.createGain();
       gain.gain.value = 0.85; // 물소리·효과음과 밸런스
       src.connect(gain).connect(this.bgmBus ?? this.master);
@@ -879,14 +896,14 @@ class AudioManagerImpl {
       const melody = AudioManagerImpl.MELODY;
       const freq = melody[this.songStep % melody.length];
       if (freq > 0) {
-        this.tone('square', freq, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.9, 0.2, undefined, this.bgmBus ?? undefined);
+        this.tone('square', freq, this.songNextTime, this.songStepSec * 0.9, 0.2, undefined, this.bgmBus ?? undefined);
         // 간단한 베이스 (한 옥타브 아래, 2스텝마다)
         if (this.songStep % 2 === 0) {
-          this.tone('triangle', freq / 2, this.songNextTime, AudioManagerImpl.STEP_SEC * 0.8, 0.14, undefined, this.bgmBus ?? undefined);
+          this.tone('triangle', freq / 2, this.songNextTime, this.songStepSec * 0.8, 0.14, undefined, this.bgmBus ?? undefined);
         }
       }
       this.songStep += 1;
-      this.songNextTime += AudioManagerImpl.STEP_SEC;
+      this.songNextTime += this.songStepSec;
     }
   }
 

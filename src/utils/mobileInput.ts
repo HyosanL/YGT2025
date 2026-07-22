@@ -103,19 +103,21 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     const left = r.left + rect.x * sx;
     const width = rect.w * sx;
 
-    // 따라 칠 문장이 길면 한 줄에 안 들어간다 — 폭에 맞춰 글자 크기를 줄이고,
-    // 그래도 작아지면 두 줄로 눕혀 라벨을 키운다. (잘려서 안 보이는 것이 최악)
+    // 따라 칠 문장은 **읽히는 게 최우선** — 라벨은 입력창 폭이 아니라 캔버스 전폭을
+    // 쓰고, 폭에 맞춰 글꼴을 줄이되 그래도 작으면 두 줄로 눕힌다.
     const text = opts.label?.text ?? '';
     const CHAR_W = 0.56; // 한글 기준 글자 폭 ≈ 글꼴 크기의 절반 남짓
-    const baseH = Math.max(30, h * 0.85);
+    const baseH = Math.max(34, h * 0.9);
+    const labelLeft = r.left + 8;
+    const labelW = Math.max(width, r.width - 16);
     let labelLines = 1;
-    let labelFont = Math.min(baseH * 0.5, width / Math.max(1, text.length * CHAR_W));
-    if (labelFont < 15 && text.length > 0) {
+    let labelFont = Math.min(baseH * 0.55, labelW / Math.max(1, text.length * CHAR_W));
+    if (labelFont < 18 && text.length > 0) {
       labelLines = 2;
-      labelFont = Math.min(baseH * 0.46, width / Math.max(1, (text.length / 2) * CHAR_W));
+      labelFont = Math.min(baseH * 0.5, labelW / Math.max(1, (text.length / 2) * CHAR_W));
     }
-    labelFont = Math.max(13, labelFont);
-    const labelH = labelEl ? Math.max(baseH, labelFont * 1.35 * labelLines + 8) : 0;
+    labelFont = Math.max(16, labelFont);
+    const labelH = labelEl ? Math.max(baseH, labelFont * 1.35 * labelLines + 10) : 0;
     const labelGap = labelEl ? 6 : 0;
 
     let top = r.top + rect.y * sy;
@@ -134,11 +136,12 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     el.style.height = `${h}px`;
     el.style.fontSize = `${Math.max(16, Math.round(h * 0.42))}px`;
     if (labelEl) {
-      labelEl.style.left = `${left}px`;
-      labelEl.style.width = `${width}px`;
+      labelEl.style.left = `${labelLeft}px`;
+      labelEl.style.width = `${labelW}px`;
       labelEl.style.height = `${labelH}px`;
       labelEl.style.top = `${top - labelH - labelGap}px`;
       labelEl.style.fontSize = `${Math.round(labelFont)}px`;
+      labelEl.style.boxShadow = '0 3px 0 rgba(0,0,0,0.55)';
     }
   };
 

@@ -15,8 +15,8 @@ import { BaseMainScene } from './BaseMainScene';
  */
 const WALL_X = 150;
 
-/** 판정 링 x — 노트가 여기 닿는 순간이 '쿵' 타이밍 (벽면 위) */
-const RING_X = WALL_X + 60;
+/** 판정 링 x — 벽에 바짝 붙여서 '실제로 벽을 두드리는' 느낌을 만든다 */
+const RING_X = WALL_X - 22;
 /** 노트가 태어나는 화면 오른쪽 바깥 */
 const SPAWN_X = GAME_WIDTH + 70;
 /** 카운트인 박자 수 — '3, 2, 1, 시작!' 뒤 첫 노트가 온다 */
@@ -74,6 +74,8 @@ export class WallPunchScene extends BaseMainScene {
   /** 씬 pause에 흔들리지 않도록 delta 누적으로 굴리는 곡 시계 (ms) */
   private songTime = 0;
   private lastBeat = -1;
+  /** 오늘의 박자 간격 — 노래 배속에 맞춰 일차마다 짧아진다 */
+  private beatMs = 380;
   private goodMs: number = Q5_WALLPUNCH.goodMs;
   private notes: RhythmNote[] = [];
   private missCount = 0;
@@ -276,6 +278,7 @@ export class WallPunchScene extends BaseMainScene {
     this.stopChatterBubbles();
     audio.stopChatter();
 
+    this.beatMs = Q5_WALLPUNCH.beatMs(this.day);
     this.notes = this.buildNotes();
     this.songTime = 0;
     this.lastBeat = -1;
@@ -284,8 +287,8 @@ export class WallPunchScene extends BaseMainScene {
     this.missText.setVisible(true);
     this.updateMissText();
 
-    // 샤워장에서 몰래 틀던 그 노래 — 이 비트에 노트가 실려 온다
-    audio.startSong();
+    // 샤워장에서 몰래 틀던 그 노래 — 일차가 오를수록 배속이 붙는다
+    audio.startSong(Q5_WALLPUNCH.songRate(this.day));
   }
 
   /**
@@ -296,7 +299,7 @@ export class WallPunchScene extends BaseMainScene {
   private buildNotes(): RhythmNote[] {
     const count = Q5_WALLPUNCH.noteCount(this.day);
     const offbeatP = Q5_WALLPUNCH.offbeatChance(this.day);
-    const beatMs = Q5_WALLPUNCH.beatMs;
+    const beatMs = this.beatMs;
     const lead = Q5_WALLPUNCH.songLeadMs;
     const laneCount = this.laneYs.length;
     const out: RhythmNote[] = [];
@@ -452,14 +455,14 @@ export class WallPunchScene extends BaseMainScene {
       this.tweens.add({ targets: this.tapLabel, alpha: 0, duration: 250 });
     }
 
-    // 타격 컷 반짝 + 실감나는 쿵 (perfect는 더 세게)
+    // 타격 컷 반짝 + 실감나는 쿵 + 화면이 울리는 흔들림 (perfect는 더 세게)
     audio.thud(perfect);
     vibrate(HAPTIC.miniSuccess);
     this.sceneHit.setAlpha(1);
     this.time.delayedCall(100, () => {
       if (!this.finished) this.sceneHit.setAlpha(0);
     });
-    this.cameras.main.shake(70, perfect ? 0.004 : 0.002);
+    this.cameras.main.shake(120, perfect ? 0.011 : 0.007);
 
     const obj = note.obj;
     if (obj) {
@@ -521,7 +524,8 @@ export class WallPunchScene extends BaseMainScene {
     this.missCount += 1;
     this.combo = 0;
     this.comboText.setText('');
-    audio.buzz();
+    // 잘못 친 벽에서는 민망한 "뿡" 소리가 난다
+    audio.fart();
     vibrate(HAPTIC.damage);
     this.judgePopup(label, COLORS.accentCss, this.laneYs[lane] ?? 600);
     this.cameras.main.shake(140, 0.006);
@@ -677,9 +681,7 @@ export class WallPunchScene extends BaseMainScene {
 
     // 박 격자는 노트/가청 비트와 같은 songLeadMs 오프셋 위에 있다 —
     // 이걸 빼지 않으면 메트로놈·링 펄스가 노래보다 100ms 빨라 박치기 게임이 된다
-    const beatIdx = Math.floor(
-      (this.songTime - Q5_WALLPUNCH.songLeadMs) / Q5_WALLPUNCH.beatMs
-    );
+    const beatIdx = Math.floor((this.songTime - Q5_WALLPUNCH.songLeadMs) / this.beatMs);
     if (beatIdx !== this.lastBeat) {
       this.lastBeat = beatIdx;
       this.onBeat(beatIdx);

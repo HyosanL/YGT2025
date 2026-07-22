@@ -100,16 +100,41 @@ document.addEventListener('visibilitychange', () => {
     }
   } else {
     gameState.releaseClock();
+    // 복귀 직후 뷰포트가 재확정되며 캔버스 크기가 틀어질 수 있다
+    window.setTimeout(refreshScale, 100);
   }
 });
 
-// iOS 주소창 접힘/가상 키보드/회전 시 뷰포트가 바뀌어도 캔버스가 잘리지 않게 재계산
+// iOS 주소창 접힘/회전 시 뷰포트가 바뀌어도 캔버스가 잘리지 않게 재계산
 const refreshScale = (): void => {
   game.scale.refresh();
 };
-window.visualViewport?.addEventListener('resize', refreshScale);
+/** 가상 키보드가 떠 있는 상태(줄어든 visualViewport)인지 — 이때 재계산하면 축소가 잔존한다 */
+const keyboardOpen = (): boolean => {
+  const vv = window.visualViewport;
+  return !!vv && vv.height < window.innerHeight - 140;
+};
+window.addEventListener('resize', () => {
+  if (!keyboardOpen()) refreshScale();
+});
+window.visualViewport?.addEventListener('resize', () => {
+  if (!keyboardOpen()) refreshScale();
+});
 window.addEventListener('orientationchange', () => {
   // 회전 직후에는 뷰포트 값이 늦게 확정되는 기기가 있어 한 박자 뒤 한 번 더
   refreshScale();
   window.setTimeout(refreshScale, 300);
 });
+// 축소 잔존 감시 — 어떤 경로로든(키보드/회전/PWA 복귀) 캔버스가 #app의 FIT 기대치보다
+// 작게 남아 있으면 다시 맞춘다. "화면이 꽉 안 찬다"는 축소 고착의 마지막 안전망.
+window.setInterval(() => {
+  if (keyboardOpen()) return;
+  const app = document.getElementById('app');
+  const cv = app?.querySelector('canvas');
+  if (!app || !cv) return;
+  const ar = app.getBoundingClientRect();
+  const cr = cv.getBoundingClientRect();
+  if (ar.width < 50 || ar.height < 50) return;
+  const expectedW = GAME_WIDTH * Math.min(ar.width / GAME_WIDTH, ar.height / GAME_HEIGHT);
+  if (Math.abs(cr.width - expectedW) > 4) refreshScale();
+}, 1200);
