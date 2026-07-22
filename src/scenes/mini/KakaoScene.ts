@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT, GAME_WIDTH, M1_KAKAO } from '../../config';
+import { GAME_WIDTH, M1_KAKAO } from '../../config';
 import { audio } from '../../core/AudioManager';
 import { gameState } from '../../core/GameState';
 import type { KakaoPrompt } from '../../types';
@@ -7,17 +7,15 @@ import { createHiddenInput, type HiddenInput } from '../../utils/mobileInput';
 import { pick } from '../../utils/rng';
 import { BaseMiniScene, KAKAO, PANEL } from './BaseMiniScene';
 import { drawIncoming, drawOutgoing, KAKAO_INPUT_H } from '../../ui/kakao';
-import { Button } from '../../ui/Button';
 
 /**
  * M1. 카톡 답장하기 — 제한 시간 안에 제시된 문장을 정확히 타이핑 (느낌표까지!).
- * 카톡풍 채팅방 디자인: 하늘색 배경 + 상대(흰) 버블 + 내(노랑) 버블.
- * 게임 좌표에 맞춰 겹쳐 놓은 '보이는' <input>이 키보드를 띄운다 (직접 탭 가능해 확실).
- * 키보드 포커스(또는 첫 입력) 확인 후 타이머 시작.
+ * **카톡 화면의 입력바 자체가 입력창**이다: 평소엔 채팅방 하단 입력바 자리에 얹혀 있고
+ * (＋ · 흰 알약 · 노란 전송 ➤), 키보드가 뜨면 실제 카톡처럼 그 입력바가 키보드 위로
+ * 올라온다. 따로 뜨는 팝업 입력창은 없다. 따라 칠 문장은 입력바 바로 위 노란 라벨.
  */
 export class KakaoScene extends BaseMiniScene {
   private prompt!: KakaoPrompt;
-  private hintText!: Phaser.GameObjects.Text;
   private hiddenInput: HiddenInput | null = null;
   private timerStarted = false;
 
@@ -27,6 +25,9 @@ export class KakaoScene extends BaseMiniScene {
 
   create(): void {
     this.timerStarted = false;
+    // 입력바 내용(＋·전송)은 DOM 카톡 입력바가 그린다 — 흰 바 배경만 남긴다
+    this.roomSkipInput = true;
+    this.roomPlaceholder = '';
     this.setupOverlay('김선배', 'kakao');
 
     const tier = M1_KAKAO.tier(gameState.day);
@@ -76,60 +77,23 @@ export class KakaoScene extends BaseMiniScene {
       time: '오후 9:47',
     });
 
-    // 보낼 답장 문장은 캔버스가 아니라 입력창 위의 DOM 라벨(노란 버블)로 표시한다
-    // — 가상 키보드가 올라와도 입력창과 함께 화면에 남아 항상 보인다
-    this.add
-      .text(GAME_WIDTH / 2, y + 24, '👇 노란 문장을 그대로 입력해서 전송! (느낌표까지)', {
-        fontFamily: FONT,
-        fontSize: '24px',
-        color: '#3f4c5a',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
-
-    this.hintText = this.add
-      .text(GAME_WIDTH / 2, y + 66, '⌨️ 입력창을 탭하면 키보드가 올라온다!', {
-        fontFamily: FONT,
-        fontSize: '23px',
-        color: '#b23b2e',
-      })
-      .setOrigin(0.5);
-
-    // 실제 카톡처럼 입력바 오른쪽에 노란 전송 버튼
-    const barMid = PANEL.y + PANEL.h - KAKAO_INPUT_H / 2;
-    new Button(this, PANEL.x + PANEL.w - 56, barMid, {
-      label: '➤',
-      width: 88,
-      height: 88,
-      color: KAKAO.yellow,
-      labelColor: KAKAO.textBrown,
-      fontSize: 40,
-      onClick: () => this.send(),
-    });
-
-    // 보이는 input을 게임 좌표에 겹쳐 배치 — 씬 진입 즉시 키보드 요청,
-    // 포커스(또는 첫 입력) 확인 후 타이머 시작
+    // ── 카톡 입력바(DOM) = 실제 입력창 ──
+    // ＋ · 흰 알약 입력창(메시지 입력) · 노란 전송 ➤. 위에는 따라 칠 노란 문장 라벨.
+    // 평소엔 rect(채팅방 하단 입력바 자리)에, 키보드가 뜨면 키보드 바로 위로 올라온다.
     this.hiddenInput = createHiddenInput({
       onInput: (value) => this.onTyped(value),
       onEnter: () => this.send(),
       onFocus: () => this.beginCountdown(),
-      rect: { x: PANEL.x + 62, y: barMid - 34, w: PANEL.w - 172, h: 68 },
-      // 실제 카톡 입력칸처럼 — 흰 라운드 필드 + '메시지 입력' 플레이스홀더.
-      // 키보드 바로 위에 홀로 떠도 입력창임이 분명하도록 옅은 테두리·그림자를 준다.
+      onSend: () => this.send(),
+      kakaoBar: true,
       placeholder: '메시지 입력',
-      style: {
-        background: '#ffffff',
-        border: '1.5px solid #e4e7eb',
-        textAlign: 'left',
-        color: KAKAO.textDark,
-        caretColor: '#d4a017',
-      },
-      // 따라 칠 문장 — 키보드가 올라와도 입력창 바로 위에 붙어 항상 보인다
+      rect: { x: PANEL.x, y: PANEL.y + PANEL.h - KAKAO_INPUT_H, w: PANEL.w, h: KAKAO_INPUT_H },
+      style: { color: KAKAO.textDark, caretColor: '#d4a017' },
       label: { text: this.prompt.reply, background: '#fee500', color: KAKAO.textBrown },
     });
     this.hiddenInput.focus();
 
-    // input 밖(패널 어디든)을 탭해도 포커스 재시도 — 제스처 안에서 focus가 불려 확실해진다
+    // 채팅 영역(입력바 위)을 탭해도 포커스 재시도 — 키보드가 내려갔을 때 다시 올린다
     this.add
       .zone(0, 0, GAME_WIDTH, PANEL.y + PANEL.h - KAKAO_INPUT_H)
       .setOrigin(0)
@@ -145,7 +109,6 @@ export class KakaoScene extends BaseMiniScene {
   private beginCountdown(): void {
     if (this.timerStarted || this.done) return;
     this.timerStarted = true;
-    this.hintText.setText('빨리!!!');
     this.startTimer(M1_KAKAO.timeMs, () =>
       this.finishFail('답장이 늦었다... 선배의 인내심이 바닥났다.')
     );

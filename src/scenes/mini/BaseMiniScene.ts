@@ -41,6 +41,8 @@ export abstract class BaseMiniScene extends Phaser.Scene {
   protected roomMemberCount = 0;
   /** 입력바 플레이스홀더 */
   protected roomPlaceholder = '';
+  /** 입력바 내용(＋·전송)을 DOM 입력바가 대신 그릴 때 true — 카톡 답장(타자) */
+  protected roomSkipInput = false;
 
   init(data: MiniSceneData): void {
     this.returnTo = data.returnTo;
@@ -79,7 +81,12 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       this.room = drawKakaoRoom(
         this,
         { x: PANEL.x, y: PANEL.y, w: PANEL.w, h: PANEL.h },
-        { title, memberCount: this.roomMemberCount, placeholder: this.roomPlaceholder }
+        {
+          title,
+          memberCount: this.roomMemberCount,
+          placeholder: this.roomPlaceholder,
+          skipInputContent: this.roomSkipInput,
+        }
       );
       drawKakaoDate(this, PANEL.y + 196, '오늘');
       this.room.top = PANEL.y + 226;

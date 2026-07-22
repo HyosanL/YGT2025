@@ -81,8 +81,10 @@ export class WallPunchScene extends BaseMainScene {
   private missCount = 0;
   private combo = 0;
   private endScheduled = false;
-  /** 마지막으로 처리(히트/미스)된 노트의 t — 그쪽을 향한 늦은 탭은 벌점 없이 무시 */
+  /** 마지막으로 처리(히트/미스)된 노트의 t — 그쪽을 향한 늦은 탭 1번은 벌점 없이 무시 */
   private lastResolvedT: number | null = null;
+  /** 마지막 처리 이후 '봐준 탭'을 이미 한 번 썼는지 — 난타(연타)가 유예창을 도배하는 걸 막는다 */
+  private graceUsed = false;
   /** '아직!' 안내 팝업 스로틀 (songTime 기준) */
   private earlyPopupAt = -1000;
 
@@ -121,6 +123,7 @@ export class WallPunchScene extends BaseMainScene {
     this.combo = 0;
     this.endScheduled = false;
     this.lastResolvedT = null;
+    this.graceUsed = false;
     this.earlyPopupAt = -1000;
     this.rings = [];
 
@@ -432,23 +435,27 @@ export class WallPunchScene extends BaseMainScene {
       return;
     }
 
-    // 방금 처리된 노트를 향한 늦은 탭 — 내려오던 손가락까지 벌하진 않는다.
-    // 단 200ms 안쪽일 때만: 상한 없이 봐주면 노트 사이 아무 때나 두드려도 무벌점이 된다.
+    // 방금 처리된 노트를 향한 늦은 탭 — 내려오던 손가락 '한 번'만 봐준다.
+    // (graceUsed 플래그로 처리당 1회로 제한 — 안 그러면 200ms 유예창을 난타로 도배해
+    //  박자 무시 연타로도 통과된다. 유저 피드백: 박자 안 맞추고 치면 깎여야 함.)
     if (
       this.lastResolvedT !== null &&
+      !this.graceUsed &&
       Math.abs(this.songTime - this.lastResolvedT) <= 200 &&
       Math.abs(this.songTime - this.lastResolvedT) <= nearestDt
     ) {
+      this.graceUsed = true;
       return;
     }
 
-    // 박자에서 한참 벗어난 헛방망이질 — 그 쿵 소리가 제일 수상하다
+    // 박자에서 벗어난 헛방망이질(난타 포함) — 그 쿵 소리가 제일 수상하다
     this.addMiss('엇박!!', tapLane);
   }
 
   private hitNote(note: RhythmNote, perfect: boolean): void {
     note.resolved = true;
     this.lastResolvedT = note.t;
+    this.graceUsed = false;
     this.combo += 1;
     // 첫 히트에 성공했으면 타이밍 안내는 소임을 다했다
     if (this.tapLabel.alpha > 0) {
@@ -487,6 +494,7 @@ export class WallPunchScene extends BaseMainScene {
   private missNote(note: RhythmNote): void {
     note.resolved = true;
     this.lastResolvedT = note.t;
+    this.graceUsed = false;
     const obj = note.obj;
     if (obj) {
       this.tweens.add({
@@ -505,6 +513,7 @@ export class WallPunchScene extends BaseMainScene {
   private consumeWrongSpot(note: RhythmNote): void {
     note.resolved = true;
     this.lastResolvedT = note.t;
+    this.graceUsed = false;
     const obj = note.obj;
     if (obj) {
       this.tweens.add({

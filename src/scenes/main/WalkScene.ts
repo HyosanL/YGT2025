@@ -248,7 +248,7 @@ export class WalkScene extends BaseMainScene {
     const speed = this.holding ? Q4_WALK.runSpeed(this.day) : Q4_WALK.walkSpeed(this.day);
     this.progressPx += (speed * delta) / 1000;
     if (this.holding) {
-      const drain = (Q4_WALK.runHpPerSec * delta) / 1000;
+      const drain = (Q4_WALK.runHpPerSec(this.day) * delta) / 1000;
       gameState.damage(Math.min(drain, Math.max(0, gameState.hp - 1)));
       if (gameState.hp <= 1.01) {
         this.holding = false;
@@ -316,9 +316,10 @@ export class WalkScene extends BaseMainScene {
         spotter = g.cadet;
       }
       g.cadet.setFace(inCone ? (this.holding ? '🫡' : '😡') : '👀');
-      // 화면 위로 걸어 올라갈 땐(순찰 방향 -1) 등을 보이고, 내려올 땐 정면.
+      // 화면에서 위로 올라갈 땐 등(뒷모습), 아래로 내려올 땐 정면.
+      // 순찰 +1 → worldY↑ → sy↓(위로 이동)=뒷모습, −1 → 아래로 이동=정면.
       // (뒷모습 에셋이 없으면 Cadet이 정면으로 자연 폴백한다)
-      g.cadet.setBack(g.patrolDir === -1);
+      g.cadet.setBack(g.patrolDir === 1);
       g.cadet.setMotion('walk');
 
       // 시야 부채꼴 — 평소엔 노랑, 나를 비추는 중엔 빨강

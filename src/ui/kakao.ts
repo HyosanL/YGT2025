@@ -77,7 +77,7 @@ function drawStatusBar(scene: Phaser.Scene, x: number, y: number, w: number): vo
 export function drawKakaoRoom(
   scene: Phaser.Scene,
   rect: { x: number; y: number; w: number; h: number },
-  opts: { title: string; memberCount?: number; placeholder?: string }
+  opts: { title: string; memberCount?: number; placeholder?: string; skipInputContent?: boolean }
 ): KakaoRoom {
   const { x, y, w, h } = rect;
   const r = 26;
@@ -142,30 +142,34 @@ export function drawKakaoRoom(
   g.lineStyle(2, KAKAO.hairline, 1);
   g.lineBetween(x, inputTop, x + w, inputTop);
 
-  const midY = inputTop + KAKAO_INPUT_H / 2;
-  const plus = scene.add.graphics();
-  plus.lineStyle(4, 0x8b95a1, 1);
-  plus.lineBetween(x + 26, midY, x + 54, midY);
-  plus.lineBetween(x + 40, midY - 14, x + 40, midY + 14);
-  if (opts.placeholder) {
-    scene.add
-      .text(x + 76, midY, opts.placeholder, {
-        fontFamily: FONT,
-        fontSize: '25px',
-        color: '#b0b8c1',
-      })
-      .setOrigin(0, 0.5);
+  // 입력바 내용(＋·플레이스홀더·이모티콘·전송)은 DOM 입력바가 대신 그린다 —
+  // 키보드가 뜨면 그 DOM 바가 카톡 입력바 모양 그대로 키보드 위로 올라온다.
+  // (skipInputContent면 흰 바 배경만 남기고 아이콘류는 생략)
+  if (!opts.skipInputContent) {
+    const midY = inputTop + KAKAO_INPUT_H / 2;
+    const plus = scene.add.graphics();
+    plus.lineStyle(4, 0x8b95a1, 1);
+    plus.lineBetween(x + 26, midY, x + 54, midY);
+    plus.lineBetween(x + 40, midY - 14, x + 40, midY + 14);
+    if (opts.placeholder) {
+      scene.add
+        .text(x + 76, midY, opts.placeholder, {
+          fontFamily: FONT,
+          fontSize: '25px',
+          color: '#b0b8c1',
+        })
+        .setOrigin(0, 0.5);
+    }
+    const right = scene.add.graphics();
+    right.lineStyle(3.5, 0x8b95a1, 1);
+    right.strokeCircle(x + w - 46, midY, 15);
+    right.fillStyle(0x8b95a1, 1);
+    right.fillCircle(x + w - 51, midY - 5, 2.4);
+    right.fillCircle(x + w - 41, midY - 5, 2.4);
+    right.beginPath();
+    right.arc(x + w - 46, midY + 1, 8, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155));
+    right.strokePath();
   }
-  // 이모티콘(웃는 얼굴) + 샵 검색
-  const right = scene.add.graphics();
-  right.lineStyle(3.5, 0x8b95a1, 1);
-  right.strokeCircle(x + w - 46, midY, 15);
-  right.fillStyle(0x8b95a1, 1);
-  right.fillCircle(x + w - 51, midY - 5, 2.4);
-  right.fillCircle(x + w - 41, midY - 5, 2.4);
-  right.beginPath();
-  right.arc(x + w - 46, midY + 1, 8, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155));
-  right.strokePath();
 
   return { top: y + STATUS_H + NAV_H, bottom: inputTop, left: x, right: x + w };
 }

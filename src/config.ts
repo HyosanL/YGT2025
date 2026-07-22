@@ -16,11 +16,14 @@ function computeGameHeight(): number {
   if (typeof window === 'undefined') return 1280;
   // 세이프에어리어가 반영된 #app의 실제 크기가 유일한 진실 — 여기 비율과 게임 비율이
   // 어긋나면 FIT가 레터박스를 만든다 ("화면이 작아 보이는" 문제의 정체).
+  // 클램프를 [1200,2000]으로 넓혀 요즘 세로 긴 폰(비율 2.1~2.3)도 클램프에 안 걸리고
+  // #app 비율과 정확히 일치 → FIT 레터박스 없이 꽉 찬다. (씬은 GAME_HEIGHT에 맞춰 앵커)
   const app = document.getElementById('app');
-  const w = app?.clientWidth || window.innerWidth || GAME_WIDTH;
-  const h = app?.clientHeight || window.innerHeight || 1280;
+  const vv = window.visualViewport;
+  const w = app?.clientWidth || vv?.width || window.innerWidth || GAME_WIDTH;
+  const h = app?.clientHeight || vv?.height || window.innerHeight || 1280;
   const byAspect = Math.round((GAME_WIDTH * h) / Math.max(1, w));
-  return Math.max(1280, Math.min(1600, byAspect));
+  return Math.max(1200, Math.min(2000, byAspect));
 }
 
 /**
@@ -175,8 +178,8 @@ export const WALLPUNCH_UNLOCK_DAY = 1;
 export const MINI = {
   /** 하루(메인 퀘스트 1회) 안에서 미니 퀘스트 발생 확률 */
   chance: (day: number): number => Math.min(0.95, harder(0.3 + day * 0.05)),
-  /** 하루 최대 발생 횟수 */
-  maxPerDay: 2,
+  /** 하루(메인 퀘스트 1회) 최대 미니 퀘스트 발생 횟수 — 유저 지시: 최대 1회(안 나오거나 1번) */
+  maxPerDay: 1,
   /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
   failLifeUnits: 5,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
@@ -279,8 +282,15 @@ export const Q4_WALK = {
    */
   walkSpeed: (day: number): number => 300 * Math.min(1.35, Math.pow(pace(day), 0.3)),
   runSpeed: (day: number): number => 660 * Math.min(1.35, Math.pow(pace(day), 0.3)),
-  /** 구보 HP 소모 (초당) — 전 구간을 내리 뛰면 탈진하는 수치 */
-  runHpPerSec: 14,
+  /**
+   * 구보 HP 소모 (초당) — **알고리즘 대입**. 전 구간을 내리 뛰면 도착 시 HP가 약 12만
+   * 남도록 역산한다("뛰면 절묘하게 남음"). 거리·구보속도가 일차마다 달라도 자동 보정된다.
+   *   runHp = (HP_MAX − 잔여목표12) × 구보속도 ÷ 총거리
+   *   → 전 구간 구보 시간(거리/속도) 동안 정확히 (HP_MAX − 12)만큼 소모 → 도착 시 ≈12 잔존.
+   * 소비한 HP는 구보한 거리 비율에 선형 비례하므로, 필요한 만큼만 뛰면 그만큼 남는다.
+   */
+  runHpPerSec: (day: number): number =>
+    ((HP_MAX - 12) * Q4_WALK.runSpeed(day)) / Q4_WALK.distancePx(day),
   /**
    * 걷는 동안 HP 회복 (초당).
    * 지속 가능한 구보 비율 = regen / (run + regen) = 5/19 ≈ 26%.
