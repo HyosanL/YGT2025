@@ -91,13 +91,27 @@ const CYCLE4: Record<string, string[]> = {
   'senior.run': ['senior_run_f1', 'senior_run_f2', 'senior_run_f3', 'senior_run_f4'],
   'duty.run': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
   'duty.charge': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
-  // 아래 세트들은 f3/f4가 미러 프레임이라 머리 가르마·매듭이 반 사이클마다 뒤집혀
-  // 움찔거린다 — 진짜 프레임인 f1/f2만 순환한다 (재생성 전까지 2프레임)
-  'dobok.run': ['player_dobok_run_f1', 'player_dobok_run_f2'],
-  'dobok_back.run': ['player_dobok_run_back_f1', 'player_dobok_run_back_f2'],
-  'visitor.walk': ['visitor_walk_f1', 'visitor_walk_f2'],
-  'duty.walk': ['duty_walk_f1', 'duty_walk_f2'],
-  'dobok_back.walk': ['player_dobok_walk_back_f1', 'player_dobok_walk_back_f2'],
+  // 반대 위상(f3/f4)까지 전부 개별 렌더된 진짜 4프레임 사이클 — 미러 프레임 없음
+  'dobok.run': [
+    'player_dobok_run_f1',
+    'player_dobok_run_f2',
+    'player_dobok_run_f3',
+    'player_dobok_run_f4',
+  ],
+  'dobok_back.run': [
+    'player_dobok_run_back_f1',
+    'player_dobok_run_back_f2',
+    'player_dobok_run_back_f3',
+    'player_dobok_run_back_f4',
+  ],
+  'visitor.walk': ['visitor_walk_f1', 'visitor_walk_f2', 'visitor_walk_f3', 'visitor_walk_f4'],
+  'duty.walk': ['duty_walk_f1', 'duty_walk_f2', 'duty_walk_f3', 'duty_walk_f4'],
+  'dobok_back.walk': [
+    'player_dobok_walk_back_f1',
+    'player_dobok_walk_back_f2',
+    'player_dobok_walk_back_f3',
+    'player_dobok_walk_back_f4',
+  ],
 };
 
 /** 2프레임 순환 (걷기/구보 애니메이션) */
