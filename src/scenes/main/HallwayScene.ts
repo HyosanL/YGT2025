@@ -12,19 +12,38 @@ type Action = 'greet' | 'salute';
 
 const RANK_OF: Record<VisitorKind, 1 | 2 | 3> = { junior: 1, peer: 2, senior: 3 };
 
-// ── 복도 원근 ────────────────────────────────────
+// ── 복도 원근 (bg_hallway2, 원본 864×1184 — doors.json 실측) ────────────
 /**
- * bg_hallway는 1점 투시다. 아래 값들은 배경 PNG에서 **벽 밑단(굽도리 아래 선)을 픽셀로 찾아
- * 좌우 직선을 피팅한 뒤 교점을 구해** 실측한 것이다 (눈대중 배치가 캐릭터를 공중에 띄웠다).
+ * 1점 투시 복도. 소실점·문 사각은 재렌더 배경에서 실측한 **원본 픽셀** 값이고,
+ * create()에서 cover 스케일을 반영해 화면 좌표(아래 let들)로 변환한다.
  *
  * 바닥 위의 한 점은 k로 나타낸다: k=0이 소실점(복도 저 끝), k=1이 화면 맨 아래(코앞).
  * 화면 좌표·크기는 전부 k 하나에서 나오므로 발이 바닥에서 뜨지 않는다.
  */
-const VANISH_X = GAME_WIDTH / 2;
-const VANISH_Y = GAME_HEIGHT * 0.46;
-/** 화면 맨 아래(k=1)에서 좌우 벽 밑단의 x — 여기서 소실점으로 수렴한다 */
-const NEAR_WALL_L = -194;
-const NEAR_WALL_R = 900;
+const HALL_SRC = { w: 864, h: 1184, cx: 432, cy: 592, vanish: { x: 424, y: 556 } } as const;
+/** 벽 밑단 직선의 기울기 (src px, 근경 문 L1/R1 밑단 실측으로 피팅) */
+const WALL_SLOPE_L = (221 - 424) / (825 - 556);
+const WALL_SLOPE_R = (641 - 424) / (822 - 556);
+/**
+ * 사람이 나오는 문 — 배경에 실제로 그려진 문 8개 중 **먼 문 6개**만 쓴다
+ * (스폰을 더 멀리 보내달라는 피드백 — 근경 L1/R1 쌍은 스폰에 쓰지 않는다).
+ * rect = 닫힌 문 실측 사각, ov = 열림 오버레이(PNG)의 배치 좌표. 전부 src px.
+ */
+const HALL_DOORS = [
+  { key: 'door_L2_open', side: -1, rect: { x: 311, y: 472, w: 17, h: 218 }, ov: { x: 313, y: 474 } },
+  { key: 'door_L3_open', side: -1, rect: { x: 351, y: 499, w: 10, h: 141 }, ov: { x: 353, y: 501 } },
+  { key: 'door_L4_open', side: -1, rect: { x: 373, y: 511, w: 9, h: 101 }, ov: { x: 375, y: 513 } },
+  { key: 'door_R2_open', side: 1, rect: { x: 534, y: 474, w: 15, h: 223 }, ov: { x: 536, y: 476 } },
+  { key: 'door_R3_open', side: 1, rect: { x: 497, y: 500, w: 12, h: 152 }, ov: { x: 499, y: 502 } },
+  { key: 'door_R4_open', side: 1, rect: { x: 480, y: 512, w: 8, h: 108 }, ov: { x: 482, y: 514 } },
+] as const;
+type HallDoor = (typeof HALL_DOORS)[number];
+
+// create()에서 배경 매핑으로 채워지는 화면 좌표 원근 상수
+let VANISH_X = GAME_WIDTH / 2;
+let VANISH_Y = GAME_HEIGHT * 0.47;
+let NEAR_WALL_L = -194;
+let NEAR_WALL_R = 900;
 
 const floorY = (k: number): number => VANISH_Y + (GAME_HEIGHT - VANISH_Y) * k;
 const wallX = (k: number, side: -1 | 1): number =>
@@ -32,17 +51,9 @@ const wallX = (k: number, side: -1 | 1): number =>
 
 /**
  * 바닥 깊이에 따른 사람의 화면상 키 = 실제 사람 크기.
- * 카메라 눈높이가 곧 소실점 높이이므로 사람의 눈은 거리와 무관하게 소실점 선에 온다.
- * 즉 화면상 키 ≈ (발끝y − 소실점y) × (전신/눈높이 ≈ 1.06).
+ * 계수 1.32는 배경 속 문 높이(실측 419px ≈ 사람 키의 1.18배)로 캘리브레이션했다.
  */
-const heightAt = (feetYPx: number): number => Math.max(40, (feetYPx - VANISH_Y) * 1.06);
-
-/**
- * 사람이 나오는 문의 깊이.
- * 복도가 짧게 느껴진다는 피드백에 따라 **저 끝 문(k=0.14)까지** 열어 두었다 —
- * 멀리서 걸어올수록 견장을 읽을 시간이 길어지므로 난이도 조절 폭도 넓어진다.
- */
-const DOOR_DEPTHS = [0.58, 0.42, 0.28, 0.18] as const;
+const heightAt = (feetYPx: number): number => Math.max(40, (feetYPx - VANISH_Y) * 1.32);
 /** 내 앞에 서는 지점 (조작 버튼 위) */
 const ARRIVE_K = 0.7;
 /** 후배가 경례를 올리는 시점 (여정 비율) — 문에서 나오자마자 절도 있게 올린다 */
@@ -92,6 +103,10 @@ export class HallwayScene extends BaseMainScene {
   private combo = 0;
   /** 선배 경례 데드라인 표시선 */
   private deadlineG!: Phaser.GameObjects.Graphics;
+  /** 배경 실측 좌표 → 화면 좌표 매핑 (create에서 세팅) */
+  private mapX: (px: number) => number = (px) => px;
+  private mapY: (py: number) => number = (py) => py;
+  private bgScale = 1;
 
   constructor() {
     super({ key: 'hallway' });
@@ -109,7 +124,18 @@ export class HallwayScene extends BaseMainScene {
     this.spawned = 0;
     this.combo = 0;
 
-    addSceneBg(this, 'bg_hallway');
+    // 재렌더 복도 배경 — 문이 실제로 그려져 있고, 소실점·문 위치를 실측값으로 매핑한다
+    const bg = addSceneBg(this, 'bg_hallway2');
+    const s = bg.scaleX;
+    this.bgScale = s;
+    this.mapX = (px: number): number => bg.x + (px - HALL_SRC.cx) * s;
+    this.mapY = (py: number): number => bg.y + (py - HALL_SRC.cy) * s;
+    VANISH_X = this.mapX(HALL_SRC.vanish.x);
+    VANISH_Y = this.mapY(HALL_SRC.vanish.y);
+    // 벽 밑단 직선을 화면 맨 아래(k=1)까지 연장해 좌우 벽 x를 구한다
+    const srcYBottom = HALL_SRC.cy + (GAME_HEIGHT - bg.y) / s;
+    NEAR_WALL_L = this.mapX(HALL_SRC.vanish.x + WALL_SLOPE_L * (srcYBottom - HALL_SRC.vanish.y));
+    NEAR_WALL_R = this.mapX(HALL_SRC.vanish.x + WALL_SLOPE_R * (srcYBottom - HALL_SRC.vanish.y));
 
     this.deadlineG = this.add.graphics().setDepth(4);
     this.countText = textChip(this, GAME_WIDTH / 2, 90, '0 / 0', { fontSize: 38, depth: 10 });
@@ -212,17 +238,24 @@ export class HallwayScene extends BaseMainScene {
   private spawnNext(): void {
     if (this.finished || this.visitor || this.spawned >= this.target + 3) return;
     const kind = this.pickKind();
-    const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
-    const fromK = DOOR_DEPTHS[Math.floor(Math.random() * DOOR_DEPTHS.length)] ?? 0.2;
+    // 배경에 실제로 그려진 먼 문들 중 하나에서 나온다
+    const door = HALL_DOORS[Math.floor(Math.random() * HALL_DOORS.length)] ?? HALL_DOORS[0]!;
+    const side = door.side as -1 | 1;
+    const doorBottomY = this.mapY(door.rect.y + door.rect.h);
+    const fromK = Phaser.Math.Clamp(
+      (doorBottomY - VANISH_Y) / (GAME_HEIGHT - VANISH_Y),
+      0.05,
+      0.9
+    );
 
-    const doorX = wallX(fromK, side);
+    const doorX = this.mapX(door.rect.x + door.rect.w / 2);
     const cadet = new Cadet(this, doorX, 0, kind, false, { visitorRank: RANK_OF[kind] });
     cadet.setDepth(5);
     cadet.setMotion('walk');
     this.place(cadet, fromK, doorX);
 
-    // 문이 안쪽으로 열리는 순간 — 문틀이 어둡게 벌어졌다 닫힌다
-    this.flashDoor(fromK, side);
+    // 그 문이 실제로 열렸다 닫힌다 (배경과 픽셀 정합된 오버레이)
+    this.openDoorFx(door);
 
     // 걷는 시간에 ±15% 흔들림 — 매번 같은 속도로 오면 몸이 외워버린다
     const travelMs = this.approachMs * (0.85 + Math.random() * 0.3);
@@ -244,75 +277,30 @@ export class HallwayScene extends BaseMainScene {
       duration: Q2_HALLWAY.stepOutMs,
       ease: 'Sine.easeOut',
     });
-    audio.door();
     this.spawned += 1;
   }
 
   /**
-   * 진짜 복도 문처럼 열렸다 닫힌다 — 문틀 안에서 **나무색 문짝이 방 안쪽으로
-   * 젖혀지며** 어두운 실내가 드러난다. (예전엔 검은 박스만 벌어져 문 같지 않았다)
+   * 배경에 그려진 바로 그 문이 열렸다 닫힌다 — 문 사각과 픽셀 정합된
+   * 열림 오버레이(어두운 실내) 이미지를 얹었다 거둔다.
+   * (코드로 그린 문짝을 배경 위에 겹치는 방식은 폐기 — 유저 피드백)
    */
-  private flashDoor(k: number, side: -1 | 1): void {
-    const feet = floorY(k);
-    const h = heightAt(feet) * 1.15; // 문은 사람보다 조금 높다
-    const w = h * 0.42;
-    const x = wallX(k, side);
-    // 경첩은 복도 안쪽(소실점 쪽) 모서리 — 문짝이 방 안으로 젖혀지며 그쪽부터 열린다
-    const hingeX = x + (side === -1 ? w / 2 : -w / 2);
-    const dir = side === -1 ? -1 : 1; // 열리는 방향(경첩에서 바깥쪽 모서리로)
-    const doorLeft = dir === -1 ? hingeX - w : hingeX;
-    const g = this.add.graphics().setDepth(4);
-    const draw = (open: number): void => {
-      g.clear();
-      if (open <= 0.01) return;
-      // 문틀 + 열린 만큼 드러나는 불 꺼진 방 안
-      const ow = w * open;
-      const gapLeft = dir === -1 ? hingeX - ow : hingeX;
-      g.fillStyle(0x1a1510, 0.92);
-      g.fillRect(gapLeft, feet - h, ow, h);
-      g.lineStyle(Math.max(2, h * 0.012), 0x6e5b41, 1);
-      g.strokeRect(doorLeft, feet - h, w, h);
-      // 문짝 — 원근으로 폭이 줄어들며 젖혀진다 (바깥 모서리가 살짝 낮아져 회전감)
-      const lw = w * (1 - open);
-      if (lw > 2) {
-        const lx = dir === -1 ? hingeX - lw : hingeX;
-        const outerX = dir === -1 ? lx : lx + lw;
-        const innerX = dir === -1 ? lx + lw : lx;
-        const sink = h * 0.06 * open; // 열릴수록 바깥 모서리가 원근으로 내려앉는다
-        const pts = [
-          { x: innerX, y: feet - h },
-          { x: outerX, y: feet - h + sink },
-          { x: outerX, y: feet - sink * 0.4 },
-          { x: innerX, y: feet },
-        ];
-        g.fillStyle(0xcdb287, 1); // 복도 문짝의 나무색
-        g.fillPoints(pts, true);
-        g.lineStyle(Math.max(2, h * 0.01), 0x3c2f22, 1);
-        g.strokePoints(pts, true);
-        // 손잡이 — 열리는 쪽 모서리 근처
-        g.fillStyle(0x8f8578, 1);
-        g.fillCircle(
-          outerX + (innerX > outerX ? 1 : -1) * lw * 0.12,
-          feet - h * 0.48,
-          Math.max(2.5, h * 0.016)
-        );
-      }
-    };
-    const state = { open: 0 };
+  private openDoorFx(door: HallDoor): void {
+    const img = this.add
+      .image(this.mapX(door.ov.x), this.mapY(door.ov.y), door.key)
+      .setOrigin(0, 0)
+      .setScale(this.bgScale)
+      .setDepth(4)
+      .setAlpha(0);
     this.tweens.chain({
-      targets: state,
+      targets: img,
       tweens: [
-        { open: 1, duration: 200, ease: 'Cubic.easeOut', onUpdate: () => draw(state.open) },
-        {
-          open: 0,
-          delay: Q2_HALLWAY.stepOutMs,
-          duration: 260,
-          ease: 'Cubic.easeIn',
-          onUpdate: () => draw(state.open),
-        },
+        { alpha: 1, duration: 140, ease: 'Cubic.easeOut' },
+        { alpha: 0, delay: Q2_HALLWAY.stepOutMs + 320, duration: 240, ease: 'Cubic.easeIn' },
       ],
-      onComplete: () => g.destroy(),
+      onComplete: () => img.destroy(),
     });
+    audio.door();
   }
 
   /** 깊이 k와 x를 받아 발끝이 바닥에 닿도록 배치 */

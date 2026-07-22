@@ -10,34 +10,32 @@ import { BaseMainScene } from './BaseMainScene';
 type Zone = 'laundry' | 'micro';
 
 /**
- * 배경(bg_micro, 원본 900×1020) 위의 실측 좌표 — 전부 **원본 픽셀** 기준이고,
- * create()에서 cover 스케일·구도 시프트를 반영해 화면 좌표로 변환한다.
- * (예전엔 특정 화면 높이에서 잰 화면 좌표 상수라 기기 비율이 다르면 전부 어긋났다)
+ * 배경(bg_micro2, 원본 768×1344 — 세로 재렌더로 복도 소실점이 화면 안에 보인다)
+ * 위의 실측 좌표 — 전부 **원본 픽셀** 기준이고, create()에서 cover 스케일·구도
+ * 시프트를 반영해 화면 좌표로 변환한다.
  */
 const SRC = {
-  /** 원본 중심 (900/2, 1020/2) */
-  cx: 450,
-  cy: 510,
-  /** 복도 소실점(저 끝) 높이 — 원근 기준선. (소실점 자체는 cover 크롭으로 화면 밖) */
-  vanish: { x: 118, y: 336 },
+  /** 원본 중심 (768/2, 1344/2) */
+  cx: 384,
+  cy: 672,
+  /** 복도 소실점(저 끝) — 세로 구도라 모든 지원 비율에서 화면 안에 남는다 */
+  vanish: { x: 120, y: 692 },
   /** 전자레인지 유리창(안쪽 유리) 실측 사각 — 조리 불빛을 여기에 정확히 얹는다 */
-  ovenWin: { x: 368, y: 628, w: 242, h: 132 },
-  /**
-   * 훈육관 복도 경로 — 복도의 **화면에 보이는 가장 먼 지점**에서 점처럼 나타나
-   * 복도 바닥을 따라 내려온다. 진짜 소실점(x 118)은 세로 화면 cover 크롭에 잘려
-   * 모든 지원 비율에서 화면 왼쪽 밖이라, 가시 구간(x ≥ ~290) 안의 바닥 경로를 쓴다.
-   */
-  dutyFar: { x: 295, y: 452 },
-  dutyNear: { x: 305, y: 545 },
+  ovenWin: { x: 338, y: 970, w: 184, h: 128 },
+  /** 훈육관 복도 경로 — 소실점 바로 앞에서 점처럼 나타나 복도 바닥을 따라 내려온다 */
+  dutyFar: { x: 128, y: 702 },
+  dutyNear: { x: 215, y: 872 },
   /** 전자레인지 앞의 나 (x만 사용 — 발끝은 화면 하단 밖으로 프레이밍) */
-  player: { x: 652 },
+  player: { x: 615 },
   /** 오른쪽 벽의 실제 세탁실 문 (배경에 그려져 있다) — 숨는 자리 */
-  door: { x: 762, bottomY: 735 },
+  door: { x: 665, bottomY: 1105 },
 } as const;
+/** 인물 화면상 키 = (발끝y − 소실점y) ÷ 이 값 — 세탁실 문 높이(실측)로 캘리브레이션 */
+const PERSP_DIV = 264;
 /** 전자레인지 앞 내 크기 — 원근 계산값 그대로면 화면을 너무 차지해 보정 */
 const NEAR_SCALE = 1.6;
 /** 세탁실 문에 붙어 숨을 때 크기 */
-const HIDE_SCALE = 1.2;
+const HIDE_SCALE = 1.25;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -95,15 +93,15 @@ export class MicrowaveScene extends BaseMainScene {
     this.lightsLastSec = -1;
     this.stepTimer = null;
 
-    // 심야 복도 배경 — cover 스케일 후 원본 px 좌표를 화면 좌표로 매핑.
-    // 세로 화면에 맞추며 좌우가 잘리므로 살짝 우측으로 밀어 세탁실 문과 복도 끝을 함께 담는다.
-    const bg = addSceneBg(this, 'bg_micro');
-    bg.x -= 64 * bg.scaleX;
+    // 심야 복도 배경(세로 재렌더) — cover 스케일 후 원본 px 좌표를 화면 좌표로 매핑.
+    // 소실점(좌)과 세탁실 문(우)이 모두 화면에 남도록 중심을 살짝 왼쪽(원본 x 405)에 둔다.
+    const bg = addSceneBg(this, 'bg_micro2');
+    bg.x -= 21 * bg.scaleX;
     const s = bg.scaleX;
     const mx = (px: number): number => bg.x + (px - SRC.cx) * s;
     const my = (py: number): number => bg.y + (py - SRC.cy) * s;
     /** 화면 비율이 달라도 배경 확대율에 비례해 인물 크기를 맞추는 보정 계수 */
-    const sNorm = (s * 1020) / 1280;
+    const sNorm = (s * 1344) / 1280;
 
     this.horizonY = my(SRC.vanish.y);
     this.dutyFarPt = { x: mx(SRC.dutyFar.x), feetY: my(SRC.dutyFar.y) };
@@ -320,7 +318,7 @@ export class MicrowaveScene extends BaseMainScene {
 
   /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점 높이 근처에 온다 */
   private scaleAt(feetY: number): number {
-    return Math.max(0.1, (feetY - this.horizonY) / 360);
+    return Math.max(0.08, (feetY - this.horizonY) / PERSP_DIV);
   }
 
   /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝) */
