@@ -95,7 +95,7 @@ export class MicrowaveScene extends BaseMainScene {
 
     // 심야 복도 배경(세로 재렌더) — cover 스케일 후 원본 px 좌표를 화면 좌표로 매핑.
     // 소실점(좌)과 세탁실 문(우)이 모두 화면에 남도록 중심을 살짝 왼쪽(원본 x 405)에 둔다.
-    const bg = addSceneBg(this, 'bg_micro2');
+    const bg = addSceneBg(this, 'bg_micro3');
     bg.x -= 21 * bg.scaleX;
     const s = bg.scaleX;
     const mx = (px: number): number => bg.x + (px - SRC.cx) * s;

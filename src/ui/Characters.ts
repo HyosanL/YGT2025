@@ -102,6 +102,14 @@ const CYCLE4: Record<string, string[]> = {
   ],
   'duty.run': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
   'duty.charge': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
+  'visitor.walk': ['visitor_walk_f1', 'visitor_walk_f2', 'visitor_walk_f3', 'visitor_walk_f4'],
+  'duty.walk': ['duty_walk_f1', 'duty_walk_f2', 'duty_walk_f3', 'duty_walk_f4'],
+  'dobok_back.walk': [
+    'player_dobok_walk_back_f1',
+    'player_dobok_walk_back_f2',
+    'player_dobok_walk_back_f3',
+    'player_dobok_walk_back_f4',
+  ],
 };
 
 /** 2프레임 순환 (걷기/구보 애니메이션) */

@@ -25,17 +25,19 @@ const HALL_SRC = { w: 864, h: 1184, cx: 432, cy: 592, vanish: { x: 424, y: 556 }
 const WALL_SLOPE_L = (221 - 424) / (825 - 556);
 const WALL_SLOPE_R = (641 - 424) / (822 - 556);
 /**
- * 사람이 나오는 문 — 배경에 실제로 그려진 문 8개 중 **먼 문 6개**만 쓴다
- * (스폰을 더 멀리 보내달라는 피드백 — 근경 L1/R1 쌍은 스폰에 쓰지 않는다).
- * rect = 닫힌 문 실측 사각, ov = 열림 오버레이(PNG)의 배치 좌표. 전부 src px.
+ * 사람이 나오는 문 — 배경에 실제로 그려진 문 8개 전부 (가장 가까운 쌍도 예전
+ * 스폰 지점보다 멀다). rect = 닫힌 문 실측 사각, ov = 문짝이 젖혀진 '열림'
+ * 오버레이(제미나이 편집 아트)의 배치 좌표. 전부 src px.
  */
 const HALL_DOORS = [
-  { key: 'door_L2_open', side: -1, rect: { x: 311, y: 472, w: 17, h: 218 }, ov: { x: 313, y: 474 } },
-  { key: 'door_L3_open', side: -1, rect: { x: 351, y: 499, w: 10, h: 141 }, ov: { x: 353, y: 501 } },
-  { key: 'door_L4_open', side: -1, rect: { x: 373, y: 511, w: 9, h: 101 }, ov: { x: 375, y: 513 } },
-  { key: 'door_R2_open', side: 1, rect: { x: 534, y: 474, w: 15, h: 223 }, ov: { x: 536, y: 476 } },
-  { key: 'door_R3_open', side: 1, rect: { x: 497, y: 500, w: 12, h: 152 }, ov: { x: 499, y: 502 } },
-  { key: 'door_R4_open', side: 1, rect: { x: 480, y: 512, w: 8, h: 108 }, ov: { x: 482, y: 514 } },
+  { key: 'door_L1_open', side: -1, rect: { x: 200, y: 406, w: 42, h: 419 }, ov: { x: 181, y: 403 } },
+  { key: 'door_L2_open', side: -1, rect: { x: 311, y: 472, w: 17, h: 218 }, ov: { x: 301, y: 472 } },
+  { key: 'door_L3_open', side: -1, rect: { x: 351, y: 499, w: 10, h: 141 }, ov: { x: 345, y: 499 } },
+  { key: 'door_L4_open', side: -1, rect: { x: 373, y: 511, w: 9, h: 101 }, ov: { x: 368, y: 511 } },
+  { key: 'door_R1_open', side: 1, rect: { x: 620, y: 410, w: 42, h: 412 }, ov: { x: 431, y: 377 } },
+  { key: 'door_R2_open', side: 1, rect: { x: 534, y: 474, w: 15, h: 223 }, ov: { x: 426, y: 452 } },
+  { key: 'door_R3_open', side: 1, rect: { x: 497, y: 500, w: 12, h: 152 }, ov: { x: 424, y: 485 } },
+  { key: 'door_R4_open', side: 1, rect: { x: 480, y: 512, w: 8, h: 108 }, ov: { x: 428, y: 502 } },
 ] as const;
 type HallDoor = (typeof HALL_DOORS)[number];
 
