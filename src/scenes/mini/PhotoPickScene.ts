@@ -92,18 +92,21 @@ export class PhotoPickScene extends BaseMiniScene {
     const correctIndex = randInt(0, count - 1);
     const flawPool = shuffle(FLAWS);
 
-    // 사진이 작아 정리 상태를 못 알아본다는 피드백 — 입력바를 덮지 않는 선에서 최대로 키웠다
+    // 사진이 작아 정리 상태를 못 알아본다는 피드백 — 입력바 직전까지 패널을 꽉 채워
+    // 들어가는 최대 크기를 실제 남은 공간에서 계산한다 (상수 눈대중 금지)
     const cols = 2;
     const rows = Math.ceil(count / cols);
-    const scale = rows >= 3 ? 0.52 : 0.7;
-    const cellH = rows >= 3 ? 168 : 264;
-    const startY = this.msgBottom + (rows >= 3 ? 60 + 70 : 90 + 94);
+    const gridTop = this.msgBottom + 44;
+    const bottomLimit = PANEL.y + PANEL.h - 104; // 입력바 위
+    const cellH = (bottomLimit - gridTop - 20) / rows;
+    const scale = Math.min(0.94, (cellH - 36) / LOCKER_H, 292 / LOCKER_W);
+    const xOff = (LOCKER_W * scale) / 2 + 26;
 
     for (let i = 0; i < count; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
-      const x = GAME_WIDTH / 2 + (col === 0 ? -168 : 168);
-      const y = startY + row * cellH;
+      const x = GAME_WIDTH / 2 + (col === 0 ? -xOff : xOff);
+      const y = gridTop + 28 + row * cellH + (LOCKER_H * scale) / 2;
       const flaw = i === correctIndex ? null : (flawPool[i % flawPool.length] ?? pick(FLAWS));
       const { container } = this.drawLocker(x, y, scale, flaw);
 
@@ -158,7 +161,11 @@ export class PhotoPickScene extends BaseMiniScene {
       .setOrigin(0.5);
 
     const flaw = pick(FLAWS);
-    const scale = 1.5;
+    // 남은 공간에 맞는 최대 크기 (한 장짜리 모드)
+    const scale = Math.min(
+      2.0,
+      (PANEL.y + PANEL.h - 110 - (this.msgBottom + 46) - 16) / LOCKER_H
+    );
     const cx = GAME_WIDTH / 2;
     const cy = this.msgBottom + 46 + (LOCKER_H * scale) / 2;
     const { flawRect } = this.drawLocker(cx, cy, scale, flaw);

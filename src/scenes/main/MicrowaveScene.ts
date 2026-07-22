@@ -64,7 +64,6 @@ export class MicrowaveScene extends BaseMainScene {
   private lightsFill!: Phaser.GameObjects.Graphics;
   private lightsLabel!: Phaser.GameObjects.Text;
   private beepText!: Phaser.GameObjects.Text;
-  private ovenLight!: Phaser.GameObjects.Graphics;
   /** 배경 실측 좌표를 화면 좌표로 변환한 값들 (create에서 계산) */
   private horizonY = 0;
   private nearPos = { x: 0, y: 0, scale: 1 };
@@ -121,23 +120,10 @@ export class MicrowaveScene extends BaseMainScene {
       scale: HIDE_SCALE * sNorm,
     };
 
-    // 조리 중에만 켜지는 내부 조명 — 유리창 실측 사각을 매핑해 정확히 얹는다
+    // 전자레인지 불빛은 배경 그림에 이미 켜져 있다 — 코드로 덧그리지 않는다 (유저 피드백)
     const winX = mx(SRC.ovenWin.x);
     const winY = my(SRC.ovenWin.y);
     const winW = SRC.ovenWin.w * s;
-    const winH = SRC.ovenWin.h * s;
-    this.ovenLight = this.add.graphics().setVisible(false);
-    this.ovenLight.fillStyle(0xffdf85, 0.62);
-    this.ovenLight.fillRoundedRect(winX, winY, winW, winH, 8);
-    // 가운데를 한 겹 더 밝게
-    this.ovenLight.fillStyle(0xfff4cf, 0.5);
-    this.ovenLight.fillRoundedRect(
-      winX + winW * 0.12,
-      winY + winH * 0.12,
-      winW * 0.76,
-      winH * 0.76,
-      6
-    );
 
     addVignette(this, 0.3);
 
@@ -314,6 +300,9 @@ export class MicrowaveScene extends BaseMainScene {
     this.stepTimer = null;
     this.dutyTween?.remove();
     this.dutyTween = null;
+    // 원거리 연출(블러·반투명)이 돌진 클로즈업에 남지 않게 초기화
+    if (this.dutyBlur) this.dutyBlur.strength = 0;
+    this.senior.setAlpha(1);
   }
 
   /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점 높이 근처에 온다 */
@@ -379,13 +368,11 @@ export class MicrowaveScene extends BaseMainScene {
     const cooking = this.zone === 'micro';
     if (cooking) audio.startMicrowaveHum();
     else audio.stopMicrowaveHum();
-    this.ovenLight.setVisible(cooking);
 
     // 전자레인지 앞에 있을 때만 조리 진행 — 100% = "삐-"와 함께 즉시 성공
     if (cooking) {
       this.cookProgressMs += delta;
       if (this.cookProgressMs >= this.cookTotalMs) {
-        this.ovenLight.setVisible(false); // 조리 완료 — 내부 조명 소등
         this.beepText.setVisible(true);
         this.tweens.add({
           targets: this.beepText,

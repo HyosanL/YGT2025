@@ -86,30 +86,18 @@ const BACK: Partial<Record<CadetMotion, string>> = {
  * 없으면 아래 2프레임 순환으로 폴백한다. 접지→공중→반대접지→공중 표준 사이클.
  */
 const CYCLE4: Record<string, string[]> = {
+  // 4프레임 진짜 사이클 (전 프레임 별도 생성 — 방향·디테일 일관)
   'player.run': ['player_run_f1', 'player_run_f2', 'player_run_f3', 'player_run_f4'],
   'senior.run': ['senior_run_f1', 'senior_run_f2', 'senior_run_f3', 'senior_run_f4'],
-  'dobok.run': [
-    'player_dobok_run_f1',
-    'player_dobok_run_f2',
-    'player_dobok_run_f3',
-    'player_dobok_run_f4',
-  ],
-  'dobok_back.run': [
-    'player_dobok_run_back_f1',
-    'player_dobok_run_back_f2',
-    'player_dobok_run_back_f3',
-    'player_dobok_run_back_f4',
-  ],
   'duty.run': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
   'duty.charge': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
-  'visitor.walk': ['visitor_walk_f1', 'visitor_walk_f2', 'visitor_walk_f3', 'visitor_walk_f4'],
-  'duty.walk': ['duty_walk_f1', 'duty_walk_f2', 'duty_walk_f3', 'duty_walk_f4'],
-  'dobok_back.walk': [
-    'player_dobok_walk_back_f1',
-    'player_dobok_walk_back_f2',
-    'player_dobok_walk_back_f3',
-    'player_dobok_walk_back_f4',
-  ],
+  // 아래 세트들은 f3/f4가 미러 프레임이라 머리 가르마·매듭이 반 사이클마다 뒤집혀
+  // 움찔거린다 — 진짜 프레임인 f1/f2만 순환한다 (재생성 전까지 2프레임)
+  'dobok.run': ['player_dobok_run_f1', 'player_dobok_run_f2'],
+  'dobok_back.run': ['player_dobok_run_back_f1', 'player_dobok_run_back_f2'],
+  'visitor.walk': ['visitor_walk_f1', 'visitor_walk_f2'],
+  'duty.walk': ['duty_walk_f1', 'duty_walk_f2'],
+  'dobok_back.walk': ['player_dobok_walk_back_f1', 'player_dobok_walk_back_f2'],
 };
 
 /** 2프레임 순환 (걷기/구보 애니메이션) */
@@ -136,6 +124,8 @@ const LYING = new Set<CadetMotion>(['lying', 'lying_punch']);
 interface ContentBounds {
   /** 불투명 내용의 세로 픽셀 수 */
   h: number;
+  /** 불투명 내용의 가로 픽셀 수 */
+  w: number;
   /** 캔버스 하단의 투명 여백 (발끝을 바닥선에 붙일 때 보정) */
   padBottom: number;
   /** 내용 가로 중심이 캔버스 중심에서 벗어난 양(px) — 프레임 간 좌우 뒤뚱거림 보정 */
@@ -157,7 +147,7 @@ function contentBounds(scene: Phaser.Scene, key: string): ContentBounds {
   const src = scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   const w = src.width || 1;
   const h = src.height || 1;
-  let out: ContentBounds = { h, padBottom: 0, dx: 0 };
+  let out: ContentBounds = { h, w, padBottom: 0, dx: 0 };
   try {
     const cv = document.createElement('canvas');
     cv.width = w;
@@ -184,6 +174,7 @@ function contentBounds(scene: Phaser.Scene, key: string): ContentBounds {
       if (top >= 0 && bottom >= top && right >= left) {
         out = {
           h: bottom - top + 1,
+          w: right - left + 1,
           padBottom: h - 1 - bottom,
           dx: (left + right + 1) / 2 - w / 2,
         };
@@ -243,21 +234,7 @@ export class Cadet extends Phaser.GameObjects.Container {
 
     scene.add.existing(this);
     this.setMotion('idle');
-    // 견장은 포즈가 바뀌어도 그대로 — 한 번만 얹는다 (방문자는 자세가 고정이다)
-    if (this.visitorRank) this.drawRankBoards(this.visitorRank);
-  }
-
-  /**
-   * 어깨 견장을 코드로 그린다.
-   *
-   * 견장 줄 수는 복도 판별 게임의 **유일한 단서**인데, 생성 모델은 "줄 3개"를 요구해도
-   * 2개나 4개를 그리기 일쑤였다. 그래서 방문자는 무늬 없는 한 장(`visitor_base`)만 쓰고
-   * 계급 줄은 여기서 정확히 rank개 찍는다 — **어떤 컷으로 갈아입어도 개수가 틀릴 수 없다**.
-   * (경례 컷은 junior_salute를 차용하므로 그 컷의 어깨 좌표로 견장을 따로 그려 덮는다)
-   */
-  private drawRankBoards(rank: 1 | 2 | 3): void {
-    this.rankG = this.buildRankBoards(rank, this.texFor('idle'), [0.2, 0.8], 0.222, 0.135);
-    this.add(this.rankG);
+    // 견장은 applyTexture의 layoutRankBoards가 컷마다 어깨 위치에 맞춰 그린다
   }
 
   /**
@@ -371,12 +348,45 @@ export class Cadet extends Phaser.GameObjects.Container {
       // 내용의 가로 중심을 컨테이너 중심에 정렬 — 프레임마다 그림이 캔버스 안에서
       // 좌우로 치우쳐 있으면 걸을 때 몸이 좌우로 뒤뚱거린다
       this.sprite.setPosition(-own.dx * scale, FOOT_Y + own.padBottom * scale);
+      this.layoutRankBoards(own.w * scale, own.h * scale);
       return;
     }
     const src = this.sprite.texture.getSourceImage() as { height?: number };
     const th = src.height || this.sprite.height || BASE_H;
     this.sprite.setScale(BASE_H / th);
     this.sprite.setPosition(0, FOOT_Y);
+    const own = contentBounds(this.scene, key);
+    this.layoutRankBoards(own.w * (BASE_H / th), own.h * (BASE_H / th));
+  }
+
+  /**
+   * 코드 견장을 현재 컷의 **내용(그림) 박스** 어깨 위치에 다시 그린다.
+   * 프레임마다 그림 크기·위치가 달라 고정 좌표로 두면 견장이 허공에 점처럼 뜬다.
+   */
+  private layoutRankBoards(contentW: number, contentH: number): void {
+    if (!this.visitorRank || this.motion === 'salute') return;
+    this.rankG?.destroy();
+    const g = this.scene.add.graphics();
+    const boardW = 0.15 * contentW;
+    const boardH = 0.055 * contentH;
+    const top = FOOT_Y - contentH; // 내용 밑변은 항상 FOOT_Y에 정렬돼 있다
+    for (const fx of [0.22, 0.78]) {
+      const cx = (fx - 0.5) * contentW;
+      const cy = top + 0.222 * contentH;
+      g.fillStyle(0x1b2540, 1);
+      g.fillRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
+      g.lineStyle(Math.max(2, boardH * 0.16), 0x14141a, 1);
+      g.strokeRoundedRect(cx - boardW / 2, cy - boardH / 2, boardW, boardH, boardH * 0.28);
+      const barW = boardW * 0.15;
+      const gap = boardW * 0.11;
+      const total = this.visitorRank * barW + (this.visitorRank - 1) * gap;
+      g.fillStyle(0xffc93c, 1);
+      for (let i = 0; i < this.visitorRank; i++) {
+        g.fillRect(cx - total / 2 + i * (barW + gap), cy - boardH * 0.32, barW, boardH * 0.64);
+      }
+    }
+    this.add(g);
+    this.rankG = g;
   }
 
   setFace(_emoji: string): void {
@@ -428,7 +438,9 @@ export class Cadet extends Phaser.GameObjects.Container {
       let i = 0;
       this.applyTexture(cycle[0] ?? '', anchorKey);
       // 한 사이클(왕복)의 체감 속도를 프레임 수와 무관하게 유지
-      const delay = (motion === 'run' ? 220 : 600) / cycle.length;
+      // (4프레임 구보는 220ms/사이클이면 발이 너무 파닥거린다 — 살짝 여유)
+      const runCycleMs = cycle.length > 2 ? 320 : 220;
+      const delay = (motion === 'run' ? runCycleMs : 600) / cycle.length;
       this.cycleTimer = this.scene.time.addEvent({
         delay,
         loop: true,

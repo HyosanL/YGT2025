@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { registerSW } from 'virtual:pwa-register';
-import { COLORS, GAME_HEIGHT, GAME_WIDTH } from './config';
+import { COLORS, finalizeViewport, GAME_HEIGHT, GAME_WIDTH } from './config';
 import { audio } from './core/AudioManager';
 import { gameState } from './core/GameState';
 import { BootScene } from './scenes/BootScene';
@@ -44,58 +44,83 @@ audio.installAutoUnlock();
 // 실음원 프리로드 — 샤워장 노래 + 물소리 + 전자레인지 (첫 제스처 후 디코드)
 audio.preloadAudio();
 
-const game = new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'app',
-  width: GAME_WIDTH,
-  height: GAME_HEIGHT,
-  scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-  },
-  backgroundColor: COLORS.bg,
-  physics: { default: 'arcade' },
-  scene: [
-    BootScene,
-    TitleScene,
-    DayIntroScene,
-    ResultScene,
-    ShowerScene,
-    HallwayScene,
-    MicrowaveScene,
-    WalkScene,
-    WallPunchScene,
-    KakaoScene,
-    VoteScene,
-    PhotoPickScene,
-    // 오버레이 씬은 마지막에 — Phaser는 이 배열 순서대로 렌더링하므로
-    // 앞에 두면 게임 씬 '아래'에 깔려 보이지 않는다
-    PauseScene,
-  ],
-});
-
-// 개발/자동 스크린샷용 핸들 (프로덕션 동작에는 영향 없음)
-(window as unknown as { __game?: Phaser.Game }).__game = game;
+let game: Phaser.Game | null = null;
 
 /**
- * 만화체 웹폰트(Jua·Poor Story)가 늦게 도착하면 Phaser가 폴백 폰트 기준으로
- * 글자 폭을 재 놓아 배경 패널과 어긋난다. 폰트가 준비되면 이미 그려진 텍스트를
- * 한 번 다시 렌더시켜 폭을 맞춘다.
+ * iOS PWA는 부팅 직후 뷰포트가 설익어(세이프에어리어 미적용 등) #app이 실제보다
+ * 크게 재진다 — 그 순간 게임 높이를 굳히면 비율이 어긋나 화면이 영영 레터박스에
+ * 갇힌다. #app 크기가 안정될 때까지 잠깐 기다렸다가 높이를 확정하고 게임을 만든다.
  */
-void document.fonts?.ready.then(() => {
-  for (const scene of game.scene.getScenes(true)) {
-    scene.children.each((child) => {
-      if (child instanceof Phaser.GameObjects.Text) child.updateText();
-    });
+async function boot(): Promise<void> {
+  const app = document.getElementById('app');
+  let prev = '';
+  let stable = 0;
+  for (let i = 0; i < 10 && stable < 3; i++) {
+    await new Promise((r) => window.setTimeout(r, 120));
+    const cur = `${app?.clientWidth ?? 0}x${app?.clientHeight ?? 0}`;
+    if (cur === prev && cur !== '0x0') stable += 1;
+    else {
+      stable = 0;
+      prev = cur;
+    }
   }
-});
+  finalizeViewport();
+
+  game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: 'app',
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
+    backgroundColor: COLORS.bg,
+    physics: { default: 'arcade' },
+    scene: [
+      BootScene,
+      TitleScene,
+      DayIntroScene,
+      ResultScene,
+      ShowerScene,
+      HallwayScene,
+      MicrowaveScene,
+      WalkScene,
+      WallPunchScene,
+      KakaoScene,
+      VoteScene,
+      PhotoPickScene,
+      // 오버레이 씬은 마지막에 — Phaser는 이 배열 순서대로 렌더링하므로
+      // 앞에 두면 게임 씬 '아래'에 깔려 보이지 않는다
+      PauseScene,
+    ],
+  });
+
+  // 개발/자동 스크린샷용 핸들 (프로덕션 동작에는 영향 없음)
+  (window as unknown as { __game?: Phaser.Game }).__game = game;
+
+  /**
+   * 만화체 웹폰트(Jua·Poor Story)가 늦게 도착하면 Phaser가 폴백 폰트 기준으로
+   * 글자 폭을 재 놓아 배경 패널과 어긋난다. 폰트가 준비되면 이미 그려진 텍스트를
+   * 한 번 다시 렌더시켜 폭을 맞춘다.
+   */
+  void document.fonts?.ready.then(() => {
+    if (!game) return;
+    for (const scene of game.scene.getScenes(true)) {
+      scene.children.each((child) => {
+        if (child instanceof Phaser.GameObjects.Text) child.updateText();
+      });
+    }
+  });
+}
+void boot();
 
 // 다른 앱/탭으로 떠나면 자동 일시정지 + 생존시간 시계 정지.
 // (벽시계 기반 플레이 시간이 자리를 비운 사이 불어나는 것을 막는다)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     gameState.holdClock();
-    for (const scene of game.scene.getScenes(true)) {
+    for (const scene of game?.scene.getScenes(true) ?? []) {
       if (scene instanceof BaseMainScene) scene.autoPause();
     }
   } else {
@@ -107,7 +132,7 @@ document.addEventListener('visibilitychange', () => {
 
 // iOS 주소창 접힘/회전 시 뷰포트가 바뀌어도 캔버스가 잘리지 않게 재계산
 const refreshScale = (): void => {
-  game.scale.refresh();
+  game?.scale.refresh();
 };
 /** 가상 키보드가 떠 있는 상태(줄어든 visualViewport)인지 — 이때 재계산하면 축소가 잔존한다 */
 const keyboardOpen = (): boolean => {

@@ -121,11 +121,14 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     const labelGap = labelEl ? 6 : 0;
 
     let top = r.top + rect.y * sy;
-    // iOS는 키보드가 떠도 레이아웃 뷰포트가 안 줄어든다 — 키보드에 가려질 위치면
-    // 보이는 영역(visualViewport) 하단 바로 위로 끌어올린다 (라벨 포함).
-    // 라벨이 화면 위로 밀려 나가지 않도록 라벨 높이까지 셈에 넣는다.
+    // iOS(특히 PWA)는 키보드가 뜨면 vv.height/고정요소 좌표 보고가 기기·버전마다
+    // 제각각이라 "키보드 바로 위" 계산이 자주 틀어져 입력창이 하늘로 솟거나 잠긴다.
+    // 유일하게 항상 보이는 자리는 **비주얼 뷰포트 최상단** — 포커스 중에는 라벨+입력창을
+    // 화면 맨 위에 도킹한다 (키보드 크기와 무관하게 안정).
     const vv = window.visualViewport;
-    if (vv) {
+    if (document.activeElement === el) {
+      top = (vv?.offsetTop ?? 0) + labelH + labelGap + 10;
+    } else if (vv) {
       const maxTop = vv.offsetTop + vv.height - h - 12;
       const minTop = vv.offsetTop + labelH + labelGap + 12;
       if (top > maxTop) top = Math.max(minTop, maxTop);
@@ -154,15 +157,20 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
   };
   const handleFocus = (): void => {
     opts.onFocus?.();
-    // 키보드가 올라와 뷰포트가 줄어든 뒤 캔버스가 재배치되므로 한 박자 뒤 재계산
+    // 포커스 즉시 상단 도킹 + 키보드 애니메이션 후 재계산
+    reposition();
     window.setTimeout(reposition, 250);
     window.setTimeout(reposition, 600);
+  };
+  const handleBlur = (): void => {
+    window.setTimeout(reposition, 100);
   };
   const handleViewportChange = (): void => reposition();
 
   el.addEventListener('input', handleInput);
   el.addEventListener('keydown', handleKeydown);
   el.addEventListener('focus', handleFocus);
+  el.addEventListener('blur', handleBlur);
   window.addEventListener('resize', handleViewportChange);
   window.visualViewport?.addEventListener('resize', handleViewportChange);
   window.visualViewport?.addEventListener('scroll', handleViewportChange);
@@ -189,6 +197,7 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
       el.removeEventListener('input', handleInput);
       el.removeEventListener('keydown', handleKeydown);
       el.removeEventListener('focus', handleFocus);
+      el.removeEventListener('blur', handleBlur);
       window.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('scroll', handleViewportChange);

@@ -14,22 +14,25 @@ export const GAME_WIDTH = 720;
  */
 function computeGameHeight(): number {
   if (typeof window === 'undefined') return 1280;
+  // 세이프에어리어가 반영된 #app의 실제 크기가 유일한 진실 — 여기 비율과 게임 비율이
+  // 어긋나면 FIT가 레터박스를 만든다 ("화면이 작아 보이는" 문제의 정체).
   const app = document.getElementById('app');
-  // iOS PWA 부팅 직후엔 요소 치수가 설익을 수 있다(0/축소값) — 여러 소스에서
-  // 폭은 최소·높이는 최대를 취해 비율을 되도록 크게 잡는다. 비율이 실제보다 크면
-  // 위아래만 살짝 레터박스되고 가로는 꽉 차므로(FIT) '화면이 작아지는' 쪽보다 안전하다.
-  const widths = [app?.clientWidth, window.innerWidth, window.visualViewport?.width].filter(
-    (v): v is number => typeof v === 'number' && v > 0
-  );
-  const heights = [app?.clientHeight, window.innerHeight, window.visualViewport?.height].filter(
-    (v): v is number => typeof v === 'number' && v > 0
-  );
-  const w = widths.length > 0 ? Math.min(...widths) : GAME_WIDTH;
-  const h = heights.length > 0 ? Math.max(...heights) : 1280;
+  const w = app?.clientWidth || window.innerWidth || GAME_WIDTH;
+  const h = app?.clientHeight || window.innerHeight || 1280;
   const byAspect = Math.round((GAME_WIDTH * h) / Math.max(1, w));
   return Math.max(1280, Math.min(1600, byAspect));
 }
-export const GAME_HEIGHT = computeGameHeight();
+
+/**
+ * iOS PWA는 부팅 직후 뷰포트 값이 설익어(세이프에어리어 미적용 등) 실제보다 크게
+ * 재기도 한다 — 그 값으로 게임 높이를 굳히면 판 전체가 레터박스에 갇힌다.
+ * 그래서 main.ts가 **뷰포트가 안정된 뒤 게임 생성 직전에** 이 함수로 확정한다.
+ * (ESM live binding이라 씬들은 갱신된 값을 본다)
+ */
+export let GAME_HEIGHT = computeGameHeight();
+export function finalizeViewport(): void {
+  GAME_HEIGHT = computeGameHeight();
+}
 
 export const HP_MAX = 100;
 /** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 노미스 클리어로 채운다 */
