@@ -81,6 +81,15 @@ const DOBOK_BACK: Partial<Record<CadetMotion, string>> = {
 const BACK: Partial<Record<CadetMotion, string>> = {
   idle: 'player_back_idle', walk: 'player_back_idle', run: 'player_back_idle',
 };
+/** 선배(3학년) 뒷모습 — Q4 순찰에서 화면 위로 걸어 올라갈 때 등을 본다.
+ *  (뒷모습 에셋이 아직 없으면 texFor가 정면 포즈로 자연 폴백한다) */
+const SENIOR_BACK: Partial<Record<CadetMotion, string>> = {
+  idle: 'senior_walk_back', walk: 'senior_walk_back', run: 'senior_run_back',
+};
+/** 당직훈육관 뒷모습 — Q3에서 대각선 좌측 위로 돌아갈 때 등을 본다 */
+const DUTY_BACK: Partial<Record<CadetMotion, string>> = {
+  idle: 'duty_walk_back', walk: 'duty_walk_back', run: 'duty_charge',
+};
 /**
  * 4프레임 러닝 사이클 (재렌더 에셋) — 파일이 전부 로드된 세트만 쓰고,
  * 없으면 아래 2프레임 순환으로 폴백한다. 접지→공중→반대접지→공중 표준 사이클.
@@ -89,6 +98,21 @@ const CYCLE4: Record<string, string[]> = {
   // 4프레임 진짜 사이클 (전 프레임 별도 생성 — 방향·디테일 일관)
   'player.run': ['player_run_f1', 'player_run_f2', 'player_run_f3', 'player_run_f4'],
   'senior.run': ['senior_run_f1', 'senior_run_f2', 'senior_run_f3', 'senior_run_f4'],
+  // 선배 걷기 4프레임 (왼발/오른팔→교차→오른발/왼팔) — 완장·머리 불변 재생성분
+  'senior.walk': ['senior_walk_f1', 'senior_walk_f2', 'senior_walk_f3', 'senior_walk_f4'],
+  'senior_back.walk': [
+    'senior_walk_back_f1',
+    'senior_walk_back_f2',
+    'senior_walk_back_f3',
+    'senior_walk_back_f4',
+  ],
+  // 훈육관 뒷모습 걷기 4프레임 (Q3 대각선 좌측 위로 돌아갈 때)
+  'duty_back.walk': [
+    'duty_walk_back_f1',
+    'duty_walk_back_f2',
+    'duty_walk_back_f3',
+    'duty_walk_back_f4',
+  ],
   'duty.run': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
   'duty.charge': ['duty_charge_f1', 'duty_charge_f2', 'duty_charge_f3', 'duty_charge_f4'],
   // 반대 위상(f3/f4)까지 전부 개별 렌더된 진짜 4프레임 사이클 — 미러 프레임 없음
@@ -313,7 +337,14 @@ export class Cadet extends Phaser.GameObjects.Container {
       return 'visitor_base';
     }
     const front = this.dobok ? DOBOK : POSE[this.kind];
-    const table = this.back ? (this.dobok ? DOBOK_BACK : BACK) : front;
+    const backTable = this.dobok
+      ? DOBOK_BACK
+      : this.kind === 'senior'
+        ? SENIOR_BACK
+        : this.kind === 'duty'
+          ? DUTY_BACK
+          : BACK;
+    const table = this.back ? backTable : front;
     // 뒷모습 에셋이 없는 모션은 정면 포즈로 자연스럽게 폴백한다
     const candidates = [table[motion], table.idle, front[motion], front.idle, 'player_idle'];
     for (const key of candidates) {
@@ -436,11 +467,12 @@ export class Cadet extends Phaser.GameObjects.Container {
       this.rankSaluteG?.setVisible(saluting);
     }
 
+    // 뒷모습(선배 순찰 위 방향 등)은 `${kind}_back.${motion}` 사이클을 먼저 찾는다
     const cycleKey = this.visitorRank
       ? `visitor.${motion}`
       : this.dobok && (motion === 'run' || motion === 'walk')
         ? `${this.back ? 'dobok_back' : 'dobok'}.${motion}`
-        : `${this.kind}.${motion}`;
+        : `${this.back ? `${this.kind}_back` : this.kind}.${motion}`;
     // 4프레임 재렌더 세트가 전부 로드돼 있으면 우선 사용, 아니면 2프레임 폴백
     const four = CYCLE4[cycleKey];
     const cycle: string[] | undefined =

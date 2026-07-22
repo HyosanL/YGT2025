@@ -23,6 +23,8 @@ export interface HiddenInputOptions {
   /** 게임 좌표(720×1280 기준) 배치 영역 — 캔버스 스케일에 맞춰 CSS로 환산.
    *  생략하면 화면 하단의 반투명 스트립으로 배치한다. */
   rect?: { x: number; y: number; w: number; h: number };
+  /** 빈 입력창에 흐리게 뜨는 안내 문구 (예: 카톡 '메시지 입력') */
+  placeholder?: string;
   /** 테마별 외형 오버라이드 (기본: 어두운 게임 테마) */
   style?: Partial<{
     background: string;
@@ -47,6 +49,7 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
   el.spellcheck = false;
   el.setAttribute('autocorrect', 'off');
   el.setAttribute('enterkeyhint', 'send');
+  if (opts.placeholder) el.placeholder = opts.placeholder;
 
   Object.assign(el.style, {
     position: 'fixed',
@@ -121,17 +124,22 @@ export function createHiddenInput(opts: HiddenInputOptions): HiddenInput {
     const labelGap = labelEl ? 6 : 0;
 
     let top = r.top + rect.y * sy;
-    // iOS(특히 PWA)는 키보드가 뜨면 vv.height/고정요소 좌표 보고가 기기·버전마다
-    // 제각각이라 "키보드 바로 위" 계산이 자주 틀어져 입력창이 하늘로 솟거나 잠긴다.
-    // 유일하게 항상 보이는 자리는 **비주얼 뷰포트 최상단** — 포커스 중에는 라벨+입력창을
-    // 화면 맨 위에 도킹한다 (키보드 크기와 무관하게 안정).
+    // 실제 카톡처럼 입력창을 **키보드 바로 위**에 붙인다 (따라 칠 라벨은 그 위).
+    // 키보드가 올라오면 visualViewport 높이가 줄어드니 그 하단(=가시영역 바닥)이 곧
+    // 키보드 상단이다. 자연 위치(rect.y)보다 위로 솟지 않게, 라벨이 화면 밖으로
+    // 넘치지 않게만 클램프한다.
     const vv = window.visualViewport;
-    if (document.activeElement === el) {
-      top = (vv?.offsetTop ?? 0) + labelH + labelGap + 10;
-    } else if (vv) {
-      const maxTop = vv.offsetTop + vv.height - h - 12;
-      const minTop = vv.offsetTop + labelH + labelGap + 12;
-      if (top > maxTop) top = Math.max(minTop, maxTop);
+    if (vv) {
+      const keyboardTop = vv.offsetTop + vv.height; // 가시영역 하단 = 키보드 상단
+      const dockedTop = keyboardTop - h - 14;
+      const labelCeil = vv.offsetTop + labelH + labelGap + 8; // 라벨이 안 잘리는 최상단
+      if (document.activeElement === el) {
+        // 포커스 중(키보드 올라옴): 키보드 바로 위에 도킹
+        top = Math.max(labelCeil, dockedTop);
+      } else {
+        // 비포커스: 자연 위치를 쓰되 가시영역 밖이면 끌어올린다
+        top = Math.min(top, dockedTop);
+      }
     }
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;

@@ -114,14 +114,17 @@ export class KakaoScene extends BaseMiniScene {
       onEnter: () => this.send(),
       onFocus: () => this.beginCountdown(),
       rect: { x: PANEL.x + 62, y: barMid - 34, w: PANEL.w - 172, h: 68 },
+      // 실제 카톡 입력칸처럼 — 흰 라운드 필드 + '메시지 입력' 플레이스홀더.
+      // 키보드 바로 위에 홀로 떠도 입력창임이 분명하도록 옅은 테두리·그림자를 준다.
+      placeholder: '메시지 입력',
       style: {
         background: '#ffffff',
-        border: 'none',
+        border: '1.5px solid #e4e7eb',
         textAlign: 'left',
         color: KAKAO.textDark,
         caretColor: '#d4a017',
       },
-      // 따라 칠 문장 — 키보드가 올라와도 입력창 위에 붙어 항상 보인다
+      // 따라 칠 문장 — 키보드가 올라와도 입력창 바로 위에 붙어 항상 보인다
       label: { text: this.prompt.reply, background: '#fee500', color: KAKAO.textBrown },
     });
     this.hiddenInput.focus();

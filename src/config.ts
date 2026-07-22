@@ -253,7 +253,9 @@ export const Q3_MICROWAVE = {
   /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
   tempo: (day: number): SeniorTempoSpec => ({
     baseGapMs: paced(1800, day, 850),
-    baseStayMs: Math.round(1000 * Math.min(1.5, Math.pow(pace(day), 0.35))),
+    // 훈육관이 복도를 좌→우로 가로지르는 시간(≈1.6s)을 담도록 체류를 늘렸다 —
+    // 짧으면 순찰이 중간에 잘려 우 끝까지 못 가고 사라진다.
+    baseStayMs: Math.round(1900 * Math.min(1.35, Math.pow(pace(day), 0.3))),
     minRecoveryMs: Math.max(700, paced(1150, day, 700)),
     // 조리는 전자레인지 앞에 있어야만 진행된다 — 점유율 상한이 곧 클리어 보장선
     maxPresenceRatio: 0.42,

@@ -316,6 +316,9 @@ export class WalkScene extends BaseMainScene {
         spotter = g.cadet;
       }
       g.cadet.setFace(inCone ? (this.holding ? '🫡' : '😡') : '👀');
+      // 화면 위로 걸어 올라갈 땐(순찰 방향 -1) 등을 보이고, 내려올 땐 정면.
+      // (뒷모습 에셋이 없으면 Cadet이 정면으로 자연 폴백한다)
+      g.cadet.setBack(g.patrolDir === -1);
       g.cadet.setMotion('walk');
 
       // 시야 부채꼴 — 평소엔 노랑, 나를 비추는 중엔 빨강
