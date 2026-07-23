@@ -35,6 +35,12 @@ interface Guard {
   /** 이 선배의 순찰 폭·속도 (개인차를 줘 전부 같이 움직이지 않게) */
   patrolRange: number;
   patrolSpeed: number;
+  /**
+   * 이 선배가 '걷는 나'를 본 누적 시간(ms) — **선배별**로 따로 쌓인다.
+   * 시야 안에서 걸으면 늘고(구보 중엔 동결), 시야 밖에서 서서히 식는다.
+   * graceMs를 넘기면 이 선배에게 발각. 깜빡여도 리셋되지 않아 악용을 막는다.
+   */
+  susp: number;
 }
 
 /**
@@ -51,7 +57,7 @@ export class WalkScene extends BaseMainScene {
   private holding = false;
   /** 탈진 상태 — HP가 바닥나면 죽는 대신 당분간 못 뛴다 (회복하면 해제) */
   private exhausted = false;
-  private spottedMs = 0;
+  /** 걷다 걸리는 유예 한계(ms) — 선배별 susp가 이 값을 넘으면 발각 */
   private graceMs = 500;
   /** 미니퀘스트/일시정지 복귀 직후 잠깐의 판정 면제 */
   private spotSafeUntilMs = 0;
@@ -75,7 +81,6 @@ export class WalkScene extends BaseMainScene {
     this.elapsedMs = 0;
     this.holding = false;
     this.exhausted = false;
-    this.spottedMs = 0;
     this.spotSafeUntilMs = 0;
     this.dangerOn = false;
     this.distancePx = Q4_WALK.distancePx(gameState.day);
@@ -131,6 +136,7 @@ export class WalkScene extends BaseMainScene {
         // 개인차 ±35% — 전원이 같은 폭·같은 속도로 움직이면 패턴이 금방 읽힌다
         patrolRange: Q4_WALK.patrolRangePx(gameState.day) * randFloat(0.65, 1.35),
         patrolSpeed: Q4_WALK.patrolSpeed(gameState.day) * randFloat(0.65, 1.35),
+        susp: 0,
       });
     };
     // 도착 지점(무도장 입구)까지 빈 구간 없이 깔린다
@@ -230,9 +236,10 @@ export class WalkScene extends BaseMainScene {
     this.events.on(Phaser.Scenes.Events.PAUSE, () => {
       this.holding = false;
     });
-    // 복귀 직후 짧은 판정 면제 — 눈 뜨자마자 시야 정중앙이어도 대응할 시간을 준다
+    // 복귀 직후 짧은 판정 면제 — 눈 뜨자마자 시야 정중앙이어도 대응할 시간을 준다.
+    // 모든 선배의 누적 의심도 초기화(미니퀘 복귀 후 동결됐던 의심이 터지지 않게).
     this.events.on(Phaser.Scenes.Events.RESUME, () => {
-      this.spottedMs = 0;
+      for (const g of this.guards) g.susp = 0;
       this.spotSafeUntilMs = this.elapsedMs + 600;
     });
 
@@ -281,8 +288,11 @@ export class WalkScene extends BaseMainScene {
     const baseTurn = Phaser.Math.DegToRad(vision.turnDegPerSec(this.day)) / 1000; // rad/ms
     const thinkRange = vision.thinkMsRange(this.day);
     const snapP = vision.snapChance(this.day);
+    // 미니퀘/일시정지 복귀 직후의 짧은 면제 — 이 동안엔 의심이 쌓이지 않는다
+    const graced = this.elapsedMs < this.spotSafeUntilMs;
+    const decay = Q4_WALK.suspDecay;
     let anySpot = false;
-    let spotter: Cadet | null = null;
+    let caughtBy: Cadet | null = null;
     this.coneG.clear();
     for (const g of this.guards) {
       // 길가를 오르내리며 순찰한다 — 시야 공백이 고정되지 않아 외워서 뚫을 수 없다
@@ -311,10 +321,23 @@ export class WalkScene extends BaseMainScene {
       const dist = Math.hypot(dx, dy);
       const inCone =
         dist < range && Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - g.gaze)) < half;
+
+      // ── 선배별 의심 누적/감쇠 ──
+      // 시야 안 + 걷는 중 → 누적. 구보 중엔 **동결**(안 잡히지만 지워지지도 않음).
+      // 시야 밖 → 천천히 감쇠(즉시 리셋 금지 — 깜빡이 악용 차단).
       if (inCone) {
         anySpot = true;
-        spotter = g.cadet;
+        if (graced) {
+          g.susp = 0;
+        } else if (!this.holding) {
+          g.susp += delta;
+          // graceMs를 넘기면 이 선배에게 발각. 유예는 선배별 1회분 — 깜빡여도 재충전 안 됨.
+          if (g.susp > this.graceMs) caughtBy = g.cadet;
+        }
+      } else {
+        g.susp = Math.max(0, g.susp - delta * decay);
       }
+
       g.cadet.setFace(inCone ? (this.holding ? '🫡' : '😡') : '👀');
       // 화면에서 위로 올라갈 땐 등(뒷모습), 아래로 내려올 땐 정면.
       // 순찰 +1 → worldY↑ → sy↓(위로 이동)=뒷모습, −1 → 아래로 이동=정면.
@@ -328,28 +351,18 @@ export class WalkScene extends BaseMainScene {
       this.coneG.fillPath();
     }
 
-    // ── 발각 유예 판정 ──
+    // ── 발각 처리 ──
+    if (caughtBy && !this.holding) {
+      this.player.setFace('😨');
+      this.failCaught(caughtBy, '시야에 걸린 채 걷다가 딱 걸렸다!', '야, 일로 와봐.');
+      return;
+    }
+
+    // ── 위험 비네트 / 경고 ──
     if (anySpot) {
       if (!this.dangerOn) {
         this.dangerOn = true;
         this.setDanger('in');
-      }
-      const graced = this.elapsedMs < this.spotSafeUntilMs;
-      if (graced) {
-        // 미니퀘/일시정지 복귀 직후의 짧은 면제만 의심을 리셋한다
-        this.spottedMs = 0;
-      } else if (this.holding) {
-        // 구보 중엔 발각되지 않는다. 단 **의심(spottedMs)은 리셋하지 않고 그대로 둔다** —
-        // 0.5초씩 뛰었다 걸었다 깜빡여 판정을 초기화하던 악용을 막는다.
-        // (시야를 뚫고 지나가는 정당한 구보는 여전히 안전: 누적도 멈추고 발각도 없음.
-        //  누적을 지우려면 잠깐 뛰는 게 아니라 실제로 사각지대로 빠져나가야 한다.)
-      } else {
-        this.spottedMs += delta;
-        if (this.spottedMs > this.graceMs && spotter) {
-          this.player.setFace('😨');
-          this.failCaught(spotter, '시야에 걸린 채 걷다가 딱 걸렸다!', '야, 일로 와봐.');
-          return;
-        }
       }
       this.alertText.setVisible(!this.holding);
     } else {
@@ -357,7 +370,6 @@ export class WalkScene extends BaseMainScene {
         this.dangerOn = false;
         this.setDanger('off');
       }
-      this.spottedMs = 0;
       this.alertText.setVisible(false);
     }
 

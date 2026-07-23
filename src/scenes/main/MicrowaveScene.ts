@@ -42,9 +42,13 @@ const NEAR_SCALE = 1.6;
 /** 세탁실 문에 붙어 숨을 때 크기 */
 const HIDE_SCALE = 1.25;
 /** 훈육관이 전자레인지 앞을 '알아채는' 순찰 진행도(0=far 등장, 1=near 도착).
- *  이 지점을 지나기 전에 숨지 못하면 발각. 유저 지시로 검출 기준 10% 상향(0.78→0.86)
- *  — 훈육관이 거의 다 왔을 때(더 가까이서) 확실히 알아챈다. */
-const DETECT_T = 0.86;
+ *  이 지점을 지나기 전에 숨지 못하면 발각. 유저 지시: **더 멀리서부터** 알아채도록
+ *  검출 기준을 앞당긴다(0.86→0.75) — 아직 조금 떨어져 있어도 전자레인지 앞에 선 걸 눈치챈다. */
+const DETECT_T = 0.75;
+/** 등을 돌려 물러나는 중이라도 이 진행도(근접) 이상이면 인기척을 챈다(유저 지시).
+ *  물러나는 초반(코앞, t≥0.78)엔 뒤돌아 있어도 전자레인지 앞으로 나오면 발각 — t가
+ *  이 밑으로 떨어질 만큼(충분히 멀어질 때까지) 숨어 있어야 안전하다. */
+const RETREAT_NEAR_T = 0.78;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -90,6 +94,8 @@ export class MicrowaveScene extends BaseMainScene {
   private dutyBlur: { strength: number } | null = null;
   /** 이번 접근에서 검출 판정을 이미 처리했는지 (t가 DETECT_T를 넘는 순간 1회만) */
   private detectChecked = false;
+  /** 등을 돌려 물러나는 중인지 — 이 동안엔 근접(t≥RETREAT_NEAR_T) 시 인기척으로 발각 */
+  private dutyRetreating = false;
 
   constructor() {
     super({ key: 'microwave' });
@@ -251,6 +257,7 @@ export class MicrowaveScene extends BaseMainScene {
         this.seniorState = 'in';
         this.reacted = false;
         this.detectChecked = false;
+        this.dutyRetreating = false;
         // **앞모습**으로 좌측 위(far, 작고 흐림)에서 우측 아래(near, 크고 또렷)로 대각선 접근.
         // 걷는 내내 원근 배율·페이드·블러를 다시 계산하므로 발이 뜨지 않고 자연스레 나타난다.
         // 유저 지시: 조금 더 빠른 속도로 다가온다 (접근 시간 추가 7% 단축)
@@ -318,6 +325,8 @@ export class MicrowaveScene extends BaseMainScene {
   private retreat(): void {
     if (this.finished) return;
     this.seniorState = 'away';
+    // 등을 돌렸어도 아직 코앞이면 인기척을 챈다 — t가 RETREAT_NEAR_T 밑으로 떨어질 때까지 위험.
+    this.dutyRetreating = true;
     this.stepTimer?.remove();
     this.stepTimer = null;
     this.senior.setBack(true).setMotion('walk');
@@ -331,6 +340,7 @@ export class MicrowaveScene extends BaseMainScene {
       onUpdate: () => this.placeDuty(),
       onComplete: () => {
         this.dutyTween = null;
+        this.dutyRetreating = false;
         this.senior.setVisible(false);
       },
     });
@@ -359,6 +369,7 @@ export class MicrowaveScene extends BaseMainScene {
     this.stepTimer = null;
     this.dutyTween?.remove();
     this.dutyTween = null;
+    this.dutyRetreating = false;
     this.senior.setAlpha(1);
     if (this.dutyBlur) this.dutyBlur.strength = 0;
   }
@@ -418,6 +429,14 @@ export class MicrowaveScene extends BaseMainScene {
     if (this.seniorState === 'in' && this.reacted && this.zone === 'micro') {
       this.stopDutyApproach();
       this.failCaught(this.senior, '전자레인지 앞에 서 있는 걸 훈육관에게 발각됐다!');
+      return;
+    }
+
+    // 등을 돌려 물러나는 중이라도 아직 코앞(t≥RETREAT_NEAR_T)이면, 전자레인지 앞으로
+    // 나오는 순간 인기척으로 알아챈다 (유저 지시). 충분히 멀어질 때까지 숨어 있어야 안전.
+    if (this.dutyRetreating && this.zone === 'micro' && this.dutyT.t >= RETREAT_NEAR_T) {
+      this.stopDutyApproach();
+      this.failCaught(this.senior, '돌아서던 훈육관이 인기척을 느끼고 홱 돌아봤다!');
       return;
     }
 
