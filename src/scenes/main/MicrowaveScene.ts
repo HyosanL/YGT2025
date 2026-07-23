@@ -27,7 +27,8 @@ const SRC = {
    * (안 보이는데 갑툭 게임오버)을 폐기. 올 때는 **앞모습**으로 좌측 위(far, 작음)에서
    * 우측 아래(near, 큼)로 다가오고, 돌아갈 때는 **뒷모습**으로 near→far(좌측 위)로 물러난다.
    */
-  dutyFar: { x: 205, y: 872 },
+  // 유저 지시: 시작점을 near→far 직선으로 더 멀리 연장(도착 방향은 유지). 먼쪽은 흐리게 페이드인.
+  dutyFar: { x: 90, y: 767 },
   dutyNear: { x: 535, y: 1172 },
   /** 전자레인지 앞의 나 (x만 사용 — 발끝은 화면 하단 밖으로 프레이밍) */
   player: { x: 615 },
@@ -40,9 +41,10 @@ const PERSP_DIV = 264;
 const NEAR_SCALE = 1.6;
 /** 세탁실 문에 붙어 숨을 때 크기 */
 const HIDE_SCALE = 1.25;
-/** 훈육관이 전자레인지 앞을 '알아채는' 순찰 진행도(0=좌 등장, 1=우 퇴장).
- *  이 지점(≈세번째 순찰 위치)을 지나기 전에 숨지 못하면 발각된다. */
-const DETECT_T = 0.78;
+/** 훈육관이 전자레인지 앞을 '알아채는' 순찰 진행도(0=far 등장, 1=near 도착).
+ *  이 지점을 지나기 전에 숨지 못하면 발각. 유저 지시로 검출 기준 10% 상향(0.78→0.86)
+ *  — 훈육관이 거의 다 왔을 때(더 가까이서) 확실히 알아챈다. */
+const DETECT_T = 0.86;
 
 /**
  * Q3. 몰래 결식하고 전자레인지 돌리기.
@@ -84,6 +86,10 @@ export class MicrowaveScene extends BaseMainScene {
   private dutyTween: Phaser.Tweens.Tween | null = null;
   /** 순찰 진행도 (0=far 좌측 위, 1=near 우측 아래) — 등장·퇴장 트윈이 공유한다 */
   private dutyT = { t: 0 };
+  /** 원거리 페이드인용 가우시안 블러 (WebGL 전용) — 먼쪽(t 작음)일수록 흐리다 */
+  private dutyBlur: { strength: number } | null = null;
+  /** 이번 접근에서 검출 판정을 이미 처리했는지 (t가 DETECT_T를 넘는 순간 1회만) */
+  private detectChecked = false;
 
   constructor() {
     super({ key: 'microwave' });
@@ -197,6 +203,17 @@ export class MicrowaveScene extends BaseMainScene {
     this.senior = new Cadet(this, this.dutyFar.x, 0, 'duty');
     this.senior.setDepth(6).setVisible(false);
     this.placeOnFloor(this.senior, this.dutyFar.x, this.dutyFar.feetY);
+    // 먼쪽에서 흐릿하게 페이드인 — WebGL이면 가우시안 블러(강도는 placeDuty에서 t로 조절)
+    try {
+      const fx = (
+        this.senior as unknown as {
+          postFX?: { addBlur: (...a: number[]) => { strength: number } };
+        }
+      ).postFX;
+      this.dutyBlur = fx?.addBlur ? fx.addBlur(1, 2, 2, 0) : null;
+    } catch {
+      this.dutyBlur = null;
+    }
 
     // 나는 전자레인지를 마주 보고 서 있다 — 카메라 코앞이라 뒷모습 상반신 위주.
     // depth 9: 전자레인지(7)보다 앞 → 내가 전자레인지 앞에 선 것으로 보인다.
@@ -233,12 +250,13 @@ export class MicrowaveScene extends BaseMainScene {
       onEnter: () => {
         this.seniorState = 'in';
         this.reacted = false;
-        // **앞모습**으로 좌측 위(far, 작음)에서 우측 아래(near, 큼)로 대각선으로 다가온다.
-        // 걷는 내내 원근 배율을 다시 계산하므로 발이 바닥에서 뜨지 않는다.
+        this.detectChecked = false;
+        // **앞모습**으로 좌측 위(far, 작고 흐림)에서 우측 아래(near, 크고 또렷)로 대각선 접근.
+        // 걷는 내내 원근 배율·페이드·블러를 다시 계산하므로 발이 뜨지 않고 자연스레 나타난다.
         // 유저 지시: 조금 더 빠른 속도로 다가온다 (접근 시간 단축)
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
         const crossMs = Math.max(1150, reactMs * 1.6);
-        this.senior.setBack(false).setVisible(true).setAlpha(1).setMotion('walk');
+        this.senior.setBack(false).setVisible(true).setMotion('walk');
         this.tweens.killTweensOf(this.senior);
         this.dutyTween?.remove();
         this.dutyT.t = 0;
@@ -248,7 +266,20 @@ export class MicrowaveScene extends BaseMainScene {
           t: 1,
           duration: crossMs,
           ease: 'Sine.easeIn',
-          onUpdate: () => this.placeDuty(),
+          onUpdate: () => {
+            this.placeDuty();
+            // 검출은 **진행도 t가 DETECT_T를 넘는 순간** 1회 — delayedCall이 체류 종료로
+            // 건너뛰던(=발각 안 되던) 버그를 없앤다. 접근이 여기까지 오면 확실히 알아챈다.
+            if (!this.detectChecked && this.dutyT.t >= DETECT_T && this.seniorState === 'in') {
+              this.detectChecked = true;
+              if (this.zone === 'laundry') {
+                this.reacted = true;
+              } else if (!this.finished) {
+                this.stopDutyApproach();
+                this.failCaught(this.senior, '반응이 늦었다! 전자레인지 앞에 서 있는 걸 들켰다.');
+              }
+            }
+          },
           onComplete: () => {
             // 다 왔다 — 여기서부터는 몸을 돌려 좌측 위로 되돌아간다(뒷모습).
             this.dutyTween = null;
@@ -266,17 +297,6 @@ export class MicrowaveScene extends BaseMainScene {
             step += 1;
             audio.footstep(Math.min(1, 0.25 + step * 0.12));
           },
-        });
-
-        // 세번째 지점(DETECT_T)까지 다가오는 순간 판정 — 그 전에 숨어야 한다.
-        this.time.delayedCall(crossMs * DETECT_T, () => {
-          if (this.finished || this.seniorState !== 'in') return;
-          if (this.zone === 'laundry') {
-            this.reacted = true;
-          } else {
-            this.stopDutyApproach();
-            this.failCaught(this.senior, '반응이 늦었다! 전자레인지 앞에 서 있는 걸 들켰다.');
-          }
         });
       },
       onLeave: () => {
@@ -313,12 +333,16 @@ export class MicrowaveScene extends BaseMainScene {
     });
   }
 
-  /** 순찰 진행도(dutyT.t)에 맞춰 대각선 far↔near 위치·원근 배율을 갱신 */
+  /** 순찰 진행도(dutyT.t)에 맞춰 대각선 far↔near 위치·원근 배율·페이드·블러를 갱신 */
   private placeDuty(): void {
     const t = this.dutyT.t;
-    const fx = Phaser.Math.Linear(this.dutyFar.x, this.dutyNear.x, t);
-    const fy = Phaser.Math.Linear(this.dutyFar.feetY, this.dutyNear.feetY, t);
-    this.placeOnFloor(this.senior, fx, fy);
+    const cx = Phaser.Math.Linear(this.dutyFar.x, this.dutyNear.x, t);
+    const cy = Phaser.Math.Linear(this.dutyFar.feetY, this.dutyNear.feetY, t);
+    this.placeOnFloor(this.senior, cx, cy);
+    // 먼쪽(t=0)에서 중간(t=0.5)까지 흐릿+반투명 → 이후 또렷+불투명 (페이드인)
+    const fade = Phaser.Math.Clamp(t / 0.5, 0, 1);
+    this.senior.setAlpha(0.15 + 0.85 * fade);
+    if (this.dutyBlur) this.dutyBlur.strength = 3.5 * (1 - fade);
   }
 
   /**
@@ -332,6 +356,7 @@ export class MicrowaveScene extends BaseMainScene {
     this.dutyTween?.remove();
     this.dutyTween = null;
     this.senior.setAlpha(1);
+    if (this.dutyBlur) this.dutyBlur.strength = 0;
   }
 
   /** 바닥 위 거리에 따른 크기 — 서 있는 사람의 머리는 항상 소실점 높이 근처에 온다 */

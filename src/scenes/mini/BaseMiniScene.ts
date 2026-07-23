@@ -215,10 +215,10 @@ export abstract class BaseMiniScene extends Phaser.Scene {
       .setDepth(600);
     void text;
 
-    // 미니 퀘스트 성공 보상 — 목숨 ⅕ 적립 (연습 모드는 제외)
+    // 미니 퀘스트 성공 보상 — 목숨 ⅓칸 적립 (연습 모드는 제외)
     if (!gameState.practiceMode && gameState.addLifeUnits(1)) {
       const lifeText = this.add
-        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅕ 적립!', {
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, '❤️ 목숨 +⅓ 적립!', {
           fontFamily: FONT,
           fontSize: '30px',
           color: COLORS.safeCss,

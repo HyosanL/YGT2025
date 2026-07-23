@@ -40,8 +40,8 @@ export function finalizeViewport(): void {
 export const HP_MAX = 100;
 /** 목숨 최대 칸 수 — 새 판은 1칸으로 시작, 벽치기 노미스 클리어로 채운다 */
 export const LIVES_MAX = 3;
-/** 하트 1칸의 내부 단위 수 (⅕ 단위 — 미니 퀘스트 성공 보상이 1단위) */
-export const LIFE_UNITS = 5;
+/** 하트 1칸의 내부 단위 수 (⅓ 단위 — 미니 퀘스트 성공 보상이 1단위 = ⅓칸) */
+export const LIFE_UNITS = 3;
 
 /** 제목·버튼·강조 — 굵고 둥근 만화체 */
 export const FONT = "'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
@@ -184,8 +184,8 @@ export const MINI = {
   chance: (day: number): number => Math.min(0.8, 0.8 * (1 - Math.exp(-0.109 * (day - 1)))),
   /** 하루(메인 퀘스트 1회) 최대 미니 퀘스트 발생 횟수 — 유저 지시: 최대 1회(안 나오거나 1번) */
   maxPerDay: 1,
-  /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
-  failLifeUnits: 5,
+  /** 실패 시 목숨 차감 (내부 단위 — LIFE_UNITS(3) = 1칸). 하루는 이어서 진행, 0이면 게임 오버 */
+  failLifeUnits: 3,
   /** 첫 번째 인터럽트 지연 (ms 범위) — 메인 퀘스트가 짧아진 만큼 인터럽트도 앞당김 */
   firstDelayMs: [1200, 2500] as const,
   /** 두 번째 인터럽트 추가 지연 (ms 범위) */
@@ -237,17 +237,19 @@ export const Q2_HALLWAY = {
    * 경례해야 한다(0=문 앞, 1=내 앞 도착). 늦으면 그 자리에서 잡힌다.
    * 선은 멀찍이(복도 안쪽) 긋고 대신 접근을 빠르게 — 보자마자 판독하는 게임.
    * 후반 하한 0.42는 접근 하한 1100ms·여정 -15% 흔들림 최악에도 예산 ~390ms를 지키는 선.
+   * 유저 지시: 먼저 경례하기가 빡세서 선을 7% 널널하게(×1.07 — 마감 비율을 더 뒤로).
    */
-  saluteDeadline: (day: number): number => lerp(0.64, 0.42, difficulty(day)),
+  saluteDeadline: (day: number): number =>
+    Math.min(0.9, lerp(0.64, 0.42, difficulty(day)) * 1.07),
   /** 선배(3줄) 출현 비율 — 일차가 오를수록 증가 */
   seniorShare: (day: number): number => Math.min(0.42, 0.18 + day * 0.014),
   /** 동기(2줄) 출현 비율 */
   peerShare: 0.26,
   /**
    * 응대를 그르치거나 놓쳤을 때의 대가 — HP가 아니라 **하트**를 깎는다.
-   * 하트 한 칸은 LIFE_UNITS(5)단위이므로 2단위 ≈ 1/3칸.
+   * 하트 한 칸 = LIFE_UNITS(3)단위이므로 1단위 = ⅓칸.
    */
-  missLifeUnits: 2,
+  missLifeUnits: 1,
 } as const;
 
 // ─────────────────────────────────────────────
@@ -366,7 +368,7 @@ export const Q5_WALLPUNCH = {
   /** 노트가 화면 오른쪽에서 판정 링까지 흘러오는 시간 (ms) — 고정이라 읽기 쉽다 */
   approachMs: 1150,
   /** 노미스(풀콤보) 보상 — 목숨 내부 단위 (5 = 1칸) */
-  fullComboLifeUnits: 5,
+  fullComboLifeUnits: 3,
   /** 벽 타격 지점(레인) 수 — 1~2일차 2개, 3일차부터 3개 (위/중간/아래) */
   laneCount: (day: number): number => (day >= 3 ? 3 : 2),
 } as const;

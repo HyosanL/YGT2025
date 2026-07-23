@@ -18,9 +18,9 @@ const DEFAULT_SETTINGS: Settings = {
 class GameStateImpl {
   day = 1;
   hp = HP_MAX;
-  /** 목숨 (⅕ 단위 정수 — LIFE_UNITS(5) = 하트 1개, 최대 LIVES_MAX*5).
-   *  새 판은 1칸(5)으로 시작. 벽치기 성공 +5, 미니 퀘스트 성공 +1(⅕), 실패 -5(1칸).
-   *  사망 시 5 소모 후 온전한 하트가 남아야 부활. */
+  /** 목숨 (⅓ 단위 정수 — LIFE_UNITS(3) = 하트 1개, 최대 LIVES_MAX*3 = 9).
+   *  새 판은 1칸(3)으로 시작. 벽치기 성공 +3(1칸), 미니 퀘스트 성공 +1(⅓칸), 실패 -3(1칸).
+   *  사망 시 1칸 소모 후 조금이라도 남으면 부활. */
   livesUnits = LIFE_UNITS;
   currentQuestId: MainQuestId | null = null;
   lastQuestId: MainQuestId | null = null;
@@ -201,15 +201,15 @@ class GameStateImpl {
   }
 
   /**
-   * 사망 처리 — 목숨 1칸(5)을 소모하고, 소모 후에도 '온전한 하트'(5 이상)가
-   * 남아 있어야 부활(true). 예: 1⅕칸 → ⅕ 남으니 사망, 2칸 → 1칸 남아 부활.
+   * 사망 처리 — 목숨 1칸(LIFE_UNITS=3)을 소모하고, 소모 후 **조금이라도 남아 있으면**
+   * 부활(true). 예: 4/3칸(4단위) → ⅓칸(1단위) 남으니 부활, 1칸(3) → 0 남아 게임오버.
    * 죽기 전까지 버틴 시간은 리더보드 생존시간에 합산해 둔다.
    */
   tryRevive(): boolean {
     this.foldSegment();
     this.livesUnits = Math.max(0, this.livesUnits - LIFE_UNITS);
     this.save();
-    return this.livesUnits >= LIFE_UNITS;
+    return this.livesUnits > 0;
   }
 
   setNickname(nickname: string): void {
