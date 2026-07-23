@@ -310,10 +310,10 @@ export const Q4_WALK = {
   patrolRangePx: (day: number): number => Math.round(lerp(60, 150, difficulty(day))),
   patrolSpeed: (day: number): number => 45 * Math.min(1.6, pace(day)),
   /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다.
-   *  유저 지시: 참아주는 딜레이를 기본 200ms로 대폭 축소(595→200). 반응 하한도 150으로 낮춘다.
+   *  유저 지시: 기본 200→350ms로 상향(너무 빡빡해서 조금 완화). 반응 하한 150.
    *  단, 이 유예는 **선배별**로 쌓이는 의심(susp)의 한계일 뿐 — 뛰다 걷다 깜빡여도
    *  리셋되지 않으므로 사실상 재사용 불가(같은 시야에서 재차 걸으면 곧바로 발각). */
-  graceMs: (day: number): number => paced(200, day, 150),
+  graceMs: (day: number): number => paced(350, day, 150),
   /** 시야를 벗어났을 때 의심(susp)이 식는 속도 배율(<1 = 쌓이는 것보다 천천히 잊는다).
    *  0.5 = 시야 밖 400ms를 '연속으로' 있어야 200ms치 의심이 풀린다 → 짧은 깜빡임으론 리셋 불가.
    *  진짜 사각지대에서 한동안 걸으면 풀려 HP 회복이 가능(정상 플레이는 그대로). */
