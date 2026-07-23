@@ -335,8 +335,14 @@ export class WalkScene extends BaseMainScene {
         this.setDanger('in');
       }
       const graced = this.elapsedMs < this.spotSafeUntilMs;
-      if (this.holding || graced) {
+      if (graced) {
+        // 미니퀘/일시정지 복귀 직후의 짧은 면제만 의심을 리셋한다
         this.spottedMs = 0;
+      } else if (this.holding) {
+        // 구보 중엔 발각되지 않는다. 단 **의심(spottedMs)은 리셋하지 않고 그대로 둔다** —
+        // 0.5초씩 뛰었다 걸었다 깜빡여 판정을 초기화하던 악용을 막는다.
+        // (시야를 뚫고 지나가는 정당한 구보는 여전히 안전: 누적도 멈추고 발각도 없음.
+        //  누적을 지우려면 잠깐 뛰는 게 아니라 실제로 사각지대로 빠져나가야 한다.)
       } else {
         this.spottedMs += delta;
         if (this.spottedMs > this.graceMs && spotter) {

@@ -253,9 +253,9 @@ export class MicrowaveScene extends BaseMainScene {
         this.detectChecked = false;
         // **앞모습**으로 좌측 위(far, 작고 흐림)에서 우측 아래(near, 크고 또렷)로 대각선 접근.
         // 걷는 내내 원근 배율·페이드·블러를 다시 계산하므로 발이 뜨지 않고 자연스레 나타난다.
-        // 유저 지시: 조금 더 빠른 속도로 다가온다 (접근 시간 단축)
+        // 유저 지시: 조금 더 빠른 속도로 다가온다 (접근 시간 추가 7% 단축)
         const reactMs = Q3_MICROWAVE.reactMs(this.day);
-        const crossMs = Math.max(1150, reactMs * 1.6);
+        const crossMs = Math.max(1070, reactMs * 1.49);
         this.senior.setBack(false).setVisible(true).setMotion('walk');
         this.tweens.killTweensOf(this.senior);
         this.dutyTween?.remove();
@@ -281,9 +281,12 @@ export class MicrowaveScene extends BaseMainScene {
             }
           },
           onComplete: () => {
-            // 다 왔다 — 여기서부터는 몸을 돌려 좌측 위로 되돌아간다(뒷모습).
+            // 다 왔다 — 유저 지시: 바로 안 가고 근처에서 잠깐(≈420ms) 기다렸다가 물러난다.
+            // 이 동안 seniorState는 'in'이라, 숨었다가 풀고 나오면 tick에서 발각된다(긴장 연장).
             this.dutyTween = null;
-            this.retreat();
+            this.time.delayedCall(420, () => {
+              if (!this.finished && this.seniorState === 'in') this.retreat();
+            });
           },
         });
         // 다가오는 전투화 발소리 — 가까워질수록 커진다. 화면을 안 봐도 귀로 먼저 안다.
@@ -338,9 +341,10 @@ export class MicrowaveScene extends BaseMainScene {
     const t = this.dutyT.t;
     const cx = Phaser.Math.Linear(this.dutyFar.x, this.dutyNear.x, t);
     const cy = Phaser.Math.Linear(this.dutyFar.feetY, this.dutyNear.feetY, t);
-    this.placeOnFloor(this.senior, cx, cy);
-    // 먼쪽(t=0)에서 중간(t=0.5)까지 흐릿+반투명 → 이후 또렷+불투명 (페이드인)
-    const fade = Phaser.Math.Clamp(t / 0.5, 0, 1);
+    // 유저 지시: 멀 때(t=0) 크기를 70%로 줄이고 가까울수록 100%로 복원
+    this.placeOnFloor(this.senior, cx, cy, Phaser.Math.Linear(0.7, 1, t));
+    // 유저 지시: 블러/페이드는 t=0.3까지만 — 먼쪽(t=0)에서 t=0.3까지 흐릿+반투명 → 이후 또렷
+    const fade = Phaser.Math.Clamp(t / 0.3, 0, 1);
     this.senior.setAlpha(0.15 + 0.85 * fade);
     if (this.dutyBlur) this.dutyBlur.strength = 3.5 * (1 - fade);
   }
@@ -364,9 +368,9 @@ export class MicrowaveScene extends BaseMainScene {
     return Math.max(0.08, (feetY - this.horizonY) / PERSP_DIV);
   }
 
-  /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝) */
-  private placeOnFloor(cadet: Cadet, x: number, feetY: number): void {
-    const s = this.scaleAt(feetY);
+  /** 발끝이 바닥 feetY에 정확히 닿도록 배치 (스프라이트 밑변 = 발끝). mult로 원근 배율을 더 줄인다 */
+  private placeOnFloor(cadet: Cadet, x: number, feetY: number, mult = 1): void {
+    const s = this.scaleAt(feetY) * mult;
     cadet.setScale(s).setPosition(x, feetY - 120 * s);
   }
 

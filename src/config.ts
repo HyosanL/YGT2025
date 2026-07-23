@@ -262,10 +262,11 @@ export const Q3_MICROWAVE = {
   reactMs: (day: number): number => paced(820, day, REACT_FLOOR_MS),
   /** 등장 리듬 — 패턴으로 흩어지되 조리할 틈은 반드시 남는다 */
   tempo: (day: number): SeniorTempoSpec => ({
-    // 유저 지시: 조금 더 자주 온다 — 간격·최소회복 단축 + 점유율 상한 소폭 상향.
-    baseGapMs: paced(1500, day, 720),
-    // 훈육관이 대각선으로 다가왔다 물러나는 시간을 담도록 체류 유지(짧으면 순찰이 잘린다).
-    baseStayMs: Math.round(1550 * Math.min(1.35, Math.pow(pace(day), 0.3))),
+    // 유저 지시: 더 자주 온다(오다 마는 페인트 포함) — 간격 추가 단축.
+    // 단, 점유율 상한(maxPresenceRatio)이 조우 사이 회복 틈을 보장해 완전 불가 판을 막는다.
+    baseGapMs: paced(1300, day, 630),
+    // 접근 + '잠깐 기다림' + 물러남을 담도록 체류를 조금 늘렸다(도착 후 바로 안 가고 머문다).
+    baseStayMs: Math.round(1620 * Math.min(1.35, Math.pow(pace(day), 0.3))),
     minRecoveryMs: Math.max(600, paced(950, day, 600)),
     // 조리는 전자레인지 앞에 있어야만 진행된다 — 점유율 상한이 곧 클리어 보장선
     maxPresenceRatio: 0.46,
@@ -308,21 +309,22 @@ export const Q4_WALK = {
   /** 길가 선배가 제자리를 지키지 않고 순찰하는 폭(px)과 속도(px/s) */
   patrolRangePx: (day: number): number => Math.round(lerp(60, 150, difficulty(day))),
   patrolSpeed: (day: number): number => 45 * Math.min(1.6, pace(day)),
-  /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다 */
-  graceMs: (day: number): number => paced(700, day, REACT_FLOOR_MS),
+  /** 시야에 걸린 채 걷기가 허용되는 유예 (ms) — 이 안에 구보로 전환해야 한다.
+   *  유저 지시: 참아주는 딜레이 15% 단축(700→595). */
+  graceMs: (day: number): number => paced(595, day, REACT_FLOOR_MS),
   /**
-   * 도로변 선배 배치 간격 (월드 px). 일차가 오를수록 촘촘해지되 **620px 하한**을 둔다 —
-   * 이보다 촘촘해지면 시야 공백이 사라져 구보 비율이 지속 가능선(26%)을 넘고,
-   * 아무리 잘해도 탈진하는 판이 된다.
+   * 도로변 선배 배치 간격 (월드 px). 일차가 오를수록 촘촘해지되 하한을 둔다.
+   * 유저 지시: 선배 수 약간 ↑(간격 축소). 대신 시야 빔을 좁혀 지속가능선은 지킨다.
    */
-  seniorSpacingPx: (day: number): number => Math.max(620, paced(1250, day)),
-  /** 같은 지점에 맞은편 선배가 하나 더 서는(시야 교차 구간) 확률 */
-  pairChance: 0.22,
+  seniorSpacingPx: (day: number): number => Math.max(540, paced(1080, day)),
+  /** 같은 지점에 맞은편 선배가 하나 더 서는(시야 교차 구간) 확률 — 유저 지시로 소폭 ↑ */
+  pairChance: 0.28,
   /** CCTV 시야 설정 — 시선은 변칙적으로 움직인다 (목표각을 수시로 갈아치움).
    *  선배가 길가에서 멀리 떨어져 있어(측면 ~300px) 시야 끝자락만 도로 중앙에 닿는다 */
   vision: {
     rangePx: 470,
-    halfAngleDeg: 26,
+    // 유저 지시: 빔 폭을 좁힌다(26→22°). 대신 선배 수를 늘려 전체 난이도는 ↑.
+    halfAngleDeg: 22,
     /** 정면 기준 좌우 회전 폭 (도) */
     ampDeg: 80,
     /** 시선 회전 속도 (도/초) — 일차가 오를수록 빨라진다 */
