@@ -2,13 +2,20 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { audio } from '../core/AudioManager';
 import { gameState } from '../core/GameState';
+import { fetchTop, submitScore } from '../core/Leaderboard';
 import { Button, showToast } from '../ui/Button';
-import { Cadet } from '../ui/Characters';
+import { Cadet, speechBubble } from '../ui/Characters';
 import { showHelpPanel } from '../ui/HelpPanel';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { addSceneBg } from '../ui/Scenery';
 import { addVolumeButton } from '../ui/VolumePanel';
+import { HAPTIC, vibrate } from '../utils/haptics';
 import { askNickname } from '../utils/nicknameDialog';
+
+/** 이스터에그: 앞서 달리는 기태를 연속으로 이만큼 탭하면 발동 */
+const EGG_TAP_GOAL = 15;
+/** 이 시간 안에 다음 탭이 없으면 '연속' 판정이 끊겨 카운트 리셋 */
+const EGG_TAP_WINDOW_MS = 1500;
 
 interface TitleSceneData {
   /** 연습 종료 후 복귀 — 게임설명 패널을 바로 연다 */
@@ -20,6 +27,10 @@ interface TitleSceneData {
 export class TitleScene extends Phaser.Scene {
   private lbPanel: Phaser.GameObjects.Container | null = null;
   private helpPanel: Phaser.GameObjects.Container | null = null;
+  /** 이스터에그 연속 탭 카운트 / 발동 중 재진입 잠금 */
+  private eggTaps = 0;
+  private eggFiring = false;
+  private eggResetTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super({ key: 'Title' });
@@ -28,6 +39,9 @@ export class TitleScene extends Phaser.Scene {
   create(data?: TitleSceneData): void {
     this.lbPanel = null;
     this.helpPanel = null;
+    this.eggTaps = 0;
+    this.eggFiring = false;
+    this.eggResetTimer = null;
     gameState.endPractice(); // 어떤 경로로 돌아왔든 연습 플래그 정리
     audio.setBgmTempo(1); // 타이틀은 항상 원래 템포
     audio.startBgm('title');
@@ -97,6 +111,10 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: runner, x: -230, duration: 6200, repeat: -1 });
     this.tweens.add({ targets: chaser, x: -90, duration: 6200, repeat: -1 });
 
+    // 🥚 이스터에그 — 앞서 달리는 기태를 연속 15번 탭하면 전력질주.
+    // 현재 1등과 '같은 일차'에 '1초 더'로 리더보드 맨 위에 올라선다.
+    this.wireRunnerEasterEgg(runner, laneY);
+
     if (gameState.bestDay > 0) {
       this.add
         .text(GAME_WIDTH / 2, 640, `내 최고 기록: ${gameState.bestDay}일차`, {
@@ -146,6 +164,105 @@ export class TitleScene extends Phaser.Scene {
 
     // 우측 상단 소리 아이콘 — 음소거 토글 대신 '소리 설정' 패널을 연다 (역할 전환)
     addVolumeButton(this);
+  }
+
+  /**
+   * 달려가는 기태(앞선 생도)를 탭 가능하게 만들고, 연속 탭을 센다.
+   * 히트 영역은 컨테이너 로컬 좌표(스케일 이전) — Cadet은 발끝을 y≈120에 두고
+   * 위로 ~300px 뻗으므로 몸통을 넉넉히 감싸는 사각형을 준다.
+   */
+  private wireRunnerEasterEgg(runner: Cadet, laneY: number): void {
+    runner.setInteractive(
+      new Phaser.Geom.Rectangle(-110, -200, 220, 340),
+      Phaser.Geom.Rectangle.Contains
+    );
+    runner.on('pointerdown', () => {
+      if (this.eggFiring) return;
+      this.eggTaps += 1;
+      vibrate(HAPTIC.damage);
+
+      // 탭 반응 — 잠깐 튀어오른다 (원래 배율 0.52로 yoyo 복귀)
+      this.tweens.add({
+        targets: runner,
+        scale: 0.6,
+        duration: 70,
+        yoyo: true,
+        ease: 'Quad.easeOut',
+      });
+
+      // '연속' 판정 — 손을 오래 떼면 카운트가 끊긴다
+      this.eggResetTimer?.remove();
+      this.eggResetTimer = this.time.delayedCall(EGG_TAP_WINDOW_MS, () => {
+        this.eggTaps = 0;
+      });
+
+      // 막판 카운트다운 힌트
+      const left = EGG_TAP_GOAL - this.eggTaps;
+      if (left > 0 && left <= 5) {
+        speechBubble(this, runner.x, laneY - 160, `${left}!`, 450);
+      }
+
+      if (this.eggTaps >= EGG_TAP_GOAL) {
+        this.eggFiring = true;
+        this.eggResetTimer?.remove();
+        this.eggResetTimer = null;
+        void this.fireLeaderboardEasterEgg(runner);
+      }
+    });
+  }
+
+  /**
+   * 현재 리더보드 1등을 기준으로, 일수는 그대로 두고 초만 1초 더해
+   * 기태를 리더보드 맨 위(1등)에 등재한다.
+   */
+  private async fireLeaderboardEasterEgg(runner: Cadet): Promise<void> {
+    vibrate(HAPTIC.success);
+    // 전력질주 연출 — 화면 밖으로 쏜살같이 사라졌다 리셋 트윈이 다시 데려온다
+    this.tweens.add({ targets: runner, x: -260, duration: 500, ease: 'Cubic.easeIn' });
+    speechBubble(this, runner.x, runner.y - 160, '차는 두고 가!!', 900);
+
+    // 등재에 쓸 닉네임 확보
+    let nick = gameState.settings.nickname;
+    if (!nick) {
+      const chosen = await askNickname('', '1등에 오를 닉네임을 정하자 (1~12자)');
+      if (chosen) {
+        gameState.setNickname(chosen);
+        nick = chosen;
+      }
+    }
+    if (!this.scene.isActive()) return;
+    if (!nick) {
+      showToast(this, '닉네임이 있어야 1등에 등재할 수 있어', COLORS.warnCss);
+      this.eggFiring = false;
+      this.eggTaps = 0;
+      return;
+    }
+
+    // 현재 1등을 조회 — 일수는 그대로, play_ms만 1초(1000ms) 더 얹는다
+    const top = await fetchTop();
+    if (!this.scene.isActive()) return;
+    const first = top?.entries?.[0];
+    const days = first ? first.days : 1;
+    const play_ms = first ? first.play_ms + 1000 : 3000;
+
+    const result = await submitScore({ nickname: nick, days, play_ms });
+    if (!this.scene.isActive()) return;
+    const secs = Math.round(play_ms / 1000);
+    if (result.ok) {
+      audio.chime();
+      showToast(
+        this,
+        `🏆 ${days}일차 · ${secs}초 — ${result.rank ?? 1}위 등극!`,
+        COLORS.safeCss
+      );
+    } else if (result.queued) {
+      showToast(this, '🥚 오프라인 — 다음 접속 시 1등으로 등록돼', COLORS.warnCss);
+    } else {
+      showToast(this, `등재 실패: ${result.error ?? '알 수 없는 오류'}`, COLORS.accentCss);
+    }
+    // 다시 도전할 수 있도록 잠금 해제 (연속 카운트는 초기화)
+    this.eggFiring = false;
+    this.eggTaps = 0;
   }
 
   private toggleHelp(): void {
