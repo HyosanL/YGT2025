@@ -23,6 +23,8 @@ const SPAWN_X = GAME_WIDTH + 70;
 const COUNT_BEATS = 4;
 /** 인트로(옆방 수다 구경) — 이후 자동으로 리듬게임이 시작된다 */
 const INTRO_MS = 1100;
+/** 무한 리듬 모드 종료 조건 — 이만큼 실수하면 끝 (일반판보다 넉넉하게) */
+const ENDLESS_MAX_MISS = 5;
 
 /** 벽 너머 1학년들의 수다 (인트로 동안) */
 const CHATTER_LINES = [
@@ -119,6 +121,11 @@ export class WallPunchScene extends BaseMainScene {
   /** 밀리초 판정이 도는 리듬게임 — 미니 퀘스트 난입은 억울한 미스만 만든다 */
   protected allowsMini(): boolean {
     return false;
+  }
+
+  /** 이 판의 발각 임계 — 무한 모드는 5회, 일반판은 3회 */
+  private get maxMiss(): number {
+    return this.endless ? ENDLESS_MAX_MISS : Q5_WALLPUNCH.maxMiss;
   }
 
   create(): void {
@@ -300,8 +307,9 @@ export class WallPunchScene extends BaseMainScene {
       this.notes = [];
       this.genBeat = COUNT_BEATS;
       this.ensureNotesAhead();
-      this.subText.setText(`♾️ 무한 리듬 · ${this.day}일차 속도 — ⏸ 로 나가기`);
-      this.missText.setVisible(false);
+      this.subText.setText(`♾️ 무한 리듬 · ${this.day}일차 속도 — 실수 ${ENDLESS_MAX_MISS}번이면 끝`);
+      this.missText.setVisible(true);
+      this.updateMissText();
     } else {
       this.notes = this.buildNotes();
       this.subText.setText('👊가 링에 닿는 순간, 그 높이의 화면을 탭!');
@@ -588,14 +596,12 @@ export class WallPunchScene extends BaseMainScene {
     vibrate(HAPTIC.damage);
     this.judgePopup(label, COLORS.accentCss, this.laneYs[lane] ?? 600);
     this.cameras.main.shake(140, 0.006);
-    // 무한 모드는 미스로 끝나지 않는다 — 발각 판정·경고를 모두 건너뛴다
-    if (this.endless) return;
     this.updateMissText();
-    if (this.missCount >= Q5_WALLPUNCH.maxMiss) {
+    if (this.missCount >= this.maxMiss) {
       this.busted();
       return;
     }
-    if (this.missCount === Q5_WALLPUNCH.maxMiss - 1) {
+    if (this.missCount === this.maxMiss - 1) {
       // 다음 실수 = 사망 — 은은한 비네트로는 부족하다, 대놓고 경고한다
       this.setDanger('in');
       const warn = this.add
@@ -622,7 +628,7 @@ export class WallPunchScene extends BaseMainScene {
   }
 
   private updateMissText(): void {
-    const max = Q5_WALLPUNCH.maxMiss;
+    const max = this.maxMiss;
     this.missText.setText(
       `실수 ${'💢'.repeat(this.missCount)}${'⚪'.repeat(Math.max(0, max - this.missCount))}`
     );
