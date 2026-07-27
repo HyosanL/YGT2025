@@ -105,10 +105,10 @@ class GameStateImpl {
     this.save();
   }
 
-  /** 연습 시작 — 1일차 난이도/HP로 세팅 (저장하지 않음, 기록·목숨 무관) */
-  startPractice(): void {
+  /** 연습 시작 — 선택한 일차 난이도/HP로 세팅 (저장하지 않음, 기록·목숨 무관) */
+  startPractice(day = 1): void {
     this.practiceMode = true;
-    this.day = 1;
+    this.day = Math.max(1, Math.floor(day));
     this.hp = HP_MAX;
   }
 
