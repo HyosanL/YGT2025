@@ -42,6 +42,8 @@ export const HP_MAX = 100;
 export const LIVES_MAX = 3;
 /** 하트 1칸의 내부 단위 수 (⅓ 단위 — 미니 퀘스트 성공 보상이 1단위 = ⅓칸) */
 export const LIFE_UNITS = 3;
+/** 주간 보너스 주기 — 이 일수를 클리어할 때마다(7·14·21…일차) 하트 1칸을 덤으로 준다 */
+export const WEEKLY_BONUS_DAYS = 7;
 
 /** 제목·버튼·강조 — 굵고 둥근 만화체 */
 export const FONT = "'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
