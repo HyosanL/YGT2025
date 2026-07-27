@@ -93,7 +93,7 @@ export class ResultScene extends Phaser.Scene {
 
   private showSuccess(data: ResultSceneData): void {
     const clearedDay = gameState.day;
-    gameState.completeDay();
+    const bonus = gameState.completeDay();
     let advanced = false;
     const advance = (): void => {
       if (advanced) return;
@@ -147,9 +147,55 @@ export class ResultScene extends Phaser.Scene {
       tint: [0x4ecca3, 0xffd700, 0xe94560, 0x4a90d9, 0xf5f5f5],
     });
 
+    // 🎁 주간 보너스 — 7·14·21…일차를 넘길 때 하트 1칸을 덤으로 준다.
+    // 한 번 볼 가치가 있으니 이때만 자동 전환을 조금 늦춘다.
+    if (bonus.weeklyBonusDue) {
+      this.showWeeklyBonus(bonus.weeklyBonusGranted);
+    }
+
     // 리듬 유지 — 탭 없이 자동으로 다음 날로 (탭하면 즉시)
-    this.time.delayedCall(850, advance);
+    this.time.delayedCall(bonus.weeklyBonusDue ? 1800 : 850, advance);
     this.input.once('pointerdown', advance);
+  }
+
+  /**
+   * 주간 보너스 배너 — 하트 아이콘 팝 + 안내 문구 + 현재 목숨 바.
+   * `granted`가 false면 목숨이 이미 가득 차 실제 지급은 없었던 경우다.
+   */
+  private showWeeklyBonus(granted: boolean): void {
+    const bannerY = 852;
+    const gift = this.add
+      .text(GAME_WIDTH / 2, bannerY, '🎁', { fontFamily: FONT, fontSize: '90px' })
+      .setOrigin(0.5)
+      .setScale(0.2);
+    this.tweens.add({ targets: gift, scale: 1, duration: 320, ease: 'Back.easeOut' });
+
+    this.add
+      .text(GAME_WIDTH / 2, bannerY + 92, '🎉 주간 보너스!', {
+        fontFamily: FONT,
+        fontSize: '46px',
+        color: COLORS.safeCss,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(
+        GAME_WIDTH / 2,
+        bannerY + 146,
+        granted ? '일주일 생존 보상 — 하트 +1 ❤️' : '하지만 목숨이 이미 가득!',
+        {
+          fontFamily: FONT,
+          fontSize: '28px',
+          color: granted ? COLORS.warnCss : COLORS.subCss,
+        }
+      )
+      .setOrigin(0.5);
+
+    const livesBar = new LivesBar(this, GAME_WIDTH / 2 - LivesBar.widthFor(44) / 2, bannerY + 200, 44);
+    livesBar.setLives(gameState.livesUnits);
+
+    audio.chime();
+    vibrate(HAPTIC.lifeGain);
   }
 
   private showGameOver(data: ResultSceneData): void {

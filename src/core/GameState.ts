@@ -1,5 +1,13 @@
-import { HP_MAX, LIFE_UNITS, LIVES_MAX } from '../config';
+import { HP_MAX, LIFE_UNITS, LIVES_MAX, WEEKLY_BONUS_DAYS } from '../config';
 import type { MainQuestId, SaveData, Settings } from '../types';
+
+/** completeDay 결과 — 주간 보너스 지급 여부를 호출측(결과 화면)에 알린다 */
+export interface DayCompletion {
+  /** 이번에 클리어한 일차가 주간 보너스 주기(7·14·21…)에 해당했는지 */
+  weeklyBonusDue: boolean;
+  /** 실제로 하트 1칸이 지급됐는지 (이미 가득이면 false) */
+  weeklyBonusGranted: boolean;
+}
 
 const STORAGE_KEY = 'ygt2025_save_v1';
 
@@ -141,14 +149,25 @@ class GameStateImpl {
     }
   }
 
-  /** 메인 퀘스트 성공 → 다음 날로 */
-  completeDay(): void {
+  /**
+   * 메인 퀘스트 성공 → 다음 날로.
+   * 7일차를 끝내고 8일차로 넘어갈 때처럼 주기(WEEKLY_BONUS_DAYS)의 배수 일차를
+   * 클리어하면 '주간 보너스'로 하트 1칸을 덤으로 지급한다.
+   */
+  completeDay(): DayCompletion {
     this.foldSegment();
     this.bestDay = Math.max(this.bestDay, this.day);
     this.lastQuestId = this.currentQuestId;
     this.currentQuestId = null;
+    const clearedDay = this.day;
     this.day += 1;
+
+    const weeklyBonusDue = clearedDay % WEEKLY_BONUS_DAYS === 0;
+    // addLifeUnits는 가득 차 있으면 false를 반환한다 (그리고 내부에서 save 호출)
+    const weeklyBonusGranted = weeklyBonusDue && this.addLifeUnits(LIFE_UNITS);
+
     this.save();
+    return { weeklyBonusDue, weeklyBonusGranted };
   }
 
   /**
