@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { gameState } from '../core/GameState';
+import { askDay } from '../utils/dayDialog';
 import { Button } from './Button';
 
 interface HelpTopic {
@@ -285,26 +286,30 @@ export function showHelpPanel(scene: Phaser.Scene, onClose: () => void): Phaser.
       })
     );
 
-    // 연습 가능한 퀘스트 — 목숨/기록에 영향 없이 바로 체험
+    // 연습 가능한 퀘스트 — 원하는 일차 난이도를 골라 목숨/기록에 영향 없이 체험
     const practice = topic.practice;
     if (practice) {
       const practiceBtn = new Button(scene, GAME_WIDTH / 2, 928, {
-        label: '🎓 연습해보기 (목숨·기록 무관)',
+        label: '🎓 일차 골라 연습 (목숨·기록 무관)',
         width: 480,
         height: 96,
         color: COLORS.safe,
-        fontSize: 30,
+        fontSize: 28,
         onClick: () => {
-          root.destroy();
-          onClose();
-          gameState.startPractice();
-          if (practice.kind === 'main') {
-            scene.scene.start(practice.key);
-          } else {
-            // 미니 퀘스트는 오버레이 방식 — 타이틀을 pause하고 그 위에 띄운다
-            scene.scene.launch(practice.key, { returnTo: scene.scene.key });
-            scene.scene.pause();
-          }
+          const defaultDay = gameState.bestDay > 0 ? gameState.bestDay : 1;
+          void askDay(defaultDay, `${topic.title} — 몇 일차로 연습할까? (1~99)`).then((day) => {
+            if (day == null) return; // 취소 — 설명 화면 그대로
+            root.destroy();
+            onClose();
+            gameState.startPractice(day);
+            if (practice.kind === 'main') {
+              scene.scene.start(practice.key);
+            } else {
+              // 미니 퀘스트는 오버레이 방식 — 타이틀을 pause하고 그 위에 띄운다
+              scene.scene.launch(practice.key, { returnTo: scene.scene.key });
+              scene.scene.pause();
+            }
+          });
         },
       });
       c.add(practiceBtn);

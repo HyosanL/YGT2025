@@ -9,11 +9,14 @@ import { showHelpPanel } from '../ui/HelpPanel';
 import { showLeaderboardPanel } from '../ui/LeaderboardPanel';
 import { addSceneBg } from '../ui/Scenery';
 import { addVolumeButton } from '../ui/VolumePanel';
+import { askDay } from '../utils/dayDialog';
 import { HAPTIC, vibrate } from '../utils/haptics';
 import { askNickname } from '../utils/nicknameDialog';
 
 /** 이스터에그: 앞서 달리는 기태를 연속으로 이만큼 탭하면 발동 */
-const EGG_TAP_GOAL = 15;
+const EGG_TAP_GOAL = 25;
+/** 이스터에그: 뒤쫓는 생도를 연속으로 이만큼 탭하면 발동 */
+const CHASER_TAP_GOAL = 7;
 /** 이 시간 안에 다음 탭이 없으면 '연속' 판정이 끊겨 카운트 리셋 */
 const EGG_TAP_WINDOW_MS = 1500;
 
@@ -31,6 +34,9 @@ export class TitleScene extends Phaser.Scene {
   private eggTaps = 0;
   private eggFiring = false;
   private eggResetTimer: Phaser.Time.TimerEvent | null = null;
+  private chaserTaps = 0;
+  private chaserFiring = false;
+  private chaserResetTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor() {
     super({ key: 'Title' });
@@ -42,6 +48,9 @@ export class TitleScene extends Phaser.Scene {
     this.eggTaps = 0;
     this.eggFiring = false;
     this.eggResetTimer = null;
+    this.chaserTaps = 0;
+    this.chaserFiring = false;
+    this.chaserResetTimer = null;
     gameState.endPractice(); // 어떤 경로로 돌아왔든 연습 플래그 정리
     audio.setBgmTempo(1); // 타이틀은 항상 원래 템포
     audio.startBgm('title');
@@ -111,9 +120,9 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: runner, x: -230, duration: 6200, repeat: -1 });
     this.tweens.add({ targets: chaser, x: -90, duration: 6200, repeat: -1 });
 
-    // 🥚 이스터에그 — 앞서 달리는 기태를 연속 15번 탭하면 전력질주.
-    // 현재 1등과 '같은 일차'에 '1초 더'로 리더보드 맨 위에 올라선다.
+    // 🥚 이스터에그 — 앞뒤 생도를 각각 몰래 두드리면 숨은 기능이 열린다.
     this.wireRunnerEasterEgg(runner, laneY);
+    this.wireChaserEasterEgg(chaser, laneY);
 
     if (gameState.bestDay > 0) {
       this.add
@@ -263,6 +272,68 @@ export class TitleScene extends Phaser.Scene {
     // 다시 도전할 수 있도록 잠금 해제 (연속 카운트는 초기화)
     this.eggFiring = false;
     this.eggTaps = 0;
+  }
+
+  /**
+   * 뒤쫓는 생도를 탭 가능하게 만들고 연속 탭을 센다.
+   * 히트 영역은 러너와 동일한 몸통 사각형 (컨테이너 로컬, 스케일 이전).
+   */
+  private wireChaserEasterEgg(chaser: Cadet, laneY: number): void {
+    chaser.setInteractive(
+      new Phaser.Geom.Rectangle(-110, -200, 220, 340),
+      Phaser.Geom.Rectangle.Contains
+    );
+    chaser.on('pointerdown', () => {
+      if (this.chaserFiring) return;
+      this.chaserTaps += 1;
+      vibrate(HAPTIC.damage);
+
+      this.tweens.add({
+        targets: chaser,
+        scale: 0.62,
+        duration: 70,
+        yoyo: true,
+        ease: 'Quad.easeOut',
+      });
+
+      this.chaserResetTimer?.remove();
+      this.chaserResetTimer = this.time.delayedCall(EGG_TAP_WINDOW_MS, () => {
+        this.chaserTaps = 0;
+      });
+
+      const left = CHASER_TAP_GOAL - this.chaserTaps;
+      if (left > 0 && left <= 3) {
+        speechBubble(this, chaser.x, laneY - 160, `${left}!`, 450);
+      }
+
+      if (this.chaserTaps >= CHASER_TAP_GOAL) {
+        this.chaserFiring = true;
+        this.chaserResetTimer?.remove();
+        this.chaserResetTimer = null;
+        void this.fireEndlessRhythm(chaser);
+      }
+    });
+  }
+
+  /**
+   * 원하는 일차 속도를 골라, 노래가 끝없이 도는 무한 리듬(벽치기) 모드로 진입한다.
+   * 기록·목숨과 무관한 연습 방식으로 열고, ⏸ 메뉴로 언제든 타이틀로 돌아온다.
+   */
+  private async fireEndlessRhythm(chaser: Cadet): Promise<void> {
+    vibrate(HAPTIC.success);
+    speechBubble(this, chaser.x, chaser.y - 160, '한 곡 더!', 900);
+
+    const defaultDay = gameState.bestDay > 0 ? gameState.bestDay : 5;
+    const day = await askDay(defaultDay, '몇 일차 속도로 즐길까? (1~99)');
+    if (!this.scene.isActive()) return;
+    if (day == null) {
+      // 취소 — 다시 시도할 수 있게 잠금 해제
+      this.chaserFiring = false;
+      this.chaserTaps = 0;
+      return;
+    }
+    gameState.startPractice(day);
+    this.scene.start('wallpunch', { endless: true });
   }
 
   private toggleHelp(): void {

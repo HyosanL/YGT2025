@@ -64,6 +64,10 @@ interface RhythmNote {
 export class WallPunchScene extends BaseMainScene {
   private phase: PunchPhase = 'intro';
   private chatterEvent: Phaser.Time.TimerEvent | null = null;
+  /** 무한 리듬 모드 — 노트가 끝없이 이어지고 미스로도 끝나지 않는다 (⏸로만 종료) */
+  private endless = false;
+  /** 무한 모드에서 다음 노트를 만들 박자 인덱스 (지평선까지 미리 채운다) */
+  private genBeat = 0;
 
   private dim!: Phaser.GameObjects.Rectangle;
   private suspenseText!: Phaser.GameObjects.Text;
@@ -102,6 +106,11 @@ export class WallPunchScene extends BaseMainScene {
     super({ key: 'wallpunch' });
   }
 
+  /** 씬 시작 데이터 — 무한 모드 여부 (일반 게임플레이에서는 데이터 없이 시작되어 false) */
+  init(data?: { endless?: boolean }): void {
+    this.endless = data?.endless === true;
+  }
+
   /** 샤워장 노래가 이 판의 비트 — 별도 BGM은 끈다 */
   protected bgmTrack(): null {
     return null;
@@ -125,6 +134,7 @@ export class WallPunchScene extends BaseMainScene {
     this.lastResolvedT = null;
     this.graceUsed = false;
     this.earlyPopupAt = -1000;
+    this.genBeat = 0;
     this.rings = [];
 
     // 실제 호실 사진을 그대로 옮긴 야간 씬 — 인물이 그 방의 그 침대에 누워 있다.
@@ -282,16 +292,56 @@ export class WallPunchScene extends BaseMainScene {
     audio.stopChatter();
 
     this.beatMs = Q5_WALLPUNCH.beatMs(this.day);
-    this.notes = this.buildNotes();
     this.songTime = 0;
     this.lastBeat = -1;
 
-    this.subText.setText('👊가 링에 닿는 순간, 그 높이의 화면을 탭!');
-    this.missText.setVisible(true);
-    this.updateMissText();
+    if (this.endless) {
+      // 무한 모드 — 지평선까지만 미리 깔고, 나머지는 tick이 계속 이어 붙인다
+      this.notes = [];
+      this.genBeat = COUNT_BEATS;
+      this.ensureNotesAhead();
+      this.subText.setText(`♾️ 무한 리듬 · ${this.day}일차 속도 — ⏸ 로 나가기`);
+      this.missText.setVisible(false);
+    } else {
+      this.notes = this.buildNotes();
+      this.subText.setText('👊가 링에 닿는 순간, 그 높이의 화면을 탭!');
+      this.missText.setVisible(true);
+      this.updateMissText();
+    }
 
-    // 샤워장에서 몰래 틀던 그 노래 — 일차가 오를수록 배속이 붙는다
+    // 샤워장에서 몰래 틀던 그 노래 — 일차가 오를수록 배속이 붙는다 (무한 모드는 계속 루프)
     audio.startSong(Q5_WALLPUNCH.songRate(this.day));
+  }
+
+  /**
+   * 무한 모드용 노트 공급기 — 곡 시계가 흐를수록 지평선(판정 도달 예정 시각)
+   * 너머까지 온비트를 이어 붙인다. 쉼표·엇박·레인은 일반 배치와 같은 규칙을 쓴다.
+   */
+  private ensureNotesAhead(): void {
+    const beatMs = this.beatMs;
+    const lead = Q5_WALLPUNCH.songLeadMs;
+    const offbeatP = Q5_WALLPUNCH.offbeatChance(this.day);
+    const laneCount = this.laneYs.length;
+    const horizon = this.songTime + Q5_WALLPUNCH.approachMs + beatMs * 4;
+    const pushNote = (t: number, lane: number): void => {
+      const prev = this.notes[this.notes.length - 1];
+      const earlyMs = prev ? Math.min(this.goodMs, (t - prev.t) / 2) : this.goodMs;
+      this.notes.push({ t, lane, earlyMs, obj: null, resolved: false });
+    };
+    // 한 프레임에 무한정 만들지 않도록 상한을 둔다 (지평선까지만 채우면 곧 break)
+    let guard = 0;
+    while (guard++ < 64) {
+      const last = this.notes[this.notes.length - 1];
+      if (last && last.t > horizon) break;
+      if (this.notes.length > 0 && chance(Q5_WALLPUNCH.restChance)) {
+        this.genBeat += 1;
+        continue;
+      }
+      const lane = randInt(0, laneCount - 1);
+      pushNote(lead + this.genBeat * beatMs, lane);
+      if (chance(offbeatP)) pushNote(lead + (this.genBeat + 0.5) * beatMs, lane);
+      this.genBeat += 1;
+    }
   }
 
   /**
@@ -538,6 +588,8 @@ export class WallPunchScene extends BaseMainScene {
     vibrate(HAPTIC.damage);
     this.judgePopup(label, COLORS.accentCss, this.laneYs[lane] ?? 600);
     this.cameras.main.shake(140, 0.006);
+    // 무한 모드는 미스로 끝나지 않는다 — 발각 판정·경고를 모두 건너뛴다
+    if (this.endless) return;
     this.updateMissText();
     if (this.missCount >= Q5_WALLPUNCH.maxMiss) {
       this.busted();
@@ -696,6 +748,9 @@ export class WallPunchScene extends BaseMainScene {
       this.onBeat(beatIdx);
     }
 
+    // 무한 모드 — 지평선까지 노트를 계속 이어 붙이고, 지나간 노트는 정리한다
+    if (this.endless) this.ensureNotesAhead();
+
     for (const n of this.notes) {
       if (n.resolved) continue;
       if (!n.obj && this.songTime >= n.t - Q5_WALLPUNCH.approachMs) this.spawnNote(n);
@@ -706,6 +761,14 @@ export class WallPunchScene extends BaseMainScene {
       if (this.songTime > n.t + this.goodMs) this.missNote(n);
       // missNote → addMiss → busted로 phase가 바뀌었으면 즉시 중단
       if (this.phase !== 'play') return;
+    }
+
+    if (this.endless) {
+      // 처리 끝난 지난 노트는 배열에서 걷어내 무한정 쌓이지 않게 한다
+      if (this.notes.length > 96) {
+        this.notes = this.notes.filter((n) => !n.resolved || n.t > this.songTime - 800);
+      }
+      return; // 무한 모드는 끝나지 않는다
     }
 
     if (!this.endScheduled && this.notes.every((n) => n.resolved)) {
